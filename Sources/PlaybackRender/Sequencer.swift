@@ -37,6 +37,15 @@ final class Sequencer: @unchecked Sendable {
         case failed(item: Int, error: any Error)
     }
 
+    /// What `setNext` or `clearNext` did to the window's tail. Started is decided here, under the
+    /// lock decode marks it with, so the caller's id mapping follows this rather than guessing.
+    enum TailChange: Equatable {
+        case appended
+        case replaced(Int)
+        case removed(Int)
+        case unchanged
+    }
+
     /// About 370 ms at 44.1 kHz: the feeder keeps its own depth, this only hides decode jitter.
     static let bufferCapacity = 4
 
@@ -89,25 +98,49 @@ final class Sequencer: @unchecked Sendable {
 
     /// Follows the window's last item with no gap once it ends: replaces the last item if decode has
     /// not reached it, else appends.
-    func setNext(item: Int, source: any ItemSource) {
+    @discardableResult
+    func setNext(item: Int, source: any ItemSource) -> TailChange {
         lock.withLock {
             // A second entry with the same number would make seeks and releases ambiguous.
             precondition(!window.contains { $0.item == item }, "item \(item) is already in the window")
             let entry = Entry(item: item, source: source)
+            let change: TailChange
             if let last = window.last, !last.started {
                 window[window.count - 1] = entry
+                change = .replaced(last.item)
             } else {
                 window.append(entry)
+                change = .appended
             }
             schedule()
+            return change
         }
     }
 
     /// Removes the window's last item if decode has not reached it.
-    func clearNext() {
+    @discardableResult
+    func clearNext() -> TailChange {
         lock.withLock {
-            if let last = window.last, !last.started { window.removeLast() }
+            guard let last = window.last, !last.started else { return .unchanged }
+            window.removeLast()
+            return .removed(last.item)
         }
+    }
+
+    /// Empties the window and interrupts the source in flight; `pull` reports `.ended` from here.
+    func clear() {
+        let interruptStale = lock.withLock {
+            window = []
+            let stale = cursor?.entry.source
+            let staleEpoch = epoch
+            epoch &+= 1
+            cursor = nil
+            buffer = []
+            failure = nil
+            scheduled = false
+            return { stale?.interrupt(through: staleEpoch) }
+        }
+        interruptStale()
     }
 
     /// Restarts decode at `mediaFrame` of `item`, which must still be in the window; the feeder's

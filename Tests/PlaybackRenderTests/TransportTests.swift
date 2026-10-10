@@ -241,6 +241,53 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(statuses, [.buffering, .playing, .ended, .buffering, .playing, .ended])
     }
 
+    /// Half a second, samples 0 to 3: decode reaches the next item before the first pump.
+    private lazy var short = FakeItemSource(format: mono, frames: 4, chunkFrames: 2)
+    /// One second, samples 1000 to 1007.
+    private lazy var b8 = FakeItemSource(format: mono, frames: 8, chunkFrames: 2, base: 1000)
+    /// One second, samples 500 to 507.
+    private lazy var c = FakeItemSource(format: mono, frames: 8, chunkFrames: 2, base: 500)
+
+    /// Decode joins b and fills the sequencer's buffer, and the feeder has pulled none of it.
+    private func decodeAheadIntoB() {
+        transport.setCurrent(item: "a", source: short)
+        transport.setNext(item: "b", source: b8)
+        timer.sync()
+        executor.runUntilIdle()
+    }
+
+    func testSetNextAfterDecodeJoinedTheNextQueuesAfterItAndItStaysSeekable() {
+        decodeAheadIntoB()
+        transport.setNext(item: "c", source: c)
+        transport.play()
+        pump()
+        run(for: 0.75)
+
+        transport.seek(item: "b", toFrame: 6)
+        pump()
+        run(for: 1.5)
+
+        XCTAssertEqual(heard, [0, 1, 2, 3, 1000, 1001, 1006, 1007, 500, 501, 502, 503, 504, 505, 506, 507])
+        XCTAssertEqual(crossed, ["a", "b", "c"])
+        XCTAssertEqual(statuses.last, .ended)
+    }
+
+    func testClearNextAfterDecodeJoinedTheNextLeavesItPlayingAndSeekable() {
+        decodeAheadIntoB()
+        transport.clearNext()
+        transport.play()
+        pump()
+        run(for: 0.75)
+
+        transport.seek(item: "b", toFrame: 6)
+        pump()
+        run(for: 1)
+
+        XCTAssertEqual(heard, [0, 1, 2, 3, 1000, 1001, 1006, 1007])
+        XCTAssertEqual(crossed, ["a", "b"])
+        XCTAssertEqual(statuses.last, .ended)
+    }
+
     func testADroppingProcessorSkipsThePositionOverWhatItDropped() {
         transport.setProcessors([DropRangesProcessor([4..<12])])
         transport.setCurrent(item: "a", source: a)

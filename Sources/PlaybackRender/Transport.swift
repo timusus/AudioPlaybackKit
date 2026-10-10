@@ -49,12 +49,9 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
 
     // Confined to `queue`.
     private var lastID = 0
+    /// The sequencer's window, by id: ids rise in play order. It follows every change the sequencer
+    /// reports and never holds an item the sequencer has dropped, so a seek to one is always valid.
     private var ids: [Int: Item] = [:]
-    /// The sequencer's window as far as the transport can be sure of it: it never holds an item the
-    /// sequencer has dropped, so a seek inside it is always valid.
-    private var window: [Int] = []
-    /// Items decode has certainly reached, which `setNext` and `clearNext` leave in place.
-    private var started: Set<Int> = []
     private var failed = false
     /// A position reported before its item's first chunk gave the rate; sent once the rate is known.
     private var unratedPosition: MediaPositionMap.Position?
@@ -86,8 +83,6 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         queue.async { [self] in
             let id = newID()
             ids = [id: item]
-            window = [id]
-            started = [id]
             failed = false
             upstream.setCurrent(item: id, source: source, startFrame: startFrame)
             feeder.seek(to: MediaPositionMap.Position(item: id, mediaFrame: startFrame))
@@ -99,15 +94,10 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// After `.ended` it plays on, re-feeding from what was heard. Ignored before a `setCurrent`.
     public func setNext(item: Item, source: any ItemSource) {
         queue.async { [self] in
-            guard let last = window.last else { return }
+            guard !ids.isEmpty else { return }
             let id = newID()
             ids[id] = item
-            if isStarted(last) {
-                window.append(id)
-            } else {
-                window[window.count - 1] = id
-            }
-            sequencer.setNext(item: id, source: source)
+            forget(sequencer.setNext(item: id, source: source))
             // The feeder pulls nothing after an end until it restarts.
             if upstream.ended {
                 failed = false
@@ -119,10 +109,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// Removes the last next item unless decode has already reached it; then it still plays, and
     /// the app seeks or calls `setCurrent` to drop it.
     public func clearNext() {
-        queue.async { [self] in
-            if window.count > 1, let last = window.last, !isStarted(last) { window.removeLast() }
-            sequencer.clearNext()
-        }
+        queue.async { [self] in forget(sequencer.clearNext()) }
     }
 
     public func play() {
@@ -147,8 +134,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     public func seek(item: Item, toFrame frame: Int64) {
         precondition(frame >= 0)
         queue.async { [self] in
-            guard let id = window.first(where: { ids[$0] == item }) else { return }
-            started.insert(id)
+            guard let id = ids.filter({ $0.value == item }).keys.min() else { return }
             failed = false
             feeder.seek(to: MediaPositionMap.Position(item: id, mediaFrame: frame))
         }
@@ -187,8 +173,11 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         onEvent(.position(item: item, frame: position.mediaFrame, sampleRate: rate))
     }
 
-    private func isStarted(_ id: Int) -> Bool {
-        started.contains(id) || upstream.sampleRates[id] != nil
+    private func forget(_ change: Sequencer.TailChange) {
+        switch change {
+        case let .replaced(id), let .removed(id): ids[id] = nil
+        case .appended, .unchanged: break
+        }
     }
 
     private func handle(_ event: FeederEvent) {
@@ -196,8 +185,6 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         case let .crossed(id):
             // Nothing can seek behind the item now heard, so the sequencer may forget those.
             upstream.release(before: id)
-            window.removeAll { $0 < id }
-            started = started.filter { $0 >= id }
             ids = ids.filter { $0.key >= id }
             if let item = ids[id] { onEvent(.crossed(item: item)) }
         case let .position(position):
