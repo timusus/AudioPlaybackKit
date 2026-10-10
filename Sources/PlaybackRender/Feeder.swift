@@ -118,6 +118,12 @@ final class Feeder {
         pump()
     }
 
+    /// Flushes and holds the output at rate 0, reporting `.ended`; upstream must supply nothing more.
+    func stop() {
+        playWhenReady = false
+        restart(from: nil, status: .ended)
+    }
+
     // MARK: Tick
 
     /// All the feeder's work; the caller calls it on its queue from a timer or the output's
@@ -157,8 +163,8 @@ final class Feeder {
         map.position(at: playhead) ?? restartPosition
     }
 
-    /// The one recovery path: an auto-flush, a stall, a transport flush and a seek all land here.
-    private func restart(from position: MediaPositionMap.Position?) {
+    /// The one recovery path: an auto-flush, a stall, a transport flush, a seek and a stop all land here.
+    private func restart(from position: MediaPositionMap.Position?, status: FeederStatus? = nil) {
         // Events already posted predate this flush, which covers them.
         _ = inbox.drain()
         output.flush()
@@ -172,7 +178,7 @@ final class Feeder {
         restartPosition = position
         // With no position nothing was consumed, so upstream's next chunk is still the right one.
         if let position { upstream.resupply(from: position) }
-        setStatus(playWhenReady ? .buffering : .paused)
+        setStatus(status ?? (playWhenReady ? .buffering : .paused))
     }
 
     /// Pulls even after an end: an end is an underrun with no supply coming, so supply that comes

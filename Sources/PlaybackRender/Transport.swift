@@ -65,15 +65,34 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         self.timer = timer
         self.onEvent = onEvent
         sequencer = Sequencer(executor: executor)
-        upstream = SequencedUpstream(sequencer: sequencer) { [unowned self] item, error in
-            fail(item: item, error)
+        // Weak: deinit's teardown runs after the transport is gone, and its events go nowhere.
+        upstream = SequencedUpstream(sequencer: sequencer) { [weak self] item, error in
+            self?.fail(item: item, error)
         }
-        feeder = Feeder(output: output, upstream: upstream) { [unowned self] in handle($0) }
+        feeder = Feeder(output: output, upstream: upstream) { [weak self] in self?.handle($0) }
         timer.start(interval: pumpInterval, queue: queue) { [weak self] in self?.pump() }
     }
 
+    /// Dropping the transport stops playback as `stop()` does, without the `.ended` event.
     deinit {
         timer.cancel()
+        let upstream = upstream!, feeder = feeder!
+        queue.async { Self.tearDown(upstream, feeder) }
+    }
+
+    /// Stops playback and forgets every item: decode is interrupted, the output flushed and held, and
+    /// `.ended` reported. A `setCurrent` starts again.
+    public func stop() {
+        queue.async { [self] in
+            ids = [:]
+            unratedPosition = nil
+            Self.tearDown(upstream, feeder)
+        }
+    }
+
+    private static func tearDown(_ upstream: SequencedUpstream, _ feeder: Feeder) {
+        upstream.stop()
+        feeder.stop()
     }
 
     /// Replaces everything set, next items included, and plays `item` from `startFrame` once

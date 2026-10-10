@@ -37,6 +37,13 @@ final class SequencedUpstream: FeederUpstream {
         restartPipeline()
     }
 
+    /// Empties the window and drops what the pipeline holds, so nothing more is supplied.
+    func stop() {
+        sequencer.clear()
+        sampleRates = [:]
+        restartPipeline()
+    }
+
     func release(before item: Int) {
         sequencer.release(before: item)
         sampleRates = sampleRates.filter { $0.key >= item }

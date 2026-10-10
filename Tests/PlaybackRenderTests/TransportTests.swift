@@ -313,6 +313,51 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(statuses.last, .ended)
     }
 
+    /// Ten seconds, so decode is still in it a second in.
+    private lazy var long = FakeItemSource(format: mono, frames: 80, chunkFrames: 2)
+
+    func testStopInterruptsDecodeFlushesTheOutputAndReportsEnded() {
+        transport.setCurrent(item: "a", source: long)
+        transport.setNext(item: "b", source: b)
+        transport.play()
+        pump()
+        run(for: 1)
+        let events = recorder.events.count
+
+        transport.stop()
+        timer.sync()
+        XCTAssertEqual(output.rate, 0)
+        XCTAssertEqual(output.flushes, [0, 1])
+        XCTAssertEqual(long.interrupts, 1)
+        XCTAssertEqual(recorder.events.count, events + 1)
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+
+        // Nothing is left to play, seek to or follow.
+        transport.play()
+        transport.seek(item: "a", toFrame: 0)
+        transport.setNext(item: "c", source: c)
+        pump()
+        run(for: 2)
+        XCTAssertEqual(heard, [0, 1, 2, 3, 4, 5, 6, 7])
+        XCTAssertEqual(output.enqueues.count, 12)
+        XCTAssertEqual(recorder.events.count, events + 1)
+    }
+
+    func testDroppingTheTransportStopsTheOutput() {
+        var transport: Transport<String>? = Transport(output: output, timer: timer, executor: executor) { _ in }
+        transport?.setCurrent(item: "a", source: long)
+        transport?.play()
+        pump()
+        run(for: 0.5)
+        XCTAssertEqual(output.rate, 1)
+
+        transport = nil
+        timer.sync()
+        XCTAssertEqual(output.rate, 0)
+        XCTAssertEqual(output.flushes, [0, 0.5])
+        XCTAssertEqual(long.interrupts, 1)
+    }
+
     func testADroppingProcessorSkipsThePositionOverWhatItDropped() {
         transport.setProcessors([DropRangesProcessor([4..<12])])
         transport.setCurrent(item: "a", source: a)
