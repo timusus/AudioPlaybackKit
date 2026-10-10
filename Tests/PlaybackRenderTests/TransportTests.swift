@@ -232,13 +232,38 @@ final class TransportTests: XCTestCase {
         run(for: 3.25)
         XCTAssertEqual(statuses.last, .ended)
 
-        transport.setNext(item: "b", source: b)
+        transport.setNext(item: "b", source: b8)
         pump()
-        run(for: 2.25)
+        run(for: 1.25)
 
-        XCTAssertEqual(heard, ramp(0..<24) + ramp(1000..<1016))
+        XCTAssertEqual(heard, [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007,
+        ])
         XCTAssertEqual(crossed, ["a", "b"])
         XCTAssertEqual(statuses, [.buffering, .playing, .ended, .buffering, .playing, .ended])
+        // Only setCurrent's: b resumes where the output paused, with nothing re-fed.
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(output.enqueues.first { $0.samples == [1000, 1001] }?.time, 3)
+    }
+
+    func testSetNextInTheLastSecondOfThePlayingFinalItemJoinsWithoutAFlush() {
+        transport.setCurrent(item: "a", source: short)
+        transport.play()
+        pump()
+        run(for: 0.25)
+        XCTAssertEqual(statuses, [.buffering, .playing])
+
+        transport.setNext(item: "b", source: b8)
+        pump()
+        run(for: 1.5)
+
+        XCTAssertEqual(output.played, [
+            .audio(start: 0, format: mono, samples: [0, 1, 2, 3, 1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007]),
+        ])
+        XCTAssertEqual(crossed, ["a", "b"])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(output.flushes, [0])
     }
 
     /// Half a second, samples 0 to 3: decode reaches the next item before the first pump.

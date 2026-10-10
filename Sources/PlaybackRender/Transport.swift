@@ -91,18 +91,14 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
 
     /// Follows the last item set with no gap. Replaces the last next item if decode has not reached
     /// it yet; once it has (decode runs a few seconds ahead), `item` is queued after it instead.
-    /// After `.ended` it plays on, re-feeding from what was heard. Ignored before a `setCurrent`.
+    /// Never flushes: near the end it joins gaplessly, and after `.ended` it plays on from where the
+    /// output stopped. Ignored before a `setCurrent`.
     public func setNext(item: Item, source: any ItemSource) {
         queue.async { [self] in
             guard !ids.isEmpty else { return }
             let id = newID()
             ids[id] = item
             forget(sequencer.setNext(item: id, source: source))
-            // The feeder pulls nothing after an end until it restarts.
-            if upstream.ended {
-                failed = false
-                feeder.flush()
-            }
         }
     }
 

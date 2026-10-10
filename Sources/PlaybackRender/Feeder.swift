@@ -175,13 +175,21 @@ final class Feeder {
         setStatus(playWhenReady ? .buffering : .paused)
     }
 
+    /// Pulls even after an end: an end is an underrun with no supply coming, so supply that comes
+    /// later (a next item) is written at `writtenEnd` and resumes through the underrun path.
     private func fill() {
-        while !failed, !upstreamEnded, map.writtenEnd - playhead() < targetDepth {
-            switch upstream.pull() {
-            case let .chunk(chunk): write(chunk)
-            case .pending: return
-            case .ended: upstreamEnded = true
+        while !failed, map.writtenEnd - playhead() < targetDepth {
+            let supply = upstream.pull()
+            if case .ended = supply {
+                upstreamEnded = true
+                return
             }
+            if upstreamEnded {
+                upstreamEnded = false
+                if status == .ended { setStatus(playWhenReady ? .buffering : .paused) }
+            }
+            guard case let .chunk(chunk) = supply else { return }
+            write(chunk)
         }
     }
 

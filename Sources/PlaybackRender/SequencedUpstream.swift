@@ -19,8 +19,6 @@ final class SequencedUpstream: FeederUpstream {
     /// Each item's sample rate, known once its first chunk is pulled. Processors cannot resample,
     /// so it is also the rate of the item's frames at the output.
     private(set) var sampleRates: [Int: Double] = [:]
-    /// The last pull returned `.ended`. The feeder pulls nothing more until it restarts.
-    private(set) var ended = false
 
     init(sequencer: Sequencer, onFailure: @escaping (_ item: Int, _ error: any Error) -> Void) {
         self.sequencer = sequencer
@@ -60,10 +58,8 @@ final class SequencedUpstream: FeederUpstream {
                 case .pending:
                     return .pending
                 case .ended:
-                    if pipelineFormat == nil || endQueued {
-                        ended = true
-                        return .ended
-                    }
+                    // A drained pipeline reconfigures for whatever a later `setNext` supplies.
+                    if pipelineFormat == nil || endQueued { return .ended }
                     pipeline.queueEndOfStream()
                     endQueued = true
                     continue
@@ -107,7 +103,6 @@ final class SequencedUpstream: FeederUpstream {
         endQueued = false
         held = nil
         failed = false
-        ended = false
     }
 
     // Sticky until the next resupply, as the sequencer's own failure is.
