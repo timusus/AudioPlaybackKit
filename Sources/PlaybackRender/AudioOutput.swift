@@ -2,9 +2,14 @@ import Foundation
 
 /// Float32 interleaved PCM at its item's native rate and channel count; it may change between
 /// enqueues, at a join (ADR-0018).
-struct PCMFormat: Hashable, Sendable {
-    var sampleRate: Double
-    var channelCount: Int
+public struct PCMFormat: Hashable, Sendable {
+    public var sampleRate: Double
+    public var channelCount: Int
+
+    public init(sampleRate: Double, channelCount: Int) {
+        self.sampleRate = sampleRate
+        self.channelCount = channelCount
+    }
 }
 
 enum AudioOutputEvent: Equatable, Sendable {

@@ -3,23 +3,28 @@ import Foundation
 /// Input frames a processor discarded immediately before output frame `atOutputFrame` (equal to the
 /// output's frame count for a drop at its end). This is all the pipeline needs to rewrite tags:
 /// output frames otherwise map one to one, in order, onto the input not dropped.
-struct DroppedFrames: Equatable, Sendable {
-    var atOutputFrame: Int
-    var inputFrames: Int64
+public struct DroppedFrames: Equatable, Sendable {
+    public var atOutputFrame: Int
+    public var inputFrames: Int64
+
+    public init(atOutputFrame: Int, inputFrames: Int64) {
+        self.atOutputFrame = atOutputFrame
+        self.inputFrames = inputFrames
+    }
 }
 
-struct ProcessorOutput: Sendable {
-    var samples: [Float]
+public struct ProcessorOutput: Sendable {
+    public var samples: [Float]
     /// In output order.
-    var dropped: [DroppedFrames]
+    public var dropped: [DroppedFrames]
 
-    init(samples: [Float] = [], dropped: [DroppedFrames] = []) {
+    public init(samples: [Float] = [], dropped: [DroppedFrames] = []) {
         self.samples = samples
         self.dropped = dropped
     }
 }
 
-enum AudioProcessingError: Error, Equatable {
+public enum AudioProcessingError: Error, Equatable {
     /// Tags count frames at the chunk's rate, so a stage cannot resample; the output stage does.
     case sampleRateChanged(from: PCMFormat, to: PCMFormat)
 }
@@ -31,7 +36,10 @@ enum AudioProcessingError: Error, Equatable {
 ///
 /// Output is the input minus the dropped frames, in order, possibly delayed: a stage never adds
 /// frames. Between flushes, output plus dropped never exceeds input, and equals it once ended.
-protocol AudioProcessor: AnyObject {
+///
+/// The transport calls every method on its own queue, so state the app also changes (a toggle, a
+/// gain) needs the processor's own lock.
+public protocol AudioProcessor: AnyObject {
     /// Stages `input` and returns the output format; with `isActive` false the stage is left out.
     func configure(_ input: PCMFormat) throws -> PCMFormat
     /// Whether the staged configuration does anything.

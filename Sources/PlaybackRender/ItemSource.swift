@@ -3,7 +3,8 @@ import PlaybackDecode
 
 /// One queue item's decoded PCM as the sequencer drives it. Every call but `interrupt(through:)`
 /// comes from the sequencer's executor, one at a time, and may block on the network.
-protocol ItemSource: AnyObject, Sendable {
+/// `FFmpegItemSource` covers any `StreamByteReader`; an app implements this only for other PCM.
+public protocol ItemSource: AnyObject, Sendable {
     /// Never blocks: the calls that follow belong to the sequencer's `epoch`.
     func begin(epoch: UInt64)
     /// The format every chunk of this item has.
@@ -19,22 +20,23 @@ protocol ItemSource: AnyObject, Sendable {
 
 /// `FFmpegStreamDecoder` as an item source. The decoder already trims encoder delay and padding
 /// (the gapless goldens), so its frames are the item's frames and the join adds no trim.
-final class FFmpegItemSource: ItemSource, @unchecked Sendable {
+public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
     private let reader: EpochReader
     private let lock = NSLock()
     // Read by `interrupt(through:)` from any thread; only the executor replaces it.
     private var decoder: FFmpegStreamDecoder?
     private var sampleRate: Double = 0
 
-    init(reader: StreamByteReader) {
+    /// The source owns `reader` from here on: only the transport's decode executor reads it.
+    public init(reader: StreamByteReader) {
         self.reader = EpochReader(reader)
     }
 
-    func begin(epoch: UInt64) {
+    public func begin(epoch: UInt64) {
         reader.begin(epoch: epoch)
     }
 
-    func open() throws -> PCMFormat {
+    public func open() throws -> PCMFormat {
         // A decoder whose open was interrupted is unusable, so each open starts a fresh one. The
         // clear forgets an interrupt aimed at a dropped call and keeps one aimed at this epoch.
         reader.clearInterrupt()
@@ -50,13 +52,13 @@ final class FFmpegItemSource: ItemSource, @unchecked Sendable {
         }
     }
 
-    func seek(toFrame frame: Int64) throws -> Int64 {
+    public func seek(toFrame frame: Int64) throws -> Int64 {
         let decoder = try opened()
         try decoder.seek(toSeconds: Double(frame) / sampleRate)
         return decoder.mediaFramesRead
     }
 
-    func nextChunk() throws -> [Float]? {
+    public func nextChunk() throws -> [Float]? {
         let decoder = try opened()
         if let chunk = decoder.nextChunk() { return chunk }
         switch decoder.endReason {
@@ -68,7 +70,7 @@ final class FFmpegItemSource: ItemSource, @unchecked Sendable {
         }
     }
 
-    func interrupt(through epoch: UInt64) {
+    public func interrupt(through epoch: UInt64) {
         reader.interrupt(through: epoch) {
             if let decoder = lock.withLock({ decoder }) {
                 decoder.interrupt()

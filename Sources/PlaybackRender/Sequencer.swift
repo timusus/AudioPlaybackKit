@@ -91,6 +91,8 @@ final class Sequencer: @unchecked Sendable {
     /// not reached it, else appends.
     func setNext(item: Int, source: any ItemSource) {
         lock.withLock {
+            // A second entry with the same number would make seeks and releases ambiguous.
+            precondition(!window.contains { $0.item == item }, "item \(item) is already in the window")
             let entry = Entry(item: item, source: source)
             if let last = window.last, !last.started {
                 window[window.count - 1] = entry
