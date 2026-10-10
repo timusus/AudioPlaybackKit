@@ -412,7 +412,9 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(failedItems, ["a"])
     }
 
-    func testCallsFromManyThreadsRunInOrderOnTheTransportsQueue() {
+    /// The real queue, timer and decode executor. Calls from many threads are serialised, and those
+    /// from one thread run in its order: the last `setRate` before `play` is the rate it plays at.
+    func testCallsFromManyThreadsRunOffTheCallersThreadAndInEachThreadsOrder() {
         let output = FakeAudioOutput()
         let playing = expectation(description: "playing")
         playing.assertForOverFulfill = false
@@ -439,7 +441,14 @@ final class TransportTests: XCTestCase {
         transport.setRate(1)
         transport.play()
         wait(for: [playing], timeout: 5)
+        // The clock stands still until advanced, so nothing has paused it since.
+        XCTAssertEqual(output.rate, 1)
 
+        // All of b written first, so the advance lands inside written audio, past the join.
+        let bWritten = expectation(for: NSPredicate { _, _ in
+            output.enqueues.contains { $0.samples == [1002, 1003] }
+        }, evaluatedWith: nil)
+        wait(for: [bWritten], timeout: 5)
         output.advance(by: 0.75)
         wait(for: [crossedB], timeout: 5)
     }
