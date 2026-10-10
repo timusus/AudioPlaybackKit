@@ -38,8 +38,8 @@ public enum AudioProcessingError: Error, Equatable {
 /// frames. Between flushes, output plus dropped never exceeds input, and equals it once ended.
 ///
 /// The transport calls every method on its own queue, so state the app also changes (a toggle, a
-/// gain) needs the processor's own lock.
-public protocol AudioProcessor: AnyObject {
+/// gain) needs the processor's own lock; hence `Sendable`.
+public protocol AudioProcessor: AnyObject, Sendable {
     /// Stages `input` and returns the output format; with `isActive` false the stage is left out.
     func configure(_ input: PCMFormat) throws -> PCMFormat
     /// Whether the staged configuration does anything.

@@ -3,7 +3,8 @@ import Foundation
 
 /// Stages the format at `configure` and applies it at `flush`, like media3 `BaseAudioProcessor`.
 /// Subclasses override `outputFormat(for:)` and `process`.
-class TestProcessor: AudioProcessor {
+// Unchecked: each test drives one from a single queue at a time.
+class TestProcessor: AudioProcessor, @unchecked Sendable {
     var enabled = true
     /// Samples handed over per `getOutput`, the rest stays held (media3's small-limit processors).
     var maxOutputSamples = Int.max
@@ -74,14 +75,14 @@ class TestProcessor: AudioProcessor {
 }
 
 /// One to one, like ReplayGain.
-final class GainProcessor: TestProcessor {
+final class GainProcessor: TestProcessor, @unchecked Sendable {
     override func process(_ samples: [Float], format: PCMFormat) -> ProcessorOutput {
         ProcessorOutput(samples: samples.map { $0 * 2 })
     }
 }
 
 /// Holds back the last `frames` input frames, like a lookahead limiter, and hands them over at end of stream.
-final class DelayProcessor: TestProcessor {
+final class DelayProcessor: TestProcessor, @unchecked Sendable {
     let frames: Int
     private var line: [Float] = []
 
@@ -107,7 +108,7 @@ final class DelayProcessor: TestProcessor {
 struct UnsupportedRate: Error {}
 
 /// Accepts only `sampleRate`, like a stage whose filter is designed for one rate.
-final class FixedRateProcessor: TestProcessor {
+final class FixedRateProcessor: TestProcessor, @unchecked Sendable {
     let sampleRate: Double
 
     init(sampleRate: Double) {
@@ -120,14 +121,14 @@ final class FixedRateProcessor: TestProcessor {
     }
 }
 
-final class RateDoublingProcessor: TestProcessor {
+final class RateDoublingProcessor: TestProcessor, @unchecked Sendable {
     override func outputFormat(for input: PCMFormat) -> PCMFormat {
         PCMFormat(sampleRate: input.sampleRate * 2, channelCount: input.channelCount)
     }
 }
 
 /// Averages each frame down to one channel; the frame count is unchanged.
-final class MonoProcessor: TestProcessor {
+final class MonoProcessor: TestProcessor, @unchecked Sendable {
     override func outputFormat(for input: PCMFormat) -> PCMFormat {
         PCMFormat(sampleRate: input.sampleRate, channelCount: 1)
     }
@@ -143,7 +144,7 @@ final class MonoProcessor: TestProcessor {
 
 /// Drops the input frames in `ranges`, counted from the last flush, and reports them like a
 /// skip-silence processor would.
-final class DropRangesProcessor: TestProcessor {
+final class DropRangesProcessor: TestProcessor, @unchecked Sendable {
     let ranges: [Range<Int>]
     private var consumed = 0
 
