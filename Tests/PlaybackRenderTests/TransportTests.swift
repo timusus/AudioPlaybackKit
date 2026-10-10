@@ -105,9 +105,11 @@ final class TransportTests: XCTestCase {
         }
     }
 
-    private func ramp(_ range: Range<Int>) -> [Float] {
-        range.map(Float.init)
-    }
+    /// All of `a`, then all of `b`, as heard.
+    private let allOfA: [Float] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    private let allOfB: [Float] = [
+        1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015,
+    ]
 
     private var crossed: [String] {
         recorder.events.compactMap { if case let .crossed(item) = $0 { item } else { nil } }
@@ -136,14 +138,18 @@ final class TransportTests: XCTestCase {
         pump()
         run(for: 6)
 
-        XCTAssertEqual(heard, ramp(0..<24) + ramp(1000..<1016))
+        XCTAssertEqual(heard, allOfA + allOfB)
         XCTAssertEqual(crossed, ["a", "b"])
         XCTAssertEqual(statuses, [.buffering, .playing, .ended])
-        XCTAssertEqual(
-            positions,
-            stride(from: 0, through: 22, by: 2).map { Heard(item: "a", frame: $0) }
-                + stride(from: 0, through: 16, by: 2).map { Heard(item: "b", frame: $0) }
-        )
+        XCTAssertEqual(positions, [
+            Heard(item: "a", frame: 0), Heard(item: "a", frame: 2), Heard(item: "a", frame: 4),
+            Heard(item: "a", frame: 6), Heard(item: "a", frame: 8), Heard(item: "a", frame: 10),
+            Heard(item: "a", frame: 12), Heard(item: "a", frame: 14), Heard(item: "a", frame: 16),
+            Heard(item: "a", frame: 18), Heard(item: "a", frame: 20), Heard(item: "a", frame: 22),
+            Heard(item: "b", frame: 0), Heard(item: "b", frame: 2), Heard(item: "b", frame: 4),
+            Heard(item: "b", frame: 6), Heard(item: "b", frame: 8), Heard(item: "b", frame: 10),
+            Heard(item: "b", frame: 12), Heard(item: "b", frame: 14), Heard(item: "b", frame: 16),
+        ])
     }
 
     func testPauseHoldsThePositionAndPlayResumesWhereItStopped() {
@@ -162,7 +168,7 @@ final class TransportTests: XCTestCase {
         pump()
         run(for: 3)
 
-        XCTAssertEqual(heard, ramp(0..<24))
+        XCTAssertEqual(heard, allOfA)
         XCTAssertEqual(statuses, [.buffering, .playing, .paused, .buffering, .playing, .ended])
     }
 
@@ -180,7 +186,7 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(positions.last, Heard(item: "a", frame: 12))
 
         run(for: 1)
-        XCTAssertEqual(heard, ramp(0..<24))
+        XCTAssertEqual(heard, allOfA)
         XCTAssertEqual(statuses.last, .ended)
     }
 
@@ -201,14 +207,119 @@ final class TransportTests: XCTestCase {
         pump()
         run(for: 6)
 
-        XCTAssertEqual(heard, ramp(0..<4) + ramp(16..<22) + ramp(4..<24) + ramp(1000..<1016))
+        let expected: [Float] = [
+            0, 1, 2, 3, 16, 17, 18, 19, 20, 21,
+            4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+        ] + allOfB
+        XCTAssertEqual(heard, expected)
         XCTAssertEqual(crossed, ["a", "b"])
 
         // A is behind the item heard, so the sequencer has let it go and the seek does nothing.
         transport.seek(item: "a", toFrame: 0)
         pump()
         run(for: 1)
-        XCTAssertEqual(heard, ramp(0..<4) + ramp(16..<22) + ramp(4..<24) + ramp(1000..<1016))
+        XCTAssertEqual(heard, expected)
+        XCTAssertEqual(statuses.last, .ended)
+    }
+
+    func testASeekToAnItemAlreadyPassedIsIgnored() {
+        transport.setCurrent(item: "a", source: short)
+        transport.setNext(item: "b", source: b8)
+        transport.play()
+        pump()
+        run(for: 0.75)
+        XCTAssertEqual(crossed, ["a", "b"])
+
+        transport.seek(item: "a", toFrame: 0)
+        pump()
+        run(for: 1)
+
+        XCTAssertEqual(heard, [0, 1, 2, 3, 1000, 1001, 1002, 1003, 1004, 1005, 1006, 1007])
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+    }
+
+    func testSetNextBeforeDecodeReachedTheNextReplacesIt() {
+        transport.setCurrent(item: "a", source: short)
+        transport.setNext(item: "b", source: b8)
+        transport.setNext(item: "c", source: c)
+        transport.play()
+        pump()
+        run(for: 0.75)
+
+        // B was replaced, so the transport has forgotten it.
+        transport.seek(item: "b", toFrame: 0)
+        pump()
+        run(for: 1)
+
+        XCTAssertEqual(heard, [0, 1, 2, 3, 500, 501, 502, 503, 504, 505, 506, 507])
+        XCTAssertEqual(crossed, ["a", "c"])
+        XCTAssertEqual(output.flushes, [0])
+    }
+
+    func testClearNextBeforeDecodeReachedTheNextRemovesIt() {
+        transport.setCurrent(item: "a", source: short)
+        transport.setNext(item: "b", source: b8)
+        transport.clearNext()
+        transport.play()
+        pump()
+        run(for: 1)
+
+        XCTAssertEqual(heard, [0, 1, 2, 3])
+        XCTAssertEqual(crossed, ["a"])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+    }
+
+    func testARepeatedItemIsReportedEachTimeAndASeekLandsInTheEarliestStillSet() {
+        transport.setCurrent(item: "a", source: short)
+        transport.setNext(item: "a", source: FakeItemSource(format: mono, frames: 4, chunkFrames: 2, base: 100))
+        transport.play()
+        pump()
+        run(for: 0.25)
+
+        // The first is still set, so the seek lands there.
+        transport.seek(item: "a", toFrame: 0)
+        pump()
+        run(for: 0.75)
+        XCTAssertEqual(crossed, ["a", "a"])
+
+        // Now only the second is.
+        transport.seek(item: "a", toFrame: 0)
+        pump()
+        run(for: 1)
+
+        XCTAssertEqual(heard, [0, 1, 0, 1, 2, 3, 100, 101, 100, 101, 102, 103])
+        XCTAssertEqual(crossed, ["a", "a"])
+        XCTAssertEqual(statuses.last, .ended)
+    }
+
+    func testAPositionBeforeTheItemsRateIsKnownIsHeldUntilItIs() {
+        transport.setCurrent(item: "a", source: a, startFrame: 4)
+        timer.sync()
+        timer.fire()
+        XCTAssertEqual(positions, [])
+
+        pump()
+        XCTAssertEqual(positions, [Heard(item: "a", frame: 4)])
+    }
+
+    func testSetProcessorsMidPlaybackRefeedsFromTheHeardFramePastWhatWasDropped() {
+        transport.setProcessors([DropRangesProcessor([4..<12])])
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        pump()
+        run(for: 1)
+        XCTAssertEqual(positions.last, Heard(item: "a", frame: 16))
+        let written = output.enqueues.count
+
+        transport.setProcessors([])
+        pump()
+        // One flush per setProcessors and one for setCurrent.
+        XCTAssertEqual(output.flushes, [0, 0, 1])
+        XCTAssertEqual(output.enqueues[written], FakeAudioOutput.Enqueue(samples: [16, 17], format: mono, time: 1))
+
+        run(for: 1.25)
+        XCTAssertEqual(heard, [0, 1, 2, 3, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23])
         XCTAssertEqual(statuses.last, .ended)
     }
 
@@ -220,7 +331,7 @@ final class TransportTests: XCTestCase {
         pump()
         run(for: 2)
 
-        XCTAssertEqual(heard, ramp(500..<508))
+        XCTAssertEqual(heard, [500, 501, 502, 503, 504, 505, 506, 507])
         XCTAssertEqual(crossed, ["c"])
         XCTAssertEqual(statuses.last, .ended)
     }
@@ -371,7 +482,7 @@ final class TransportTests: XCTestCase {
         ])
 
         run(for: 2)
-        XCTAssertEqual(heard, ramp(0..<4) + ramp(12..<24))
+        XCTAssertEqual(heard, [0, 1, 2, 3, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23])
         XCTAssertEqual(statuses.last, .ended)
     }
 
@@ -385,7 +496,7 @@ final class TransportTests: XCTestCase {
         pump()
         run(for: 2.25)
 
-        XCTAssertEqual(heard, ramp(0..<24))
+        XCTAssertEqual(heard, allOfA)
         XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing, .ended])
     }
 
@@ -406,7 +517,7 @@ final class TransportTests: XCTestCase {
         transport.play()
         pump()
         run(for: 2.25)
-        XCTAssertEqual(heard, ramp(1000..<1016))
+        XCTAssertEqual(heard, allOfB)
         // A's two chunks reached the paused playhead before it failed, so it was current.
         XCTAssertEqual(crossed, ["a", "b"])
         XCTAssertEqual(failedItems, ["a"])
