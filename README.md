@@ -5,17 +5,18 @@
 ![SwiftPM](https://img.shields.io/badge/SwiftPM-compatible-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)
 
-Decode and stream the audio AVPlayer won't, as PCM you control. A Swift package over FFmpeg for iOS and macOS.
-Used in production by Shuttle Podcasts and Shuttle2.
+Play the audio AVPlayer won't, and own the PCM on the way out. A Swift package over FFmpeg for iOS and macOS,
+used in production by Shuttle Podcasts and Shuttle2.
 
-## Why
+What an app gets:
 
-AVPlayer is the right choice for most audio. It falls short in four places:
-
-- **Formats.** No Ogg Vorbis, Ogg Opus or FLAC-in-Ogg, and no Matroska/WebM audio (such as Opus in WebM).
-- **Files whose index is stored at the end.** An MP4 or M4A like this cannot start until fully downloaded. Here it plays from range requests.
-- **PCM access.** Silence trimming, EQ or loudness need the decoded samples; AVPlayer does not hand them over.
-- **Flaky networks (PlaybackStreaming).** Range-request resume, stall detection and retry after a dropped connection.
+- **Formats AVPlayer lacks.** Ogg Vorbis, Ogg Opus, FLAC in Ogg and Matroska/WebM audio, alongside MP3, AAC, M4A/ALAC, FLAC and WAV/AIFF.
+- **Playback before the download ends.** `GrowingFileByteSource` reads an HTTP(S) URL while it downloads, with range-request resume, stall detection and retry. An MP4 with its index at the end plays from range requests.
+- **Seeks that land on the sample**, gapless joins between items (even at different sample rates), and decode that can be cancelled while blocked on the network.
+- **A decoder checked against goldens.** Over a hundred fixtures run through a faulting reader and a seek matrix against committed PCM hashes, modelled on androidx/media's tests ([ADR-0008](docs/decisions/0008-conformance-testing-modelled-on-media3.md)).
+- **An output layer to replace your `AVAudioEngine` graph** (`PlaybackRender`). One `Transport` drives an `AVSampleBufferAudioRenderer` and its synchronizer: play, pause, seek, speed, a gapless next item, and your effects as `AudioProcessor`s. Position comes back as the frame being heard. A failed renderer or a media-services reset is recovered once, landing paused where it was ([ADR-0018](docs/decisions/0018-render-layer.md)).
+- **Testable seams.** Bytes come from a `StreamByteReader`, items from an `ItemSource`, effects are `AudioProcessor`s, and `LoopbackMediaServer` is a fault-injecting local server for your own streaming tests.
+- **LGPL done for you.** FFmpeg ships as a dynamic framework Xcode embeds without a build-phase change, so users can relink ([ADR-0001](docs/decisions/0001-ffmpeg-for-demux-and-decode.md)).
 
 ## What's inside
 
@@ -28,13 +29,6 @@ Link only the products you import.
 | `PlaybackRender` | `Transport`: plays decoded PCM through `AVSampleBufferAudioRenderer`, joining items gaplessly. |
 | `PlaybackStreamingTestSupport` | `LoopbackMediaServer`: a local HTTP server for testing code that streams. |
 | `FFmpeg` | The LGPL-only FFmpeg as a dynamic framework, for an app with its own C code against libavformat. |
-
-## Capabilities
-
-- **Formats:** MP3, AAC, M4A/ALAC, Ogg, Matroska/WebM, FLAC, WAV/AIFF. [Full list](docs/usage.md#supported-formats).
-- **Sample-accurate seek**, and cancellation of a blocked open, read or seek.
-- **Range requests and a sparse on-disk cache** so bytes already fetched are not downloaded again after a seek or restart.
-- **Fault-injecting loopback server** (drops, stalls, redirects, ignored `Range`) for deterministic tests.
 
 ## Install
 
@@ -49,7 +43,7 @@ Link only the products you import.
 ])
 ```
 
-Requires iOS 17 or macOS 14, Apple silicon. The API may change before 1.0; a public API change is a minor version bump until then.
+Requires iOS 17 or macOS 14, Apple silicon. Pin a tag, never a branch. The API may change before 1.0; a public API change is a minor version bump until then.
 
 ## Example
 
@@ -65,16 +59,18 @@ while let chunk = decoder.nextChunk() {          // interleaved Float32, up to 4
 // nil is not always the end of the file: check decoder.endReason
 ```
 
-`open()`, `nextChunk()` and `seek(toSeconds:)` block, so call them from a thread of your own.
+`open()`, `nextChunk()` and `seek(toSeconds:)` block, so call them from a thread of your own. To have the
+package play it as well, see [the render section](docs/usage.md#play-through-the-render-layer).
 
 ## Not a player
 
-There is no queue, UI, effects or audio output. You schedule the PCM on `AVAudioEngine` or your own output.
-Playback through `AVSampleBufferAudioRenderer` is in `PlaybackRender`: see [the render section](docs/usage.md#play-through-the-render-layer).
+The package decodes, streams and, optionally, renders. There is no queue, Now Playing, audio session
+policy, effects or UI: those stay in the app, which drives `Transport` and supplies its effects as processors.
 
 ## Documentation
 
 - [Usage](docs/usage.md): decode a file, stream a URL, seek, cancel, show buffering state, play through the render layer.
+- [Migrating to PlaybackRender](docs/migrating.md): moving an `AVAudioEngine` player over, step by step.
 - [Architecture](docs/architecture.md): how the decoder and the download source work.
 - [Decisions](docs/decisions/README.md): why it is built this way.
 - [Contributing](CONTRIBUTING.md) and [docs/contributing.md](docs/contributing.md): tests, rebuilding FFmpeg, releasing.
