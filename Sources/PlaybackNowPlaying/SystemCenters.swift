@@ -20,8 +20,9 @@ enum RemoteCommandEvent: Equatable {
 protocol RemoteCommandCenter: AnyObject {
     /// Enables `command` with `handler`, replacing any earlier one; nil disables it.
     func setHandler(for command: RemoteCommand, _ handler: ((RemoteCommandEvent) -> MPRemoteCommandHandlerStatus)?)
-    /// The intervals drawn in the skip glyphs.
-    func setSkipIntervals(forward: TimeInterval, backward: TimeInterval)
+    /// The intervals drawn in the skip glyphs; nil clears them.
+    func setSkipIntervals(_ intervals: (forward: TimeInterval, backward: TimeInterval)?)
+    /// Empty clears them.
     func setSupportedRates(_ rates: [Double])
 }
 
@@ -56,9 +57,9 @@ final class SystemRemoteCommandCenter: RemoteCommandCenter {
         }
     }
 
-    func setSkipIntervals(forward: TimeInterval, backward: TimeInterval) {
-        center.skipForwardCommand.preferredIntervals = [NSNumber(value: forward)]
-        center.skipBackwardCommand.preferredIntervals = [NSNumber(value: backward)]
+    func setSkipIntervals(_ intervals: (forward: TimeInterval, backward: TimeInterval)?) {
+        center.skipForwardCommand.preferredIntervals = intervals.map { [NSNumber(value: $0.forward)] } ?? []
+        center.skipBackwardCommand.preferredIntervals = intervals.map { [NSNumber(value: $0.backward)] } ?? []
     }
 
     func setSupportedRates(_ rates: [Double]) {

@@ -20,10 +20,11 @@ public struct NowPlayingMetadata: Sendable {
 }
 
 /// Shows a `Player` in `MPNowPlayingInfoCenter` and routes `MPRemoteCommandCenter` back to it, until
-/// `release()`. Elapsed time and rate are written only on a seek, a pause or play, a rate change or an
-/// item change; the system extrapolates between them. A command is enabled only while it applies, as
-/// media3's available commands: next and previous while there is a neighbour, skips and scrubbing while
-/// the item is seekable, play and pause always. One session per app, since both centres are global.
+/// `release()`. Elapsed time and rate are written only on a jump of the player's position, a pause or
+/// play, a rate change or an item change; the system extrapolates between them. A command is enabled
+/// only while it applies, as media3's available commands: next while there is a next, previous on any
+/// item but a live one with nothing before it, skips and scrubbing while the item is seekable, play and
+/// pause always. One session per app, since both centres are global.
 @MainActor
 public final class NowPlayingSession<Item: Hashable & Sendable> {
     public enum SkipMode: Equatable, Sendable {
@@ -47,7 +48,6 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     private let artwork: (@MainActor (Item) async -> MPMediaItemArtwork?)?
     private let infoCenter: any NowPlayingInfoCenter
     private let commandCenter: any RemoteCommandCenter
-    private let now: @MainActor () -> TimeInterval
 
     private(set) var pendingRefresh: Task<Void, Never>?
     private(set) var artworkLoad: Task<Void, Never>?
@@ -55,27 +55,27 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     private var enabledCommands: Set<RemoteCommand>?
     private var current: (item: Item, metadata: NowPlayingMetadata, artwork: MPMediaItemArtwork?)?
     private var published: Published?
-    private var lastSeenPosition: TimeInterval = 0
+    /// Tells one artwork load from another for the same item, so only the latest publishes.
+    private var artworkLoads = 0
 
-    /// What was last written, to tell a seek from the system's own extrapolation.
-    private struct Published: Equatable {
+    /// What was last written. Position is not compared: the system extrapolates it, and a jump moves
+    /// the player's `discontinuityCount`.
+    private struct Published {
         var item: Item
         var rate: Double
         var defaultRate: Double
         var duration: TimeInterval?
         var isLive: Bool
         var state: MPNowPlayingPlaybackState
+        var discontinuity: Int
         var position: TimeInterval
-        var at: TimeInterval
 
         func sameShown(as other: Published) -> Bool {
             item == other.item && rate == other.rate && defaultRate == other.defaultRate
                 && duration == other.duration && isLive == other.isLive && state == other.state
+                && discontinuity == other.discontinuity
         }
     }
-
-    /// A position this far off the extrapolation is a seek; within it, pump jitter. Shuttle2's tolerance.
-    private static var seekTolerance: TimeInterval { 1 }
 
     /// `supportedRates` enables the rate command with those rates; empty leaves it off. `artwork` runs
     /// once per item change, and what it returns is dropped if the item changed meanwhile.
@@ -88,8 +88,7 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     ) {
         self.init(
             player: player, skipMode: skipMode, supportedRates: supportedRates, metadata: metadata, artwork: artwork,
-            infoCenter: MPNowPlayingInfoCenter.default(), commandCenter: SystemRemoteCommandCenter(),
-            now: { ProcessInfo.processInfo.systemUptime }
+            infoCenter: MPNowPlayingInfoCenter.default(), commandCenter: SystemRemoteCommandCenter()
         )
     }
 
@@ -100,8 +99,7 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         metadata: @escaping @MainActor (Item) -> NowPlayingMetadata,
         artwork: (@MainActor (Item) async -> MPMediaItemArtwork?)?,
         infoCenter: any NowPlayingInfoCenter,
-        commandCenter: any RemoteCommandCenter,
-        now: @escaping @MainActor () -> TimeInterval
+        commandCenter: any RemoteCommandCenter
     ) {
         self.player = player
         self.skipMode = skipMode
@@ -110,19 +108,21 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         self.artwork = artwork
         self.infoCenter = infoCenter
         self.commandCenter = commandCenter
-        self.now = now
         if !supportedRates.isEmpty { commandCenter.setSupportedRates(supportedRates) }
         applySkipIntervals()
         observe()
     }
 
-    /// Disables every command and clears the info, as media3's `MediaSession.release`. Final.
+    /// Disables every command and clears the info, rates and skip intervals, as media3's
+    /// `MediaSession.release`. Final.
     public func release() {
         guard !released else { return }
         released = true
         pendingRefresh?.cancel()
         artworkLoad?.cancel()
         for command in RemoteCommand.allCases { commandCenter.setHandler(for: command, nil) }
+        commandCenter.setSupportedRates([])
+        commandCenter.setSkipIntervals(nil)
         infoCenter.nowPlayingInfo = nil
         infoCenter.playbackState = .stopped
     }
@@ -156,14 +156,7 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         }
         if current?.item != item { load(item) }
         let next = snapshot(of: item)
-        let position = player.position
-        defer { lastSeenPosition = position }
-        guard let published, published.sameShown(as: next) else { return publish(next) }
-        let expected = published.position + (next.at - published.at) * published.rate
-        let seeked = published.rate == 0
-            ? position != published.position
-            : position < lastSeenPosition || abs(position - expected) > Self.seekTolerance
-        if seeked { publish(next) }
+        if published.map({ !$0.sameShown(as: next) }) ?? true { publish(next) }
     }
 
     private func load(_ item: Item) {
@@ -171,9 +164,11 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         artworkLoad?.cancel()
         artworkLoad = nil
         guard let artwork else { return }
+        artworkLoads += 1
+        let id = artworkLoads
         artworkLoad = Task { [weak self] in
             let image = await artwork(item)
-            guard let self, !released, current?.item == item, player.currentItem == item else { return }
+            guard let self, !released, artworkLoads == id, current?.item == item, player.currentItem == item else { return }
             current?.artwork = image
             publish(snapshot(of: item))
         }
@@ -194,8 +189,8 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
             duration: player.isLive ? nil : player.duration ?? current?.metadata.duration,
             isLive: player.isLive,
             state: showsPlay ? .paused : .playing,
-            position: player.position,
-            at: now()
+            discontinuity: player.discontinuityCount,
+            position: player.position
         )
     }
 
@@ -229,7 +224,8 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         switch skipMode {
         case .tracks:
             if player.hasNext { commands.insert(.nextTrack) }
-            if player.hasPrevious { commands.insert(.previousTrack) }
+            // media3 COMMAND_SEEK_TO_PREVIOUS, which restarts an item with no previous; a live one cannot.
+            if player.hasPrevious || (player.currentItem != nil && !player.isLive) { commands.insert(.previousTrack) }
         case .intervals:
             if isSeekable { commands.formUnion([.skipForward, .skipBackward]) }
         }
@@ -250,7 +246,7 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
 
     private func applySkipIntervals() {
         guard case let .intervals(forward, backward) = skipMode else { return }
-        commandCenter.setSkipIntervals(forward: forward, backward: backward)
+        commandCenter.setSkipIntervals((forward, backward))
     }
 
     private func handle(_ command: RemoteCommand, _ event: RemoteCommandEvent) -> MPRemoteCommandHandlerStatus {
@@ -261,7 +257,8 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         // media3's `playIfSuppressed` default: a suppressed player shows play, so toggle plays.
         case (.togglePlayPause, _): showsPlay ? player.play() : player.pause()
         case (.nextTrack, _): player.skipToNext()
-        case (.previousTrack, _): player.skipToPrevious()
+        // No 3 s threshold (ADR-0019): a previous item is always where it goes.
+        case (.previousTrack, _): player.hasPrevious ? player.skipToPrevious() : player.seek(to: 0)
         case let (.skipForward, .interval(seconds)): player.seek(by: seconds)
         case let (.skipBackward, .interval(seconds)): player.seek(by: -seconds)
         case let (.changePlaybackPosition, .position(seconds)): player.seek(to: seconds)

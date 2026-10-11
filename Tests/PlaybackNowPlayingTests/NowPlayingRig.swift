@@ -36,8 +36,8 @@ final class FakeCommandCenter: RemoteCommandCenter {
         handlers[command] = handler
     }
 
-    func setSkipIntervals(forward: TimeInterval, backward: TimeInterval) {
-        intervals = (forward, backward)
+    func setSkipIntervals(_ intervals: (forward: TimeInterval, backward: TimeInterval)?) {
+        self.intervals = intervals
     }
 
     func setSupportedRates(_ rates: [Double]) {
@@ -51,8 +51,7 @@ final class FakeCommandCenter: RemoteCommandCenter {
     }
 }
 
-/// A session over a `PlayerTestRig` of ten-second string items at 8 Hz, with a wall clock that
-/// moves only with `run(for:)`.
+/// A session over a `PlayerTestRig` of ten-second string items at 8 Hz.
 @MainActor
 final class NowPlayingRig {
     static let format = PCMFormat(sampleRate: 8, channelCount: 1)
@@ -61,10 +60,9 @@ final class NowPlayingRig {
     let info = FakeInfoCenter()
     let commands = FakeCommandCenter()
     private(set) var session: NowPlayingSession<String>!
-    private var clock: TimeInterval = 1_000
     /// Artwork loads for these items wait for `deliverArtwork`.
     var heldArtwork: Set<String> = []
-    private var artworkWaiters: [String: CheckedContinuation<Void, Never>] = [:]
+    private var artworkWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
     private(set) var artworks: [String: MPMediaItemArtwork] = [:]
 
     var player: Player<String> { base.player }
@@ -82,15 +80,13 @@ final class NowPlayingRig {
             metadata: { NowPlayingMetadata(title: $0.uppercased(), artist: "Artist \($0)", album: "Album", duration: 99) },
             artwork: { [weak self] in await self?.loadArtwork($0) },
             infoCenter: info,
-            commandCenter: commands,
-            now: { [weak self] in self?.clock ?? 0 }
+            commandCenter: commands
         )
     }
 
-    /// Runs the player for `seconds` of output and wall clock, then lets the session catch up.
+    /// Runs the player for `seconds` of output, then lets the session catch up.
     func run(for seconds: TimeInterval) async {
         base.run(for: seconds)
-        clock += seconds
         await settle()
     }
 
@@ -101,13 +97,14 @@ final class NowPlayingRig {
         await session.pendingRefresh?.value
     }
 
+    /// Resumes the latest held load of `item`, so loads can finish newest first.
     func deliverArtwork(for item: String) {
-        artworkWaiters.removeValue(forKey: item)?.resume()
+        artworkWaiters[item]?.popLast()?.resume()
     }
 
     private func loadArtwork(_ item: String) async -> MPMediaItemArtwork? {
         if heldArtwork.contains(item) {
-            await withCheckedContinuation { artworkWaiters[item] = $0 }
+            await withCheckedContinuation { artworkWaiters[item, default: []].append($0) }
         }
         let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 1, height: 1)) { _ in Self.image() }
         artworks[item] = artwork

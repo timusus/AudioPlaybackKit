@@ -92,6 +92,29 @@ final class NowPlayingInfoTests: XCTestCase {
         XCTAssertEqual(elapsed, 3.5)
     }
 
+    func testASmallForwardSeekWhilePlayingWritesTheNewElapsedTime() async {
+        await playing()
+        XCTAssertEqual(rig.player.position, 2)
+
+        rig.player.seek(by: 0.5)
+        await rig.settle()
+
+        XCTAssertEqual(elapsed, 2.5)
+    }
+
+    // The seek's buffering is over before the session reads the player, so only the jump tells it.
+    func testASeekThatNeverBuffersWritesTheNewElapsedTime() async {
+        await playing()
+
+        rig.player.seek(by: 0.5)
+        rig.base.pump()
+        await rig.settle()
+
+        XCTAssertEqual(rig.player.state, .ready)
+        XCTAssertEqual(rate, 1)
+        XCTAssertEqual(elapsed, 2.5)
+    }
+
     func testASmallSeekBackWhilePausedWritesTheNewElapsedTime() async {
         await playing()
         rig.player.pause()
@@ -243,5 +266,28 @@ final class NowPlayingInfoTests: XCTestCase {
         let artwork: MPMediaItemArtwork? = rig.info[MPMediaItemPropertyArtwork]
         XCTAssertNotNil(rig.artworks["a"])
         XCTAssertTrue(artwork === rig.artworks["b"])
+    }
+
+    func testArtworkFromAnEarlierVisitToTheSameItemIsDropped() async {
+        rig.heldArtwork = ["a"]
+        rig.player.setItems(["a", "b"])
+        await rig.settle()
+        let firstLoad = rig.session.artworkLoad
+        rig.player.skipToNext()
+        await rig.settle()
+        await rig.session.artworkLoad?.value
+        rig.player.skipToPrevious()
+        await rig.settle()
+        let secondLoad = rig.session.artworkLoad
+
+        rig.deliverArtwork(for: "a")
+        await secondLoad?.value
+        let current: MPMediaItemArtwork? = rig.info[MPMediaItemPropertyArtwork]
+        rig.deliverArtwork(for: "a")
+        await firstLoad?.value
+
+        let artwork: MPMediaItemArtwork? = rig.info[MPMediaItemPropertyArtwork]
+        XCTAssertNotNil(current)
+        XCTAssertTrue(artwork === current)
     }
 }

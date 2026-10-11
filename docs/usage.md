@@ -283,9 +283,10 @@ The metadata closure runs once per item change; its `duration` is shown until th
 item. Artwork that arrives after the item changed is dropped. Elapsed time and rate are written on a seek,
 a play or pause, a rate change and an item change, never on each position update: the system
 extrapolates between them. Commands are enabled only while they apply, as media3's available commands:
-next and previous while there is a neighbour (repeat `.all` wraps), skips and scrubbing once the item's
-duration is known, play and pause always. `skipMode` can change at any time. `release()` disables every
-command and clears the info.
+next while there is a next item (repeat `.all` wraps), previous on any item but a live one with nothing
+before it (with nothing before, it restarts the item), skips and scrubbing once the item's duration is
+known, play and pause always. `skipMode` can change at any time. `release()` disables every command and
+clears the info, the playback rates and the skip intervals.
 
 ## Write a byte source of your own
 

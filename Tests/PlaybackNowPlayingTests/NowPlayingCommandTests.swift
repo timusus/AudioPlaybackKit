@@ -92,18 +92,39 @@ final class NowPlayingCommandTests: XCTestCase {
 
     // media3 ExoPlayerTest.seekTo_nextWindow_notifiesAvailableCommandsChanged,
     // seekTo_previousWindow_notifiesAvailableCommandsChanged
-    func testNextAndPreviousFollowTheCurrentIndex() async {
+    func testNextFollowsTheCurrentIndex() async {
         await opened()
         XCTAssertTrue(enabled.contains(.nextTrack))
-        XCTAssertFalse(enabled.contains(.previousTrack))
 
         rig.player.seek(to: 0, itemAt: 1)
         await rig.settle()
-        XCTAssertTrue(enabled.isSuperset(of: [.nextTrack, .previousTrack]))
+        XCTAssertTrue(enabled.contains(.nextTrack))
 
         rig.player.seek(to: 0, itemAt: 2)
         await rig.settle()
         XCTAssertFalse(enabled.contains(.nextTrack))
+    }
+
+    // media3 COMMAND_SEEK_TO_PREVIOUS, which the lock screen's previous button is: available on any
+    // item but an unseekable live one with nothing before it.
+    func testPreviousIsAvailableOnTheFirstItem() async {
+        rig.player.setItems(["a", "b"])
+        await rig.settle()
+
+        XCTAssertTrue(enabled.contains(.previousTrack))
+    }
+
+    // media3 ExoPlayerTest.isCommandAvailable_duringUnseekableLiveItem_isFalseForSeekToPrevious,
+    // isCommandAvailable_duringUnseekableLiveItemWithPreviousWindow_isTrueForSeekToPrevious
+    func testPreviousOnALiveItemNeedsAPreviousItem() async {
+        rig = NowPlayingRig(live: ["a", "b"])
+        await opened(["a", "b"])
+        XCTAssertFalse(enabled.contains(.previousTrack))
+
+        rig.player.seek(to: 0, itemAt: 1)
+        rig.player.play()
+        await rig.run(for: 1)
+        XCTAssertTrue(rig.player.isLive)
         XCTAssertTrue(enabled.contains(.previousTrack))
     }
 
@@ -122,49 +143,45 @@ final class NowPlayingCommandTests: XCTestCase {
     // addMediaSource_atTheStart_notifiesAvailableCommandsChanged,
     // removeMediaItem_atTheEnd_notifiesAvailableCommandsChanged,
     // removeMediaItem_atTheStart_notifiesAvailableCommandsChanged
-    func testEditsAroundTheCurrentItemUpdateNextAndPrevious() async {
+    func testEditsAroundTheCurrentItemUpdateNext() async {
         await opened(["a"])
-        XCTAssertTrue(enabled.isDisjoint(with: [.nextTrack, .previousTrack]))
+        XCTAssertFalse(enabled.contains(.nextTrack))
 
         rig.player.insert(["b"], at: 1)
         await rig.settle()
-        XCTAssertEqual(enabled.intersection([.nextTrack, .previousTrack]), [.nextTrack])
+        XCTAssertTrue(enabled.contains(.nextTrack))
 
         rig.player.insert(["x"], at: 0)
         await rig.settle()
-        XCTAssertEqual(enabled.intersection([.nextTrack, .previousTrack]), [.nextTrack, .previousTrack])
+        XCTAssertTrue(enabled.contains(.nextTrack))
 
         rig.player.remove(at: 2)
         await rig.settle()
-        XCTAssertEqual(enabled.intersection([.nextTrack, .previousTrack]), [.previousTrack])
-
-        rig.player.remove(at: 0)
-        await rig.settle()
-        XCTAssertTrue(enabled.isDisjoint(with: [.nextTrack, .previousTrack]))
+        XCTAssertFalse(enabled.contains(.nextTrack))
     }
 
     // media3 ExoPlayerTest.removeMediaItem_current_notifiesAvailableCommandsChanged
-    func testRemovingTheCurrentItemUpdatesNextAndPrevious() async {
+    func testRemovingTheCurrentItemUpdatesNext() async {
         await opened(["a", "b"])
 
         rig.player.remove(at: 0)
         await rig.settle()
 
-        XCTAssertTrue(enabled.isDisjoint(with: [.nextTrack, .previousTrack]))
+        XCTAssertEqual(enabled.intersection([.nextTrack, .previousTrack]), [.previousTrack])
     }
 
     // media3 ExoPlayerTest.setRepeatMode_all_notifiesAvailableCommandsChanged,
     // setRepeatMode_one_doesNotNotifyAvailableCommandsChanged
-    func testRepeatAllEnablesNextAndPreviousAtTheEndsAndRepeatOneDoesNot() async {
-        await opened(["a", "b"])
+    func testRepeatAllEnablesNextOnTheLastItemAndRepeatOneDoesNot() async {
+        await opened(["a", "b"], at: 1)
 
         rig.player.repeatMode = .one
         await rig.settle()
-        XCTAssertEqual(enabled.intersection([.nextTrack, .previousTrack]), [.nextTrack])
+        XCTAssertFalse(enabled.contains(.nextTrack))
 
         rig.player.repeatMode = .all
         await rig.settle()
-        XCTAssertEqual(enabled.intersection([.nextTrack, .previousTrack]), [.nextTrack, .previousTrack])
+        XCTAssertTrue(enabled.contains(.nextTrack))
     }
 
     func testChangePlaybackRateIsEnabledOnlyWithSupportedRates() async {
@@ -241,6 +258,18 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertEqual(rig.player.currentIndex, 1)
     }
 
+    // media3 Player.seekToPrevious with no previous item seeks the current one to 0; with no 3 s
+    // threshold (ADR-0019), a previous item is always where it goes.
+    func testPreviousOnTheFirstItemRestartsIt() async {
+        await opened()
+        XCTAssertGreaterThan(rig.player.position, 0)
+
+        XCTAssertEqual(rig.commands.fire(.previousTrack), .success)
+
+        XCTAssertEqual(rig.player.currentIndex, 0)
+        XCTAssertEqual(rig.player.position, 0)
+    }
+
     // media3 MediaSessionPlayerTest.seekForward, seekBack
     func testSkipsSeekByTheirInterval() async {
         rig = NowPlayingRig(skipMode: .intervals(forward: 3, backward: 2))
@@ -290,5 +319,15 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertEqual(enabled, [])
         XCTAssertNil(rig.info.nowPlayingInfo)
         XCTAssertEqual(rig.info.playbackState, .stopped)
+    }
+
+    func testReleaseClearsTheRatesAndSkipIntervalsItSet() async {
+        rig = NowPlayingRig(skipMode: .intervals(forward: 15, backward: 30), supportedRates: [1, 2])
+        await opened()
+
+        rig.session.release()
+
+        XCTAssertEqual(rig.commands.rates, [])
+        XCTAssertNil(rig.commands.intervals)
     }
 }

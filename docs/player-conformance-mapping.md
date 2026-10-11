@@ -254,20 +254,20 @@ personal output. `PlayerSessionTests` drives them through `FakeAudioSession`.
 | `isCommandAvailable_withoutDeviceVolumeControlEnabled_isFalseForDeviceVolumeCommands` | n/a: API |
 | `isCommandAvailable_duringAd_isFalseForSeekCommands` | n/a: ads |
 | `isCommandAvailable_duringUnseekableItem_isFalseForSeekInCurrentCommands` | `NowPlayingCommandTests.testSeekingIsUnavailableForALiveItem`; an item without a duration is the unseekable one |
-| `isCommandAvailable_duringUnseekableLiveItem_isFalseForSeekToPrevious` | n/a: API, `previousTrack` is `SEEK_TO_PREVIOUS_MEDIA_ITEM`, which ignores seekability |
-| `isCommandAvailable_duringUnseekableLiveItemWithPreviousWindow_isTrueForSeekToPrevious` | n/a: API, as above |
+| `isCommandAvailable_duringUnseekableLiveItem_isFalseForSeekToPrevious` | `NowPlayingCommandTests.testPreviousOnALiveItemNeedsAPreviousItem`; `previousTrack` is `SEEK_TO_PREVIOUS` |
+| `isCommandAvailable_duringUnseekableLiveItemWithPreviousWindow_isTrueForSeekToPrevious` | `NowPlayingCommandTests.testPreviousOnALiveItemNeedsAPreviousItem` |
 | `isCommandAvailable_duringLiveItem_isTrueForSeekToNext` | n/a: API, `nextTrack` is `SEEK_TO_NEXT_MEDIA_ITEM` |
-| `seekTo_nextWindow_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testNextAndPreviousFollowTheCurrentIndex` |
-| `seekTo_previousWindow_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testNextAndPreviousFollowTheCurrentIndex` |
+| `seekTo_nextWindow_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testNextFollowsTheCurrentIndex` |
+| `seekTo_previousWindow_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testNextFollowsTheCurrentIndex`; `SEEK_TO_PREVIOUS` stays available on every non-live item (`testPreviousIsAvailableOnTheFirstItem`) |
 | `seekTo_sameWindow_doesNotNotifyAvailableCommandsChanged` | n/a: API, the command centre has no change notification |
 | `automaticWindowTransition_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testAnAutomaticAdvanceToTheLastItemDisablesNext` |
-| `addMediaSource_atTheEnd_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testEditsAroundTheCurrentItemUpdateNextAndPrevious` |
-| `addMediaSource_atTheStart_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testEditsAroundTheCurrentItemUpdateNextAndPrevious` |
-| `removeMediaItem_atTheEnd_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testEditsAroundTheCurrentItemUpdateNextAndPrevious` |
-| `removeMediaItem_atTheStart_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testEditsAroundTheCurrentItemUpdateNextAndPrevious` |
-| `removeMediaItem_current_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testRemovingTheCurrentItemUpdatesNextAndPrevious` |
-| `setRepeatMode_all_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testRepeatAllEnablesNextAndPreviousAtTheEndsAndRepeatOneDoesNot` |
-| `setRepeatMode_one_doesNotNotifyAvailableCommandsChanged` | `NowPlayingCommandTests.testRepeatAllEnablesNextAndPreviousAtTheEndsAndRepeatOneDoesNot` |
+| `addMediaSource_atTheEnd_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testEditsAroundTheCurrentItemUpdateNext` |
+| `addMediaSource_atTheStart_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testEditsAroundTheCurrentItemUpdateNext` |
+| `removeMediaItem_atTheEnd_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testEditsAroundTheCurrentItemUpdateNext` |
+| `removeMediaItem_atTheStart_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testEditsAroundTheCurrentItemUpdateNext` |
+| `removeMediaItem_current_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testRemovingTheCurrentItemUpdatesNext` |
+| `setRepeatMode_all_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testRepeatAllEnablesNextOnTheLastItemAndRepeatOneDoesNot` |
+| `setRepeatMode_one_doesNotNotifyAvailableCommandsChanged` | `NowPlayingCommandTests.testRepeatAllEnablesNextOnTheLastItemAndRepeatOneDoesNot` |
 | `setShuffleModeEnabled_notifiesAvailableCommandsChanged` | n/a: shuffle |
 | `mediaSourceMaybeThrowSourceInfoRefreshError_isNotThrownUntilPlaybackReachedFailingItem` | `PlayerErrorTests.testANextTheFactoryRejectsIsReportedWhenPlaybackReachesIt` |
 | `mediaPeriodMaybeThrowPrepareError_isNotThrownUntilPlaybackReachedFailingItem` | `PlayerErrorTests.testANextThatFailsToOpenIsReportedWhenPlaybackReachesIt` |
@@ -472,8 +472,7 @@ the rest drive media3 API (custom layouts, browsing, playlist metadata, volume) 
 | `MediaSessionPlayerTest.seekTo` | `NowPlayingCommandTests.testChangePlaybackPositionSeeks` |
 | `MediaSessionPlayerTest.setPlaybackSpeed` | `NowPlayingCommandTests.testChangePlaybackRateSetsTheRate` |
 | `MediaSessionPlayerTest.seekToNextMediaItem` | `NowPlayingCommandTests.testNextAndPreviousSkip` |
-| `MediaSessionPlayerTest.seekToPreviousMediaItem` | `NowPlayingCommandTests.testNextAndPreviousSkip` |
-| `MediaSessionPlayerTest.seekForward` | `NowPlayingCommandTests.testSkipsSeekByTheirInterval`; the interval is the app's `SkipMode`, not the player's |
+| `MediaSessionPlayerTest.seekToPreviousMediaItem` | `NowPlayingCommandTests.testNextAndPreviousSkip` || `MediaSessionPlayerTest.seekForward` | `NowPlayingCommandTests.testSkipsSeekByTheirInterval`; the interval is the app's `SkipMode`, not the player's |
 | `MediaSessionPlayerTest.seekBack` | `NowPlayingCommandTests.testSkipsSeekByTheirInterval` |
 | `MediaControllerTest.isCommandAvailable_withAvailableCommand_returnsTrue` | `NowPlayingCommandTests.testTracksModeEnablesNextAndPreviousAndNoSkips`, `testIntervalsModeEnablesSkipsWithTheirIntervalsAndNoTracks` |
 | `MediaControllerTest.isCommandAvailable_withUnavailableCommand_returnsFalse` | `NowPlayingCommandTests.testChangePlaybackRateIsEnabledOnlyWithSupportedRates` |
@@ -482,12 +481,15 @@ the rest drive media3 API (custom layouts, browsing, playlist metadata, volume) 
 | `MediaControllerTest.getCurrentPosition_whenNotPlaying_doesNotAdvance` | `NowPlayingInfoTests.testPauseWritesTheElapsedTimeAndRateZero` |
 | `MediaControllerTest.getCurrentPosition_afterPause_returnsCorrectPosition` | `NowPlayingInfoTests.testPauseWritesTheElapsedTimeAndRateZero` |
 
-Rules of the session with no media3 test: elapsed time and rate are written only on a seek, a play or
-pause, a rate change or an item change (`NowPlayingInfoTests.testPositionPumpsWriteNothing` and the
-seek, rate, skip, advance and repeat tests); a forward seek under a second while playing is not seen,
-since the player sends no seek the session can share. Artwork for an item no longer current is dropped
-(`testArtworkThatArrivesAfterTheItemChangedIsDropped`), and `release()` disables every command
-(`NowPlayingCommandTests.testReleaseDisablesEveryCommandAndClearsTheInfo`).
+Rules of the session with no media3 test: elapsed time and rate are written only on a change of the
+player's `discontinuityCount`, a play or pause, a rate change or an item change
+(`NowPlayingInfoTests.testPositionPumpsWriteNothing` and the seek, rate, skip, advance and repeat tests),
+so a small seek and one that never buffers are seen (`testASmallForwardSeekWhilePlayingWritesTheNewElapsedTime`,
+`testASeekThatNeverBuffersWritesTheNewElapsedTime`). Previous with no previous item restarts the item (`NowPlayingCommandTests.testPreviousOnTheFirstItemRestartsIt`).
+Artwork from any load but the latest is dropped
+(`testArtworkThatArrivesAfterTheItemChangedIsDropped`, `testArtworkFromAnEarlierVisitToTheSameItemIsDropped`),
+and `release()` disables every command and clears the rates and skip intervals
+(`NowPlayingCommandTests.testReleaseDisablesEveryCommandAndClearsTheInfo`, `testReleaseClearsTheRatesAndSkipIntervalsItSet`).
 
 ## Ours without a media3 test
 
