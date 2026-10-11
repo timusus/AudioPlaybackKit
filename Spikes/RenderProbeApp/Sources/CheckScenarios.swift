@@ -163,7 +163,7 @@ enum CheckScenarios {
         // The fixture's level is fixed, so the volume brings it down 20 dB and the tones are made 20 dB louder to match.
         probe.transport.setVolume(0.1)
         let loud = Signals.sine(1000, 0.5)
-        probe.transport.setCurrent(item: "F", source: FFmpegItemSource(reader: try FileByteReader(url: url)), startFrame: 17 * 44100)
+        probe.transport.setCurrent(item: "F", source: FFmpegItemSource(reader: try FileByteReader(url: url)), startSeconds: 17)
         probe.transport.setNext(item: "B", source: ToneSource(rate: 48000, channels: 2, seconds: 3, loud))
         let playHost = hostNow()
         probe.transport.play()
@@ -202,7 +202,7 @@ enum CheckScenarios {
         try await probe.until(5) { $0.status == .playing }
         try await pause(3)
         let call = hostNow()
-        probe.transport.seek(item: "S", toFrame: 12 * 48000)
+        probe.transport.seek(item: "S", toSeconds: 12)
         try await pause(3)
         let landed = probe.positions.first { $0.host > call }?.seconds
         let gap = ear.tone(from: call - 0.1, to: call + 2)?.dips().first
@@ -365,7 +365,7 @@ enum CheckScenarios {
 
         let seekHost = hostNow()
         await CheckUI.shared.show(id, "Checking that .ended still fires (about 2 s).")
-        probe.transport.seek(item: "G", toFrame: source.frames - 2 * 48000)
+        probe.transport.seek(item: "G", toSeconds: Double(source.frames) / 48000 - 2)
         let ended = try await probe.until(15) { $0.status == .ended }
         let endedAfter = probe.events("status").last { $0.detail == "ended" }.map { $0.host - seekHost }
         let glitch = await CheckUI.shared.ask("Did you hear a glitch?", "Around the change: a gap, a click or a repeated bit of tone?",

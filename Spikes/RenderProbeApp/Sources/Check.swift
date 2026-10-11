@@ -269,8 +269,9 @@ final class CheckProbe: @unchecked Sendable {
     private func record(_ event: TransportEvent<String>) {
         let host = hostNow()
         switch event {
-        case let .position(item, frame, sampleRate, _):
-            let position = Position(host: host, item: item, seconds: Double(frame) / sampleRate, clock: clock, latency: Session.shared.outputLatency, sampleRate: sampleRate)
+        case let .position(item, seconds, _):
+            // Every probe source is 48 kHz; the event no longer carries the rate.
+            let position = Position(host: host, item: item, seconds: seconds, clock: clock, latency: Session.shared.outputLatency, sampleRate: 48000)
             lock.withLock { _positions.append(position) }
         case let .crossed(item):
             add(Event(host: host, kind: "crossed", detail: item))

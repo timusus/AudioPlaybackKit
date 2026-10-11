@@ -152,7 +152,7 @@ extension CheckScenarios {
             try await pause(3)
         }
         let seekHost = hostNow()
-        probe.transport.seek(item: "F", toFrame: source.frames - 2 * 48000)
+        probe.transport.seek(item: "F", toSeconds: Double(source.frames) / 48000 - 2)
         let ended = try await probe.until(15) { $0.status == .ended }
         let endedAfter = probe.events("status").last { $0.detail == "ended" }.map { $0.host - seekHost }
 
