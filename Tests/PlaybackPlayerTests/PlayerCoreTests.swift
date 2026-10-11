@@ -57,6 +57,24 @@ final class PlayerCoreTests: XCTestCase {
         XCTAssertEqual(player.state, .ended)
     }
 
+    // #134: on the phone each transport event can land in its own drain, and a resume flickered
+    // `isPlaying` true, false, true, with the lock screen's rate following it.
+    func testAResumeWithAudioQueuedKeepsIsPlayingThroughEveryEvent() {
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 1)
+        player.pause()
+        rig.settle()
+
+        let events = rig.inFlight { player.play() }
+        XCTAssertTrue(player.isPlaying)
+        XCTAssertFalse(events.isEmpty)
+        for event in events {
+            rig.deliver([event])
+            XCTAssertTrue(player.isPlaying, "after \(event)")
+        }
+    }
+
     func testPlayWhenReadyIsUnchangedByTransportEvents() {
         player.setItems(["a"])
         XCTAssertFalse(player.playWhenReady)

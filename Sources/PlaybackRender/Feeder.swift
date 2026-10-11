@@ -101,7 +101,8 @@ final class Feeder {
 
     func play() {
         playWhenReady = true
-        if status == .paused { setStatus(.buffering) }
+        // With enough queued it plays on at once: reporting buffering first would flicker the app's `isPlaying`.
+        if status == .paused, !canStart { setStatus(.buffering) }
         pump()
     }
 
@@ -171,9 +172,7 @@ final class Feeder {
 
         fill()
 
-        let depth = map.writtenEnd - playhead()
-        if playWhenReady, !outputRunning, !failed, status == .buffering,
-           upstreamEnded ? depth > 0 : depth >= resumeDepth * rate {
+        if playWhenReady, !outputRunning, status == .buffering || status == .paused, canStart {
             output.setRate(rate, at: nil)
             outputRunning = true
             setStatus(.playing)
@@ -183,6 +182,11 @@ final class Feeder {
     }
 
     // MARK: Private
+
+    private var canStart: Bool {
+        let depth = map.writtenEnd - playhead()
+        return !failed && (upstreamEnded ? depth > 0 : depth >= resumeDepth * rate)
+    }
 
     private func playhead() -> TimeInterval {
         map.playhead(currentTime: output.currentTime(), outputLatency: output.outputLatency)

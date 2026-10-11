@@ -229,7 +229,7 @@ final class TransportTests: XCTestCase {
         run(for: 3)
 
         XCTAssertEqual(heard, allOfA)
-        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .buffering, .playing, .ended])
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .playing, .ended])
     }
 
     func testRateSpeedsTheOutputClockAndThePositionFollowsIt() {

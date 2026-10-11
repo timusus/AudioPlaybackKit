@@ -121,6 +121,21 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(statuses.last, .ended)
     }
 
+    // #134: on the phone a resume reported buffering first, so `isPlaying` and the lock screen's
+    // rate went true, false, true.
+    func testAResumeWithEnoughQueuedPlaysOnWithoutReportingBuffering() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1)
+        feeder.pause()
+        events = []
+
+        feeder.play()
+
+        XCTAssertEqual(statuses, [.playing])
+        XCTAssertNotEqual(output.rate, 0)
+    }
+
     func testEndOfStreamReportsEndedNotBuffering() {
         makeFeeder([item(0, 4), item(1, 0)])
         feeder.play()
@@ -367,7 +382,7 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(heard, ramp(0, 0..<40))
         XCTAssertEqual(positions.map(\.mediaFrame), positions.map(\.mediaFrame).sorted())
         XCTAssertEqual(positions.last, pos(0, 40))
-        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .buffering, .playing, .ended])
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .playing, .ended])
     }
 
     func testAFailedEnqueueTakesTheSameRecoveryPath() {
@@ -491,7 +506,7 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(output.rebuilds, 2)
         XCTAssertTrue(failures.isEmpty)
         XCTAssertEqual(upstream.resupplies, [pos(0, 4), pos(0, 8)])
-        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .buffering, .playing, .paused])
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .playing, .paused])
     }
 
     func testARebuildThatThrowsSurfacesTheError() {
