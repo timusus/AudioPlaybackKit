@@ -125,6 +125,82 @@ final class PlayerEditTests: XCTestCase {
         XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: nil, reason: .seek)])
     }
 
+    // media3 ExoPlayerTest.clearMediaItems_notifiesMediaItemTransition, and the deviation from
+    // clearMediaItems_afterReady_transitionsToEnded: an empty list is `.idle` (ADR-0019).
+    func testRemoveAllWhilePlayingStopsAndLeavesIdle() async {
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 1)
+
+        player.removeAll()
+        XCTAssertEqual(player.items, [])
+        XCTAssertNil(player.currentIndex)
+        XCTAssertEqual(player.state, .idle)
+        XCTAssertEqual(player.position, 0)
+        XCTAssertNil(player.duration)
+        let written = rig.output.enqueues.count
+        rig.run(for: 1)
+        XCTAssertEqual(player.state, .idle)
+        XCTAssertEqual(rig.output.enqueues.count, written)
+
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: nil, reason: .seek)])
+    }
+
+    // The deviation from media3 ExoPlayerTest.settingMediaItems_withEmptyListAfterReady_transitionsToEnded.
+    func testSetItemsEmptyWhilePlayingStopsAndLeavesIdle() async {
+        player.setItems(["a", "b"], startIndex: 1)
+        player.play()
+        rig.run(for: 1)
+
+        player.setItems([])
+        XCTAssertEqual(player.items, [])
+        XCTAssertNil(player.currentIndex)
+        XCTAssertEqual(player.state, .idle)
+        let written = rig.output.enqueues.count
+        rig.run(for: 1)
+        XCTAssertEqual(player.state, .idle)
+        XCTAssertEqual(rig.output.enqueues.count, written)
+
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 1, to: nil, reason: .seek)])
+    }
+
+    // media3 ExoPlayerTest.stop_modifyingPlaylistRemainsInIdleState_needsPrepareForBuffering.
+    func testEditsAfterStopStayIdleUntilPlay() async {
+        player.setItems(["a", "b", "c"])
+        player.play()
+        rig.run(for: 1)
+        player.stop()
+        rig.pump()
+        let written = rig.output.enqueues.count
+
+        player.insert(["d"], at: 3)
+        player.move(from: 3, to: 1)
+        XCTAssertEqual(player.items, ["a", "d", "b", "c"])
+        player.remove(at: 0)
+        XCTAssertEqual(player.currentItem, "d")
+        XCTAssertEqual(player.state, .idle)
+        player.seek(to: 0, itemAt: 2)
+        player.remove(at: 2)
+        XCTAssertEqual(player.currentItem, "d", "the removed last's place falls to the first")
+        rig.run(for: 1)
+        XCTAssertEqual(player.state, .idle)
+        XCTAssertEqual(rig.factory.calls, ["a", "b"])
+        XCTAssertEqual(rig.output.enqueues.count, written)
+
+        player.play()
+        rig.pump()
+        XCTAssertEqual(player.state, .ready)
+        XCTAssertEqual(rig.firstSampleWritten(skipping: written), 3000)
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [
+            .init(from: 0, to: 0, reason: .seek),
+            .init(from: 0, to: 2, reason: .seek),
+            .init(from: 2, to: 0, reason: .seek),
+        ])
+    }
+
     // media3: removing the current item when it is last ends at the first item, and play restarts it.
     func testRemoveTheCurrentWhenItIsLastEndsAtTheFirstItem() async {
         player.setItems(["a", "b"], startIndex: 1)

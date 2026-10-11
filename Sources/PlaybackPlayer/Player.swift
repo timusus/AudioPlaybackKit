@@ -155,7 +155,7 @@ public final class Player<Item: Hashable & Sendable> {
 
     /// Removing the current item plays the one that takes its index from 0, under `.all` the first
     /// if it was the last. With nothing to follow, or under `.one`, the player ends at that index, as
-    /// media3 does.
+    /// media3 does; stopped, it stays idle until `play()`.
     public func remove(at index: Int) {
         precondition(entries.indices.contains(index), "index out of range")
         guard let current = currentIndex, entries.count > 1 else { return removeAll() }
@@ -167,7 +167,7 @@ public final class Player<Item: Hashable & Sendable> {
             currentIndex = successor
             position = 0
             duration = nil
-            let ends = repeatMode == .one || (index == entries.count && repeatMode == .off)
+            let ends = loadedKey != nil && (repeatMode == .one || (index == entries.count && repeatMode == .off))
             if ends { unload(as: .ended) }
             // Before the load, whose failure to make a source is reported after the transition.
             send(.itemTransition(from: current, to: successor, reason: .seek))
