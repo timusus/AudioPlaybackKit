@@ -181,7 +181,9 @@ final class Sequencer: @unchecked Sendable {
                 return .chunk(chunk)
             }
             if let failure { return .failed(item: failure.item, error: failure.error) }
-            guard let cursor, !(cursor.ended && entry(after: cursor.entry) == nil) else { return .ended }
+            // Nothing set is not an end: the transport pumps before its first item.
+            guard let cursor else { return .pending }
+            guard !(cursor.ended && entry(after: cursor.entry) == nil) else { return .ended }
             waiting = true
             return .pending
         }

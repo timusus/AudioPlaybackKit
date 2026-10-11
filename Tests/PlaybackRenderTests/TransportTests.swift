@@ -161,6 +161,19 @@ final class TransportTests: XCTestCase {
         ])
     }
 
+    // #112: the timer pumped an empty upstream before the first item, which reads as an end.
+    func testTicksBeforeAnyItemAreSetNeverReportEnded() {
+        transport.play()
+        pump()
+        run(for: 1)
+        transport.setCurrent(item: "a", source: a)
+        pump()
+        run(for: 4)
+
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(heard, allOfA)
+    }
+
     // #102: after a route-change auto-flush the output stayed silent until a pump took the event,
     // then until another wrote the re-decoded audio: up to two pump intervals.
     func testAnAutoFlushAndTheReDecodeEachWakeThePumpAtOnce() {
