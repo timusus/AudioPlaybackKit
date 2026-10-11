@@ -1,0 +1,39 @@
+   0.006 launch 2026-10-11T11:40:32Z iPhone iOS 26.6.1
+   0.043 CHECK start skipGuided=false
+   1.616 === CHECK G3 Pick AirPlay ===
+   1.667 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker
+   1.670 session .playAndRecord .default allowAirPlay: hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker inputLatency=1.6ms
+   1.859 mic recording at 48000 Hz, inputLatency 1.6 ms
+   2.534 transport status buffering clock 0.000
+   2.547 transport crossed G clock 0.000
+   2.567 transport status playing clock 0.000
+   4.899 PICKER OPEN outputs Speaker:Speaker
+   6.896 ROUTE CHANGE newDeviceAvailable: Speaker:Speaker -> hwRate=48000 ioBuffer=23.0ms outputLatency=2000.0ms outputs=AirPlay:Timothy’s MacBook Pro
+   6.903 prompt 'Pick AirPlay': fired: AirPlay:Timothy’s MacBook Pro
+   6.986 AUTO-FLUSH flushTime 4.253 clock 4.314 latency 2000.0 ms AirPlay:Timothy’s MacBook Pro
+   6.989 transport status buffering clock 4.314
+   7.021 transport status playing clock 4.314
+  17.022 transport status buffering clock 13.974
+  17.036 transport status playing clock 13.974
+  35.156 prompt 'Did you hear a glitch?': No glitch
+  35.206 CHECK G3: fail - fired: AirPlay:Timothy’s MacBook Pro; 1 auto-flush(es) ["re-feed 1939.428 ms vs heard"]; latency 15.354 -> 2000.0 ms; position rate 1.00, stall 2451 ms; picker opened 2.4 s after play, route fired 4.4 s; 2 position stall(s) over 250 ms; heard dips before the route fired: 1 (first at 1.55 s after picker open, 454 ms); .ended never; owner: No glitch
+  35.210 === CHECK G4 Back to the iPhone ===
+  35.406 ROUTE CHANGE routeConfigurationChange: AirPlay:Timothy’s MacBook Pro -> hwRate=48000 ioBuffer=23.0ms outputLatency=2000.0ms outputs=AirPlay:Timothy’s MacBook Pro
+  35.406 session .playAndRecord .default allowAirPlay: hwRate=48000 ioBuffer=23.0ms outputLatency=2000.0ms outputs=AirPlay:Timothy’s MacBook Pro inputLatency=1.6ms
+  35.419 ROUTE CHANGE routeConfigurationChange: AirPlay:Timothy’s MacBook Pro -> hwRate=48000 ioBuffer=23.0ms outputLatency=2000.0ms outputs=AirPlay:Timothy’s MacBook Pro
+  35.573 mic recording at 48000 Hz, inputLatency 1.6 ms
+  36.223 transport status buffering clock 0.000
+  36.229 transport crossed G clock 0.000
+  36.247 transport status playing clock 0.000
+  37.834 PICKER OPEN outputs AirPlay:Timothy’s MacBook Pro
+  43.805 ROUTE CHANGE override: AirPlay:Timothy’s MacBook Pro -> hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker
+  43.808 prompt 'Back to the iPhone': fired: Speaker:Speaker
+  43.879 AUTO-FLUSH flushTime 7.356 clock 7.366 latency 15.4 ms Speaker:Speaker
+  43.912 transport status buffering clock 7.396
+  43.937 transport status playing clock 7.396
+  54.006 transport status buffering clock 17.364
+  54.026 transport status playing clock 17.364
+  56.264 transport status ended clock 19.364
+  57.821 prompt 'Did you hear a glitch?': Gap or click
+  57.870 CHECK G4: pass - fired: Speaker:Speaker; 1 auto-flush(es) ["re-feed 5.793 ms vs heard"]; latency 2000.0 -> 15.354 ms; position rate 1.00, stall 376 ms; picker opened 1.6 s after play, route fired 7.6 s; 2 position stall(s) over 250 ms; heard dips before the route fired: 1 (first at 5.65 s after picker open, 308 ms); .ended after 2.34 s; owner: Gap or click
+  57.879 CHECK done in 58 s
