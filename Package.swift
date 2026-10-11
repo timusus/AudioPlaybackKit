@@ -30,6 +30,9 @@ let package = Package(
         // `FakeAudioSession` and `PlayerTestRig`, to drive a `Player` deterministically from a
         // consumer's own tests.
         .library(name: "PlaybackPlayerTestSupport", targets: ["PlaybackPlayerTestSupport"]),
+        // `NowPlayingSession`: a `Player` on the lock screen, Control Centre and CarPlay, and the
+        // remote commands routed back to it. Kept apart so only an app that wants it links `MediaPlayer`.
+        .library(name: "PlaybackNowPlaying", targets: ["PlaybackNowPlaying"]),
         // FFmpeg itself, for a consumer with its own C against libavformat. One FFmpeg per app:
         // a second copy would clash with this framework's symbols, or silently shadow them.
         .library(name: "FFmpeg", targets: ["CFFmpeg"]),
@@ -67,6 +70,12 @@ let package = Package(
         .testTarget(
             name: "PlaybackPlayerExternalConsumerTests",
             dependencies: ["PlaybackPlayer", "PlaybackPlayerTestSupport", "PlaybackRender", "PlaybackRenderTestSupport"]
+        ),
+        // The info and command centres sit behind internal seams the tests replace (ADR-0019).
+        .target(name: "PlaybackNowPlaying", dependencies: ["PlaybackPlayer"]),
+        .testTarget(
+            name: "PlaybackNowPlayingTests",
+            dependencies: ["PlaybackNowPlaying", "PlaybackPlayer", "PlaybackPlayerTestSupport", "PlaybackRender", "PlaybackRenderTestSupport"]
         ),
         // Two 20-45 s tone fixtures (under 250 KB each), served over the loopback server.
         .testTarget(
