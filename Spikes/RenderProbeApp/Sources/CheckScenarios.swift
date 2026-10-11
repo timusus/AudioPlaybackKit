@@ -51,13 +51,14 @@ enum CheckScenarios {
     static let airPlayBody = "Tap the button and choose an AirPlay 2 speaker, or the Mac with AirPlay Receiver on (System Settings > General > AirDrop & Handoff)."
     static let backBody = "Tap the button and choose iPhone."
 
-    /// The AirPlay pair under the other session policies, run only by name (`--only G3P,G4P,G3L,G4L`):
+    /// The AirPlay pair under the other session policies, run only by name (`--only G3P,G4P,G3L,G4L,G8`):
     /// G3/G4 need a record category for the mic, so .playback as before (P) and .longFormAudio (L) listen to nothing.
     static let airPlayVariants: [CheckRun.Scenario] = [
         route("G3P", "Pick AirPlay (.playback)", airPlayBody, ports: [.airPlay], arriving: true, picker: true, policy: .plain),
         route("G4P", "Back to the iPhone (.playback)", backBody, ports: [.airPlay], arriving: false, picker: true, policy: .plain),
         route("G3L", "Pick AirPlay (.longFormAudio)", airPlayBody, ports: [.airPlay], arriving: true, picker: true, policy: .longForm),
         route("G4L", "Back to the iPhone (.longFormAudio)", backBody, ports: [.airPlay], arriving: false, picker: true, policy: .longForm),
+        longTone,
     ]
 
     // MARK: Automatic
