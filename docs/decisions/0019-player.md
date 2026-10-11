@@ -316,8 +316,10 @@ Rules, taken from Shuttle2's `AudioSessionController` and media3's `AudioFocusMa
 
 - **Activation** is lazy: the first `play()` after init or `stop()` calls `setActive(true)` off the main
   thread, before `Transport.play()`; a throw refuses the play (`error.kind == .session`, `playWhenReady`
-  stays true so the user's next tap retries). The category is set at init. `stop()`, and the list
-  emptying, call `setActive(false, options: .notifyOthersOnDeactivation)`.
+  stays true so the user's next tap retries). The category is set at init. `stop()`, the list
+  emptying, and an item failure call `setActive(false, options: .notifyOthersOnDeactivation)`: failed
+  is idle, as media3 abandons focus on idle, so a `play()` whose item fails to load never activates and
+  an item failure clears `suppression`.
 - **Interruption began**: the system has deactivated the session, so the next play activates again.
   If `playWhenReady` is true and an item is loaded without an error, `suppression = .interruption` and
   `Transport.pause()`; `playWhenReady` is untouched. Paused, stopped or failed, nothing is suppressed and

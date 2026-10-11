@@ -225,6 +225,8 @@ public final class Player<Item: Hashable & Sendable> {
                 seekTransport(item: loadedKey, to: 0)
                 armNext()
             }
+            // A load that failed left nothing to play, so the session stays inactive.
+            guard error == nil else { return }
             if sessionActive { transport.play() } else { activate() }
         }
     }
@@ -675,8 +677,12 @@ public final class Player<Item: Hashable & Sendable> {
         reportFailure(at: current, PlaybackError(kind: key == nil ? .output : .source, underlying: underlying))
     }
 
+    /// Failed is idle, as stopped is: the session goes (media3 abandons focus), and an interruption
+    /// has nothing left to resume.
     private func reportFailure(at index: Int, _ error: PlaybackError) {
         self.error = error
+        suppression = .none
+        deactivate()
         refreshState()
         send(.itemFailed(index: index, error: error))
     }

@@ -72,6 +72,7 @@ final class PlayerSessionTests: XCTestCase {
         XCTAssertEqual(player.state, .idle)
         XCTAssertTrue(player.playWhenReady, "the user's next tap retries")
         XCTAssertFalse(isHeard())
+        XCTAssertEqual(session.calls, [.configure, .activate], "never active, so nothing to deactivate")
 
         session.activationError = nil
         player.play()
@@ -402,6 +403,67 @@ final class PlayerSessionTests: XCTestCase {
         XCTAssertEqual(session.deactivations, 1)
         player.setItems([])
         XCTAssertEqual(session.deactivations, 1, "already inactive")
+    }
+
+    // media3 AudioFocusManagerTest.updateAudioFocus_readyToIdle_abandonsAudioFocus: an error is idle too.
+    func testAPlayOntoAnItemThatFailsToMakeNeverActivates() {
+        rig.factory.failing = ["a"]
+        player.setItems(["a"])
+        player.play()
+        XCTAssertEqual(player.error?.kind, .source)
+        XCTAssertEqual(session.calls, [.configure])
+
+        rig.factory.failing = []
+        player.play()
+        XCTAssertTrue(isHeard())
+        XCTAssertEqual(session.calls, [.configure, .activate])
+    }
+
+    func testACurrentItemFailingDeactivatesAndTheNextPlayActivatesAgain() {
+        rig.factory.failingAtFrame = ["a": 40]
+        startPlaying()
+        rig.run(for: 5)
+        XCTAssertEqual(player.error?.kind, .source)
+        XCTAssertEqual(session.calls, [.configure, .activate, .deactivate])
+
+        rig.factory.failingAtFrame = [:]
+        player.play()
+        XCTAssertTrue(isHeard())
+        XCTAssertEqual(session.calls, [.configure, .activate, .deactivate, .activate])
+    }
+
+    func testReachingAFailedNextDeactivates() {
+        rig.factory.failing = ["b"]
+        startPlaying()
+        rig.run(for: 10)
+        XCTAssertEqual(player.currentItem, "b")
+        XCTAssertEqual(player.error?.kind, .source)
+        XCTAssertEqual(session.calls, [.configure, .activate, .deactivate])
+    }
+
+    func testAFailureWhileActivatingDeactivatesAndIgnoresTheLateAnswer() {
+        rig.factory.failing = ["b"]
+        session.holdsActivation = true
+        player.setItems(["a", "b"])
+        player.play()
+        player.skipToNext()
+        session.completeActivation()
+        XCTAssertFalse(isHeard())
+        XCTAssertEqual(session.calls, [.configure, .activate, .deactivate])
+    }
+
+    // Failed, nothing is left to resume, as when the interruption began after the failure.
+    func testAFailureDuringAnInterruptionResumesNothing() async {
+        rig.factory.failing = ["c"]
+        startPlaying(["a", "b", "c"])
+        session.interruptionBegan()
+        player.seek(to: 0, itemAt: 2)
+        XCTAssertEqual(player.error?.kind, .source)
+        XCTAssertEqual(player.suppression, .none)
+        session.interruptionEnded(shouldResume: true)
+        XCTAssertEqual(session.calls, [.configure, .activate], "the system already deactivated it")
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [])
     }
 
     func testAStopWhileActivatingIgnoresTheLateAnswer() {
