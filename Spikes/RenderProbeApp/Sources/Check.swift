@@ -165,7 +165,6 @@ final class CheckProbe: @unchecked Sendable {
     struct Flush { let host: Double; let flushTime: Double?; let clock: Double; let latency: Double }
 
     let transport: Transport<String>
-    let synchronizer: AVSampleBufferRenderSynchronizer
     private let lock = NSLock()
     private var _events: [Event] = []
     private var _positions: [Position] = []
@@ -176,19 +175,28 @@ final class CheckProbe: @unchecked Sendable {
     init() throws {
         let box = WeakBox<CheckProbe>()
         transport = Transport { event in box.value?.record(event) }
-        guard let synchronizer = reflected(transport, "feeder", "output", "synchronizer") as? AVSampleBufferRenderSynchronizer,
-              let renderer = reflected(transport, "feeder", "output", "renderer") as? AVSampleBufferAudioRenderer
+        guard Self.current(transport) != nil
         else { throw CheckError("no synchronizer behind Transport; the output's layout changed") }
-        self.synchronizer = synchronizer
         box.value = self
-        observer = NotificationCenter.default.addObserver(forName: .AVSampleBufferAudioRendererWasFlushedAutomatically, object: renderer, queue: nil) { [weak self] note in
-            guard let self else { return }
+        // Any renderer: recovery swaps in a new one, so filter on the one playing now.
+        observer = NotificationCenter.default.addObserver(forName: .AVSampleBufferAudioRendererWasFlushedAutomatically, object: nil, queue: nil) { [weak self] note in
+            guard let self, let (synchronizer, renderer) = Self.current(transport), note.object as AnyObject? === renderer else { return }
             let flushTime = (note.userInfo?[AVSampleBufferAudioRendererFlushTimeKey] as? NSValue)?.timeValue.seconds
             let flush = Flush(host: hostNow(), flushTime: flushTime, clock: synchronizer.currentTime().seconds, latency: Session.shared.outputLatency)
             lock.withLock { self._flushes.append(flush) }
             Log.shared.write("AUTO-FLUSH flushTime \(flushTime.map { fmt($0) } ?? "?") clock \(fmt(flush.clock)) latency \(fmt(flush.latency * 1000, 1)) ms \(Session.outputs)")
         }
     }
+
+    /// Read on every use, since recovery from a failed renderer or a media-services reset rebuilds both.
+    private static func current(_ transport: Transport<String>) -> (AVSampleBufferRenderSynchronizer, AVSampleBufferAudioRenderer)? {
+        guard let synchronizer = reflected(transport, "output", "_synchronizer") as? AVSampleBufferRenderSynchronizer,
+              let renderer = reflected(transport, "output", "_renderer") as? AVSampleBufferAudioRenderer
+        else { return nil }
+        return (synchronizer, renderer)
+    }
+
+    var synchronizer: AVSampleBufferRenderSynchronizer { Self.current(transport)!.0 }
 
     deinit {
         observer.map(NotificationCenter.default.removeObserver)
@@ -229,7 +237,7 @@ final class CheckProbe: @unchecked Sendable {
     private func record(_ event: TransportEvent<String>) {
         let host = hostNow()
         switch event {
-        case let .position(item, frame, sampleRate):
+        case let .position(item, frame, sampleRate, _):
             let position = Position(host: host, item: item, seconds: Double(frame) / sampleRate, clock: clock, latency: Session.shared.outputLatency)
             lock.withLock { _positions.append(position) }
         case let .crossed(item):

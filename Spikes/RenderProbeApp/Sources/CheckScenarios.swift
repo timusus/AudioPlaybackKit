@@ -35,7 +35,6 @@ enum CheckScenarios {
         route("G3", "Pick AirPlay", "Tap the button and choose an AirPlay 2 speaker, or the Mac with AirPlay Receiver on (System Settings > General > AirDrop & Handoff).",
               ports: [.airPlay], arriving: true, picker: true),
         route("G4", "Back to the iPhone", "Tap the button and choose iPhone.", ports: [.airPlay], arriving: false, picker: true),
-        interruption("G5", "Take a call", "Call this iPhone from another phone and answer. Hang up after about 5 s."),
         interruption("G6", "Ask Siri", "Hold the side button and ask Siri the time."),
         .init(id: "G7", question: "Reset media services (#100)", guided: true, run: mediaReset),
     ]

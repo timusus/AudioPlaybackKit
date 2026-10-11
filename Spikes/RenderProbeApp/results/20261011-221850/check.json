@@ -1,0 +1,427 @@
+{
+  "complete" : true,
+  "device" : "iPhone",
+  "ios" : "26.6.1",
+  "micPermission" : "granted",
+  "scenarios" : [
+    {
+      "endedMinusHeardEndMs" : 112.72199999999999,
+      "guided" : false,
+      "heardSeconds" : 4.0010000000000003,
+      "id" : "A1",
+      "lastPositionS" : 4,
+      "outputLatencyMs" : 9.7289999999999992,
+      "playToHeardMs" : 132.381,
+      "playToPlayingEventMs" : 37.311,
+      "question" : "play to heard; .ended against the heard end",
+      "seconds" : 5.7830000000000004,
+      "snrDb" : 28.965,
+      "status" : "pass",
+      "verdict" : "heard 4.001 s of 4; .ended 112.7 ms after the heard end; play -> heard 132 ms"
+    },
+    {
+      "guided" : false,
+      "heardMinusPositionInlierMedianMs" : 0.64400000000000002,
+      "heardMinusPositionMedianMs" : 0.64400000000000002,
+      "heardMinusPositionMs" : [
+        0.71699999999999997,
+        0.72099999999999997,
+        0.63700000000000001,
+        0.72299999999999998,
+        0.63900000000000001,
+        0.64400000000000002,
+        0.54500000000000004,
+        0.67900000000000005,
+        0.63800000000000001,
+        0.63600000000000001,
+        0.66400000000000003
+      ],
+      "id" : "A2",
+      "inliers" : 11,
+      "inputLatencyMs" : 0.625,
+      "outputLatencyMs" : 9.7289999999999992,
+      "positionVsClockMinusLatencyMs" : {
+        "max" : 1.423,
+        "median" : 0.82299999999999995,
+        "min" : 0.42799999999999999
+      },
+      "question" : "position against the synchronizer and the heard click",
+      "seconds" : 14.186,
+      "status" : "pass",
+      "verdict" : "click heard 0.6 ms after the position said (spread 0.2 ms, 11 of 11 clicks); outputLatency 9.7 ms; position = clock - latency within 1.4 ms"
+    },
+    {
+      "dropoutMs" : [
+        93,
+        140
+      ],
+      "glitch" : {
+        "dips" : [
+          {
+            "at" : 2.629,
+            "ms" : 93
+          },
+          {
+            "at" : 6.6420000000000003,
+            "ms" : 140
+          }
+        ],
+        "dipsNearMarks" : 2,
+        "levelDb" : -43.768000000000001,
+        "phaseJumps" : 0,
+        "phaseJumpsNearMarks" : 0,
+        "snrDb" : 47.530999999999999
+      },
+      "guided" : false,
+      "id" : "A3",
+      "positionJumpMs" : 0.55500000000000005,
+      "positionRateAt2x" : 2,
+      "question" : "dropout at rate 1 -> 2 -> 1",
+      "seconds" : 11.532999999999999,
+      "status" : "measured",
+      "verdict" : "dropout 93 ms to 2x, 140 ms back (ADR: 97 \/ 140 ms); position runs at 2.00x; largest position jump 1 ms"
+    },
+    {
+      "crossedAfterHeardJoinMs" : {
+        "B" : 60.497,
+        "C" : 59.603999999999999
+      },
+      "ended" : true,
+      "failed" : [
+
+      ],
+      "fixtureToTone48kDipsMs" : [
+        10
+      ],
+      "guided" : false,
+      "heardJoinsAfterPlayS" : [
+        3.145,
+        6.1449999999999996
+      ],
+      "id" : "A4",
+      "question" : "gapless joins: fixture 44.1k stereo -> 48k stereo -> 44.1k mono",
+      "seconds" : 10.813000000000001,
+      "status" : "measured",
+      "tone48kToTone44kMonoDipMs" : [
+        10
+      ],
+      "toneJoinGlitch" : {
+        "dips" : [
+          {
+            "at" : 2.0129999999999999,
+            "ms" : 10
+          }
+        ],
+        "dipsNearMarks" : 1,
+        "levelDb" : -43.734999999999999,
+        "phaseJumps" : 0,
+        "phaseJumpsNearMarks" : 0,
+        "snrDb" : 49.088999999999999
+      },
+      "verdict" : "fixture 44.1k -> 48k dips [\"10\"] ms; 48k stereo -> 44.1k mono dip 10 ms (ADR: 8-11 ms); crossed 60 \/ 60 ms after the heard joins"
+    },
+    {
+      "firstPositionAfterSeekS" : 2.9740000000000002,
+      "guided" : false,
+      "id" : "A5",
+      "positionMinusHeardAfter2sMs" : 0.95599999999999996,
+      "question" : "seek: silence and landing",
+      "seconds" : 7.2969999999999997,
+      "seekToSoundMs" : 228.38399999999999,
+      "silenceMs" : 175,
+      "status" : "fail",
+      "verdict" : "landed at 2.974 s of 12; sound back 228 ms after the call (silence 175 ms); position vs heard 2 s on 1.0 ms"
+    },
+    {
+      "crossed" : [
+        "1",
+        "2",
+        "3"
+      ],
+      "endedCount" : 2,
+      "guided" : false,
+      "id" : "A6",
+      "joinDipMs" : 0,
+      "question" : "setNext near the end, and after .ended",
+      "seconds" : 11.398,
+      "setNextAfterEndedToHeardMs" : 107.919,
+      "status" : "pass",
+      "statusesAfterFirstEnd" : [
+        "buffering",
+        "playing",
+        "ended"
+      ],
+      "verdict" : "join dip 0 ms; crossed [\"1\", \"2\", \"3\"]; .ended 2x; setNext after .ended heard 108 ms later"
+    },
+    {
+      "flushes" : [
+
+      ],
+      "guided" : false,
+      "id" : "A7",
+      "question" : "auto-flush re-feed (port override): replayed or skipped audio",
+      "seconds" : 10.249000000000001,
+      "status" : "inconclusive",
+      "verdict" : "no auto-flush on the port overrides"
+    },
+    {
+      "endedAfterSeekS" : 4.2910000000000004,
+      "endedFired" : true,
+      "failed" : [
+
+      ],
+      "guided" : false,
+      "id" : "A8",
+      "question" : "auto-flush on rate 1 -> 2 -> 1 -> 0.5",
+      "seconds" : 17.495999999999999,
+      "status" : "measured",
+      "steps" : [
+        {
+          "clockStepBackMs" : 50.115000000000002,
+          "flushes" : [
+
+          ],
+          "outputLatencyMs" : [
+            9.7289999999999992,
+            9.7289999999999992
+          ],
+          "outputsAfter" : "Speaker:Speaker",
+          "outputsBefore" : "Speaker:Speaker",
+          "positionJumpMs" : 1.0229999999999999,
+          "step" : "rate 2.0"
+        },
+        {
+          "clockStepBackMs" : 0,
+          "flushes" : [
+
+          ],
+          "outputLatencyMs" : [
+            9.7289999999999992,
+            9.7289999999999992
+          ],
+          "outputsAfter" : "Speaker:Speaker",
+          "outputsBefore" : "Speaker:Speaker",
+          "positionJumpMs" : 0.104,
+          "step" : "rate 1.0"
+        },
+        {
+          "clockStepBackMs" : 0,
+          "flushes" : [
+
+          ],
+          "outputLatencyMs" : [
+            9.7289999999999992,
+            9.7289999999999992
+          ],
+          "outputsAfter" : "Speaker:Speaker",
+          "outputsBefore" : "Speaker:Speaker",
+          "positionJumpMs" : 0,
+          "step" : "rate 0.5"
+        }
+      ],
+      "verdict" : "rate 2.0: 0 flush(es), latency 9.7 -> 9.7 ms, jump 1 ms, clock back 50.1 ms \/ rate 1.0: 0 flush(es), latency 9.7 -> 9.7 ms, jump 0 ms, clock back 0.0 ms \/ rate 0.5: 0 flush(es), latency 9.7 -> 9.7 ms, jump 0 ms, clock back 0.0 ms; .ended after 4.29 s"
+    },
+    {
+      "endedAfterSeekS" : 2.2629999999999999,
+      "endedFired" : true,
+      "failed" : [
+
+      ],
+      "guided" : false,
+      "id" : "A9",
+      "question" : "forced route: receiver -> speaker override -> receiver, category playback <-> playAndRecord",
+      "seconds" : 20.649999999999999,
+      "status" : "measured",
+      "steps" : [
+        {
+          "clockStepBackMs" : 0,
+          "flushes" : [
+            {
+              "clockAtNotification" : 3.2879999999999998,
+              "flushTime" : 3.274,
+              "flushTimeMinusClockMs" : -13.129,
+              "micNote" : "chirp not matched in the mic",
+              "outputLatencyMs" : 9.7289999999999992,
+              "refeedMinusFlushTimeMs" : 36.994,
+              "refeedMinusHeardMs" : 33.594000000000001,
+              "refeedS" : 3.3109999999999999,
+              "silenceMs" : null
+            }
+          ],
+          "outputLatencyMs" : [
+            4.5,
+            9.7289999999999992
+          ],
+          "outputsAfter" : "Receiver:Receiver",
+          "outputsBefore" : "Receiver:Receiver",
+          "positionJumpMs" : 0,
+          "step" : "override speaker"
+        },
+        {
+          "clockStepBackMs" : 0,
+          "flushes" : [
+            {
+              "clockAtNotification" : 6.4359999999999999,
+              "correlation" : [
+                0.85799999999999998,
+                0.78900000000000003
+              ],
+              "flushTime" : 6.4329999999999998,
+              "flushTimeMinusClockMs" : -2.456,
+              "mediaLostMs" : 291.20800000000003,
+              "outputLatencyMs" : 4.5,
+              "refeedMinusFlushTimeMs" : 42.587000000000003,
+              "refeedMinusHeardMs" : 44.631,
+              "refeedS" : 6.3399999999999999,
+              "replayMs" : 291.20800000000003,
+              "silenceMs" : 0
+            }
+          ],
+          "outputLatencyMs" : [
+            9.7289999999999992,
+            4.5
+          ],
+          "outputsAfter" : "Receiver:Receiver",
+          "outputsBefore" : "Speaker:Speaker",
+          "positionJumpMs" : 0,
+          "step" : "override none"
+        },
+        {
+          "clockStepBackMs" : 3.3460000000000001,
+          "flushes" : [
+            {
+              "clockAtNotification" : 9.4339999999999993,
+              "flushTime" : 9.4160000000000004,
+              "flushTimeMinusClockMs" : -17.774999999999999,
+              "micNote" : "no recording",
+              "outputLatencyMs" : 15.353999999999999,
+              "refeedMinusFlushTimeMs" : 88.566999999999993,
+              "refeedMinusHeardMs" : 86.146000000000001,
+              "refeedS" : 9.2289999999999992
+            }
+          ],
+          "outputLatencyMs" : [
+            4.5,
+            15.353999999999999
+          ],
+          "outputsAfter" : "Receiver:Receiver",
+          "outputsBefore" : "Receiver:Receiver",
+          "positionJumpMs" : 0,
+          "step" : "category playback"
+        },
+        {
+          "clockStepBackMs" : 0,
+          "flushes" : [
+            {
+              "clockAtNotification" : 12.888,
+              "flushTime" : 12.872,
+              "flushTimeMinusClockMs" : -15.523999999999999,
+              "micNote" : "chirp not matched in the mic",
+              "outputLatencyMs" : 4.5,
+              "refeedMinusFlushTimeMs" : 31.193000000000001,
+              "refeedMinusHeardMs" : 20.167999999999999,
+              "refeedS" : 12.512,
+              "silenceMs" : null
+            }
+          ],
+          "outputLatencyMs" : [
+            15.353999999999999,
+            4.5
+          ],
+          "outputsAfter" : "Receiver:Receiver",
+          "outputsBefore" : "Speaker:Speaker",
+          "positionJumpMs" : 0,
+          "step" : "category playAndRecord"
+        }
+      ],
+      "verdict" : "override speaker: 1 flush(es) (re-feed 33.594 ms vs heard, 36.994 vs flush time, silence <null> ms), latency 4.5 -> 9.7 ms, jump 0 ms, clock back 0.0 ms \/ override none: 1 flush(es) (re-feed 44.631 ms vs heard, 42.587 vs flush time, mic replay 291.208 ms, silence 0.0 ms), latency 9.7 -> 4.5 ms, jump 0 ms, clock back 0.0 ms \/ category playback: 1 flush(es) (re-feed 86.146 ms vs heard, 88.567 vs flush time), latency 4.5 -> 15.4 ms, jump 0 ms, clock back 3.3 ms \/ category playAndRecord: 1 flush(es) (re-feed 20.168 ms vs heard, 31.193 vs flush time, silence <null> ms), latency 15.4 -> 4.5 ms, jump 0 ms, clock back 0.0 ms; .ended after 2.26 s"
+    },
+    {
+      "endedAfterSeekS" : 2.355,
+      "endedFired" : true,
+      "failed" : [
+
+      ],
+      "guided" : false,
+      "id" : "A10",
+      "question" : "interruption by a non-mixable session in another app",
+      "seconds" : 16.283999999999999,
+      "status" : "measured",
+      "steps" : [
+        {
+          "clockStepBackMs" : 59.405999999999999,
+          "flushes" : [
+
+          ],
+          "outputLatencyMs" : [
+            15.353999999999999,
+            15.353999999999999
+          ],
+          "outputsAfter" : "Speaker:Speaker",
+          "outputsBefore" : "Speaker:Speaker",
+          "positionJumpMs" : 0,
+          "step" : "InterruptorApp"
+        }
+      ],
+      "verdict" : "InterruptorApp: 0 flush(es), latency 15.4 -> 15.4 ms, jump 0 ms, clock back 59.4 ms; .ended after 2.35 s"
+    },
+    {
+      "guided" : true,
+      "id" : "G1",
+      "question" : "Connect Bluetooth",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G2",
+      "question" : "Disconnect Bluetooth",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G3",
+      "question" : "Pick AirPlay",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G4",
+      "question" : "Back to the iPhone",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G5",
+      "question" : "Take a call",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G6",
+      "question" : "Ask Siri",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G7",
+      "question" : "Reset media services (#100)",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    }
+  ],
+  "skipGuided" : true,
+  "started" : "2026-10-11T11:19:08Z"
+}
