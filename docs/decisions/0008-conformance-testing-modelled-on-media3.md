@@ -20,8 +20,11 @@ The conformance suite follows media3:
   Every fixture must decode bit-identically to the clean decode under all 7, and match its golden.
 - Every supported format has a fixture. An untested format is not supported.
 - A decoder bug that is found and not fixed is pinned exactly in `KnownIssues.swift`, with its issue.
-- The three media3 assets are copied unmodified, with their licence (Apache-2.0), under
-  `Fixtures/NOTICE`. Every other fixture is synthesised by `make-fixtures.sh`.
+- media3's tests are a source of regression tests: where one tests something this package does, it is
+  ported; this is not a parity exercise and not every case is ported. The assets a port needs are
+  copied unmodified, with their licence (Apache-2.0), under `Fixtures/NOTICE`, and the cases are
+  mapped in [conformance-mapping.md](../conformance-mapping.md). Every other fixture is synthesised
+  by `make-fixtures.sh`.
 
 ## Alternatives rejected
 
@@ -35,6 +38,6 @@ The conformance suite follows media3:
   written only if the fault matrix passes against it.
 - Some encoder outputs are not byte-reproducible, so `make-fixtures.sh` is re-run only on purpose.
 - The byte source has the same treatment: `GrowingFileContractTests` ports media3's
-  `DataSourceContractTest`. The extractor-test port is still partial (#33).
+  `DataSourceContractTest`.
 
 Links: [contributing](../contributing.md), [ADR-0006](0006-one-superset-ffmpeg.md).
