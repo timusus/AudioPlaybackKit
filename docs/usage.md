@@ -239,6 +239,8 @@ A source or processor error that stops an item also arrives as `.failed(item:err
 
 ### Moving an app over
 
+The order of work, a concept map and a device checklist for each app are in [migrating.md](migrating.md).
+
 Shuttle Podcasts:
 
 - The streaming PCM reader becomes `FFmpegItemSource(reader: GrowingFileByteSource(...))`.
