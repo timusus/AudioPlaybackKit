@@ -26,7 +26,7 @@ this page has the order of work and the traps. Paths are relative to each app's 
 | Decoder behind a byte source | PCM for one track | `FFmpegItemSource(reader:)` over `FileByteReader` or `GrowingFileByteSource` |
 | A DSP stage | PCM in, PCM out | `AudioProcessor`, passed to `setProcessors(_:)` |
 | Frames a stage removes | keeps position in media time | `ProcessorOutput.dropped` (`DroppedFrames`) |
-| Position tick | what is heard | `TransportEvent.position(item:frame:sampleRate:)` |
+| Position tick | what is heard | `TransportEvent.position(item:frame:sampleRate:duration:)` |
 | Next track reached the speaker | | `TransportEvent.crossed(item:)` |
 | Playing, buffering, paused, ended | | `TransportEvent.status(_:)` with `TransportStatus` |
 | A track or output failed | | `TransportEvent.failed(item:error:)` |
@@ -108,8 +108,8 @@ Each step ships on its own. Put the new path behind a flag until step 5.
   podcast samples only. As a processor the chime would sound about two seconds late, and `setVolume`
   would duck the chime too. Play the chime on a separate player until the render layer has a playhead-time
   mix; keep the duck as a `setVolume` ramp.
-- **Duration.** `Transport` reports positions, not the item's length. Take `durationChanged` from the
-  episode's metadata, or from an `FFmpegStreamDecoder.open()` the app does itself.
+- **Duration.** `durationChanged` comes from the `duration` on `.position`, in frames as FFmpeg probed
+  the file; fall back to the episode's metadata only when it is nil.
 
 ## Shuttle2
 

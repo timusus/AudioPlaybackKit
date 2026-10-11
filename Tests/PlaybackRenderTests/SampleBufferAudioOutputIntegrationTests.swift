@@ -124,7 +124,7 @@ private final class TimedRecorder: @unchecked Sendable {
         var at: TimeInterval
 
         var status: TransportStatus? { if case let .status(status) = event { status } else { nil } }
-        var frame: Int64? { if case let .position(_, frame, _) = event { frame } else { nil } }
+        var frame: Int64? { if case let .position(_, frame, _, _) = event { frame } else { nil } }
     }
 
     private let lock = NSLock()

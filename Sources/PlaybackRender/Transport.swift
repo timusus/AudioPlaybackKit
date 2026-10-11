@@ -13,8 +13,9 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     /// What is heard now, as a media frame of `item` at its own `sampleRate`. Sent when it changes,
     /// at most once a pump; frames a processor dropped are skipped when they would have played.
     /// Within an item it never goes back except on a `seek` or `setCurrent`, so position deltas are
-    /// listening time.
-    case position(item: Item, frame: Int64, sampleRate: Double)
+    /// listening time. `duration` is the item's length in frames at `sampleRate` as its source
+    /// probed it, for the progress bar and Now Playing; nil when unknown (a live stream).
+    case position(item: Item, frame: Int64, sampleRate: Double, duration: Int64?)
     /// `item` is now the one at the playhead: the gapless join reached the speaker, or the first
     /// item's audio was written there, playing or paused.
     case crossed(item: Item)
@@ -213,7 +214,8 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
             unratedPosition = position
             return
         }
-        onEvent(.position(item: item, frame: position.mediaFrame, sampleRate: rate))
+        let duration = sequencer.duration(of: position.item)
+        onEvent(.position(item: item, frame: position.mediaFrame, sampleRate: rate, duration: duration))
     }
 
     private func forget(_ change: Sequencer.TailChange) {

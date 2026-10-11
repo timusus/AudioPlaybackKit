@@ -9,6 +9,8 @@ public protocol ItemSource: AnyObject, Sendable {
     func begin(epoch: UInt64)
     /// The format every chunk of this item has.
     func open() throws -> PCMFormat
+    /// The item's length in frames, read once `open()` returns; nil when unknown (a live stream).
+    var duration: Int64? { get }
     /// Sample-accurate (ADR-0009); returns the media frame it landed on, which reads continue from.
     func seek(toFrame frame: Int64) throws -> Int64
     /// Interleaved PCM, nil at the item's end. A failure throws, so it is never mistaken for an end.
@@ -16,6 +18,10 @@ public protocol ItemSource: AnyObject, Sendable {
     /// Any thread, never blocks: brings back early every call of `epoch` or before, one in flight or
     /// one about to start, and leaves later epochs' calls alone.
     func interrupt(through epoch: UInt64)
+}
+
+public extension ItemSource {
+    var duration: Int64? { nil }
 }
 
 /// `FFmpegStreamDecoder` as an item source. The decoder already trims encoder delay and padding
@@ -29,6 +35,8 @@ public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
     private var epoch: UInt64 = 0
     private var interruptedThrough: UInt64?
     private var sampleRate: Double = 0
+    /// As the container states it once probed (an MP3's Xing or Info frame, MP4's sample table).
+    public private(set) var duration: Int64?
 
     /// The source owns `reader` from here on: only the transport's decode executor reads it.
     public init(reader: StreamByteReader) {
@@ -55,6 +63,7 @@ public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
         do {
             let format = try decoder.open()
             sampleRate = format.sampleRate
+            duration = format.duration.map { Int64(($0 * format.sampleRate).rounded()) }
             return PCMFormat(sampleRate: format.sampleRate, channelCount: format.channelCount)
         } catch {
             lock.withLock { self.decoder = nil }

@@ -56,6 +56,8 @@ final class Sequencer: @unchecked Sendable {
         var format: PCMFormat?
         // Locked: decode has reached it, so `setNext` and `clearNext` leave it alone.
         var started = false
+        // Locked: the source's, copied at open so the transport never calls a source.
+        var duration: Int64?
 
         init(item: Int, source: any ItemSource) {
             self.item = item
@@ -172,6 +174,11 @@ final class Sequencer: @unchecked Sendable {
         }
     }
 
+    /// Known by the time the item's first chunk is pulled; nil when its source does not know it.
+    func duration(of item: Int) -> Int64? {
+        lock.withLock { window.first { $0.item == item }?.duration }
+    }
+
     /// Never blocks on decode.
     func pull() -> Pull {
         lock.withLock {
@@ -238,7 +245,11 @@ final class Sequencer: @unchecked Sendable {
         let entry = cursor.entry
         entry.source.begin(epoch: jobEpoch)
         let outcome = Result<(landed: Int64?, samples: [Float]?), any Error> {
-            if entry.format == nil { entry.format = try entry.source.open() }
+            if entry.format == nil {
+                entry.format = try entry.source.open()
+                let duration = entry.source.duration
+                lock.withLock { entry.duration = duration }
+            }
             let landed = try cursor.seekTo.map { try entry.source.seek(toFrame: $0) }
             return (landed, try entry.source.nextChunk())
         }

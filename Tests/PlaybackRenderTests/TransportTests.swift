@@ -130,7 +130,7 @@ final class TransportTests: XCTestCase {
 
     private var positions: [Heard] {
         recorder.events.compactMap {
-            guard case let .position(item, frame, sampleRate) = $0 else { return nil }
+            guard case let .position(item, frame, sampleRate, _) = $0 else { return nil }
             XCTAssertEqual(sampleRate, 8)
             return Heard(item: item, frame: frame)
         }
@@ -378,6 +378,21 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(heard, [0, 1, 0, 1, 2, 3, 100, 101, 100, 101, 102, 103])
         XCTAssertEqual(crossed, ["a", "a"])
         XCTAssertEqual(statuses.last, .ended)
+    }
+
+    func testEachPositionCarriesItsItemsDurationOrNilWhenTheSourceDoesNotKnowIt() {
+        b.duration = nil
+        transport.setCurrent(item: "a", source: a)
+        transport.setNext(item: "b", source: b)
+        transport.play()
+        pump()
+        run(for: 6)
+
+        let durations = recorder.events.compactMap { event -> String? in
+            guard case let .position(item, _, _, duration) = event else { return nil }
+            return "\(item) \(duration.map(String.init) ?? "nil")"
+        }
+        XCTAssertEqual(Set(durations), ["a 24", "b nil"])
     }
 
     func testAPositionBeforeTheItemsRateIsKnownIsHeldUntilItIs() {

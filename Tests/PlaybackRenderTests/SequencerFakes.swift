@@ -39,10 +39,13 @@ final class FakeItemSource: ItemSource, @unchecked Sendable {
     var duringRead: (() -> Void)?
 
     var interrupts: Int { lock.withLock { _interrupts } }
+    /// The item's length unless a test makes it unknown.
+    var duration: Int64?
 
     init(format: PCMFormat, frames: Int64, chunkFrames: Int64 = 100, base: Float = 0) {
         self.format = format
         frameCount = frames
+        duration = frames
         self.chunkFrames = chunkFrames
         self.base = base
     }
