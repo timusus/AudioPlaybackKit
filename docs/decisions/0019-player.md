@@ -158,6 +158,7 @@ public final class Player<Item: Hashable & Sendable> {
     public private(set) var position: TimeInterval   // what is heard; updated every 100 ms while it changes
     public private(set) var duration: TimeInterval?  // nil until probed, or for a live stream
     public private(set) var isLive: Bool
+    public private(set) var discontinuityCount: Int  // changes on every jump of `position`, never on playback
     public func seek(to position: TimeInterval)
     public func seek(to position: TimeInterval, itemAt index: Int)
     public func seek(by delta: TimeInterval)         // clamps to 0...duration, never advances
@@ -208,7 +209,11 @@ decoder's sample-accurate seek takes seconds (`seek(toSeconds:)`), and `CMTime` 
 never need because frames at the item's rate stay inside `Transport`. `position` is written when a
 `TransportEvent.position` arrives, which is once a pump (100 ms) while it changes; a view that wants
 2 Hz samples it. Within an item it never goes back except on a seek, so a position saver can take
-deltas as listening time.
+deltas as listening time. `discontinuityCount` is media3's `onPositionDiscontinuity` as an observed
+property: it changes on every seek, skip, load, transition and repeat, and never on a pump. It changes
+with the call, as media3 masks the seek target in at once, not when the seek lands: the call has
+already written the target to `position`, so a reader such as Now Playing gets the jump and the new
+position together, and the landing plays on from there.
 
 **Seek.** `seek(to:)` within the current item or an armed next calls `Transport.seek`; a seek to a
 later or earlier item that the transport no longer holds is a `setCurrent` of that entry followed by

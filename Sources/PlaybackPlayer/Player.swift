@@ -29,6 +29,10 @@ public final class Player<Item: Hashable & Sendable> {
     /// What is heard, in seconds of the current item's media time, written on every pump while it
     /// changes. Within an item it goes back only on a seek, so a saver may count deltas as listening.
     public private(set) var position: TimeInterval = 0
+    /// Changes whenever `position` jumps rather than plays on: a seek, skip, load, item transition or
+    /// repeat, as media3's `onPositionDiscontinuity`. It changes with the call, alongside the new
+    /// `position`, so a reader never pairs it with the old one. Compare it; it may move more than once.
+    public private(set) var discontinuityCount = 0
     /// Nil until the item's source has opened, and for a live stream.
     public private(set) var duration: TimeInterval?
     public private(set) var isLive = false
@@ -179,7 +183,7 @@ public final class Player<Item: Hashable & Sendable> {
         } else if index == current {
             let successor = index < entries.count ? index : 0
             currentIndex = successor
-            position = 0
+            movePosition(to: 0)
             duration = nil
             let ends = loadedKey != nil && (repeatMode == .one || (index == entries.count && repeatMode == .off))
             if ends { unload(as: .ended) }
@@ -196,7 +200,7 @@ public final class Player<Item: Hashable & Sendable> {
         currentIndex = nil
         error = nil
         unload(as: .idle)
-        position = 0
+        movePosition(to: 0)
         duration = nil
         isLive = false
         if previous != nil { send(.itemTransition(from: previous, to: nil, reason: .seek)) }
@@ -222,6 +226,7 @@ public final class Player<Item: Hashable & Sendable> {
                 load(current, at: state == .ended ? 0 : position)
             } else if state == .ended, let loadedKey {
                 seekTransport(item: loadedKey, to: 0)
+                movePosition(to: 0)
                 armNext()
             }
             // A load that failed left nothing to play, so the session stays inactive.
@@ -277,7 +282,7 @@ public final class Player<Item: Hashable & Sendable> {
         let target = min(max(position, 0), duration ?? .infinity)
         if let loadedKey, error == nil {
             seekTransport(item: loadedKey, to: target)
-            self.position = target
+            movePosition(to: target)
             seekTarget = target
             armNext()
         } else if unloadedState == .ended, error == nil {
@@ -285,7 +290,7 @@ public final class Player<Item: Hashable & Sendable> {
             seekTarget = target
         } else {
             // Idle: `play()` prepares from here.
-            self.position = target
+            movePosition(to: target)
         }
     }
 
@@ -297,7 +302,7 @@ public final class Player<Item: Hashable & Sendable> {
         // Not `state`, which waits for the transport to answer a load.
         let idle = error != nil || (loadedKey == nil && unloadedState == .idle)
         currentIndex = index
-        self.position = seconds
+        movePosition(to: seconds)
         duration = nil
         isLive = false
         // Before the load, whose failure to make a source is reported after the transition.
@@ -510,10 +515,16 @@ public final class Player<Item: Hashable & Sendable> {
         loadedKey = armedKey
         self.armedKey = nil
         seekTarget = nil
-        position = seconds
+        movePosition(to: seconds)
         duration = nil
         isLive = false
         armNext()
+    }
+
+    /// Every write of `position` but the pump's. A recovery restarts from what was heard, so it never jumps.
+    private func movePosition(to seconds: TimeInterval) {
+        position = seconds
+        discontinuityCount += 1
     }
 
     private func seekTransport(item key: Int, to seconds: TimeInterval) {
@@ -530,7 +541,7 @@ public final class Player<Item: Hashable & Sendable> {
         loadedKey = key
         if key == armedKey { armedKey = nil }
         seekTarget = nil
-        position = 0
+        movePosition(to: 0)
         duration = nil
         isLive = false
         guard let index = index(of: entryID) else {
@@ -561,7 +572,7 @@ public final class Player<Item: Hashable & Sendable> {
         if let failedNext, let index = index(of: failedNext.entryID) {
             self.failedNext = nil
             currentIndex = index
-            position = 0
+            movePosition(to: 0)
             duration = nil
             isLive = false
             unload(as: .idle)
@@ -577,7 +588,7 @@ public final class Player<Item: Hashable & Sendable> {
         }
         pauseByPlayer(.endOfItem)
         currentIndex = next
-        position = 0
+        movePosition(to: 0)
         duration = nil
         isLive = false
         send(.itemTransition(from: current, to: next, reason: next == current ? .repeat : .auto))
@@ -595,7 +606,7 @@ public final class Player<Item: Hashable & Sendable> {
     /// `setCurrent` of the entry at `index`, then the next armed after it.
     private func load(_ index: Int, at seconds: TimeInterval) {
         let entry = entries[index]
-        position = max(seconds, 0)
+        movePosition(to: max(seconds, 0))
         duration = nil
         isLive = false
         armedKey = nil

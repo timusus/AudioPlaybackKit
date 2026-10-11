@@ -8,7 +8,8 @@ says what we do. A ported test cites its media3 test in a comment, so `grep` fin
 
 To port a test: drive the same scenario on `PlayerRig` (items are ten seconds at 8 Hz on the fake
 output), assert what media3 asserts in our terms (`itemTransition` for `onMediaItemTransition`, `state`
-for `onPlaybackStateChanged`, `seekLanded` for a seek's `onPositionDiscontinuity`), and update the row.
+for `onPlaybackStateChanged`, `discontinuityCount` for `onPositionDiscontinuity` and `seekLanded` for
+when a seek's audio is heard), and update the row.
 
 `n/a` reasons used below: **API** (a media3 class, listener, command or setting with no counterpart:
 `PlayerMessage`, device volume, audio session ids, metadata, release, Wear output
@@ -301,10 +302,10 @@ personal output. `PlayerSessionTests` drives them through `FakeAudioSession`.
 | `playerIdle_withSetPlaybackSpeed_usesPlaybackParameterSpeedWithPitchUnchanged` | n/a: API |
 | `setPlaybackSpeed_withAdPlayback_onlyAppliesToContent` | n/a: ads |
 | `onEvents_correspondToListenerCalls` | n/a: API |
-| `repeatMode_windowTransition_callsOnPositionDiscontinuityAndOnMediaItemTransition` | `PlayerAdvanceTests.testRepeatOneReplaysTheCurrentItemUntilItIsTurnedOff`, `PlayerAdvanceTests.testRepeatAllWrapsFromTheLastItemToTheFirst` |
-| `setMediaSources_removesPlayingPeriod_callsOnPositionDiscontinuity` | n/a: API, no discontinuity callback |
+| `repeatMode_windowTransition_callsOnPositionDiscontinuityAndOnMediaItemTransition` | `PlayerAdvanceTests.testRepeatOneReplaysTheCurrentItemUntilItIsTurnedOff`, `PlayerAdvanceTests.testRepeatAllWrapsFromTheLastItemToTheFirst`, `PlayerDiscontinuityTests.testARepeatOfTheSameItemIsADiscontinuity` |
+| `setMediaSources_removesPlayingPeriod_callsOnPositionDiscontinuity` | `PlayerDiscontinuityTests.testEverySeekAndSkipIsADiscontinuity` |
 | `onPositionDiscontinuity_recursiveStateChange_mediaItemMaskingCorrect` | n/a: API |
-| `removeMediaItems_removesPlayingPeriod_callsOnPositionDiscontinuity` | `PlayerEditTests.testRemoveTheCurrentPlaysItsSuccessorFromTheStart` |
+| `removeMediaItems_removesPlayingPeriod_callsOnPositionDiscontinuity` | `PlayerEditTests.testRemoveTheCurrentPlaysItsSuccessorFromTheStart`, `PlayerDiscontinuityTests.testRemovingTheCurrentItemIsADiscontinuity` |
 | `concatenatingMediaSourceRemoveMediaSource_removesPlayingPeriod_callsOnPositionDiscontinuity` | n/a: timeline |
 | `concatenatingMediaSourceRemoveMediaSourceWithSeek_overridesRemoval_callsOnPositionDiscontinuity` | n/a: timeline |
 | `setMediaItems_callsListenersWithSameInstanceOfMediaItem` | n/a: API |
