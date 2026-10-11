@@ -1,12 +1,12 @@
 import Foundation
 import PlaybackRender
 import PlaybackRenderTestSupport
-import PlaybackPlayerTestSupport
+@_spi(Testing) import PlaybackPlayerTestSupport
 @_spi(Testing) @testable import PlaybackPlayer
 
 /// The shared rig over `FakeItemFactory`'s string items, plus the event-list helpers these tests share.
 @MainActor
-final class PlayerRig: PlayerTestRig<String> {
+final class PlayerRig {
     struct Transition: Equatable {
         var from: Int?
         var to: Int?
@@ -14,12 +14,25 @@ final class PlayerRig: PlayerTestRig<String> {
     }
 
     let factory: FakeItemFactory
+    private let base: PlayerTestRig<String>
 
     init() {
         let factory = FakeItemFactory()
         self.factory = factory
-        super.init { try factory.make($0) }
+        base = PlayerTestRig { try factory.make($0) }
     }
+
+    var output: FakeAudioOutput { base.output }
+    var timer: ManualPumpTimer { base.timer }
+    var session: FakeAudioSession { base.session }
+    var player: Player<String>! { base.player }
+
+    func inFlight(_ body: () -> Void) -> [TransportEvent<Int>] { base.inFlight(body) }
+    func deliver(_ events: [TransportEvent<Int>]) { base.deliver(events) }
+    func settle() { base.settle() }
+    func pump() { base.pump() }
+    func run(for seconds: TimeInterval) { base.run(for: seconds) }
+    func finish() async -> [PlayerEvent<String>] { await base.finish() }
 
     /// The first sample written after the first `skipping` writes: the frame decode landed on.
     func firstSampleWritten(skipping: Int) -> Float? {

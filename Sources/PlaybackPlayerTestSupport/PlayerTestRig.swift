@@ -4,10 +4,9 @@ import PlaybackRenderTestSupport
 @_spi(Testing) import PlaybackPlayer
 
 /// A `Player<Item>` on the fake output, fake session, manual pump and manual decode, with transport
-/// events delivered by hand so every step is chosen, not raced. Open so a package test can add its
-/// own fixtures; an app uses it as is.
+/// events delivered by hand so every step is chosen, not raced.
 @MainActor
-open class PlayerTestRig<Item: Hashable & Sendable> {
+public final class PlayerTestRig<Item: Hashable & Sendable> {
     public let output = FakeAudioOutput()
     public let timer = ManualPumpTimer()
     public let executor = ManualExecutor()
