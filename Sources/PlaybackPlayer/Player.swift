@@ -47,9 +47,14 @@ public final class Player<Item: Hashable & Sendable> {
         didSet { items = entries.map(\.item) }
     }
     @ObservationIgnored private var lastID = 0
-    /// The current entry's id while the transport holds it; nil when stopped, or ended by an edit.
-    @ObservationIgnored private var loadedID: Int?
-    @ObservationIgnored private var armedID: Int?
+    /// The entry id behind each key handed to the transport since the last `setCurrent`. Every load
+    /// and arm takes a fresh key, so a repeat of the current entry is told from its own first audio.
+    @ObservationIgnored private var keyedEntries: [Int: Int] = [:]
+    @ObservationIgnored private var lastKey = 0
+    /// The current entry's key while the transport holds it; nil when stopped, or ended by an edit.
+    @ObservationIgnored private var loadedKey: Int?
+    @ObservationIgnored private var armedKey: Int?
+    private var armedEntryID: Int? { armedKey.flatMap { keyedEntries[$0] } }
     @ObservationIgnored private var transportStatus = TransportStatus.paused
     /// The state while nothing is loaded: `.ended` once the current last item was removed (media3).
     @ObservationIgnored private var unloadedState = PlaybackState.idle
@@ -109,7 +114,7 @@ public final class Player<Item: Hashable & Sendable> {
             return setItems(newItems, startIndex: index)
         }
         let kept = entries[current]
-        let armed = armedID.flatMap { id in entries.first { $0.id == id } }
+        let armed = armedEntryID.flatMap { id in entries.first { $0.id == id } }
         entries = newItems.enumerated().map { offset, item in
             if offset == index { return kept }
             // The armed next keeps its id if it is still next, so the transport keeps its source.
@@ -155,7 +160,7 @@ public final class Player<Item: Hashable & Sendable> {
         } else if index == current {
             if index < entries.count {
                 currentIndex = index
-                if loadedID != nil || error != nil { jump(to: index, at: 0) }
+                if loadedKey != nil || error != nil { jump(to: index, at: 0) }
             } else {
                 currentIndex = 0
                 unload(as: .ended)
@@ -188,11 +193,11 @@ public final class Player<Item: Hashable & Sendable> {
             intent = newValue
             guard newValue else { return transport.pause() }
             guard let current = currentIndex else { return }
-            if loadedID == nil || error != nil {
+            if loadedKey == nil || error != nil {
                 // media3 `prepare()`: after a stop or an error, from the position; at the end, from 0.
                 load(current, at: state == .ended ? 0 : position)
-            } else if state == .ended, let loadedID {
-                seekTransport(item: loadedID, to: 0)
+            } else if state == .ended, let loadedKey {
+                seekTransport(item: loadedKey, to: 0)
             }
             transport.play()
         }
@@ -226,8 +231,8 @@ public final class Player<Item: Hashable & Sendable> {
     public func seek(to position: TimeInterval) {
         guard let current = currentIndex, !isLive, position.isFinite else { return }
         let target = min(max(position, 0), duration ?? .infinity)
-        if let loadedID, error == nil {
-            seekTransport(item: loadedID, to: target)
+        if let loadedKey, error == nil {
+            seekTransport(item: loadedKey, to: target)
             self.position = target
             seekTarget = target
         } else if unloadedState == .ended, error == nil {
@@ -246,7 +251,7 @@ public final class Player<Item: Hashable & Sendable> {
         let seconds = position.isFinite ? max(position, 0) : 0
         currentIndex = index
         // Not `state`, which waits for the transport to answer a load.
-        if error != nil || (loadedID == nil && unloadedState == .idle) {
+        if error != nil || (loadedKey == nil && unloadedState == .idle) {
             self.position = seconds
             duration = nil
             isLive = false
@@ -308,7 +313,7 @@ public final class Player<Item: Hashable & Sendable> {
                 continue
             }
             // A failed armed next is dropped by the transport whatever was called since.
-            let armedFailed = if case let .failed(id?, _) = event { id == armedID } else { false }
+            let armedFailed = if case let .failed(key?, _) = event { key == armedKey } else { false }
             if unansweredCalls > 0, !armedFailed {
                 held.append(event)
                 continue
@@ -321,8 +326,8 @@ public final class Player<Item: Hashable & Sendable> {
 
     private func apply(_ event: TransportEvent<Int>) {
         switch event {
-        case let .position(id, seconds, duration):
-            guard id == loadedID, let current = currentIndex else { return }
+        case let .position(key, seconds, duration):
+            guard key == loadedKey, let current = currentIndex else { return }
             position = seconds
             self.duration = duration
             // The source has opened by the time audio is reported, so no duration means live.
@@ -334,10 +339,10 @@ public final class Player<Item: Hashable & Sendable> {
         case let .status(status):
             transportStatus = status
             refreshState()
-        case let .failed(id, underlying):
-            failed(id, underlying)
-        case let .crossed(id):
-            crossed(into: id)
+        case let .failed(key, underlying):
+            failed(key, underlying)
+        case let .crossed(key):
+            crossed(into: key)
         case .sought:
             break
         }
@@ -355,11 +360,12 @@ public final class Player<Item: Hashable & Sendable> {
     /// Makes `index` current at `seconds`: a seek if the transport already holds it as the armed
     /// next, so its open source is kept, otherwise a fresh `setCurrent`.
     private func jump(to index: Int, at seconds: TimeInterval) {
-        let entry = entries[index]
-        guard entry.id == armedID, loadedID != nil, error == nil else { return load(index, at: seconds) }
-        seekTransport(item: entry.id, to: seconds)
-        loadedID = entry.id
-        armedID = nil
+        guard let armedKey, entries[index].id == armedEntryID, loadedKey != nil, error == nil else {
+            return load(index, at: seconds)
+        }
+        seekTransport(item: armedKey, to: seconds)
+        loadedKey = armedKey
+        self.armedKey = nil
         seekTarget = nil
         position = seconds
         duration = nil
@@ -367,18 +373,18 @@ public final class Player<Item: Hashable & Sendable> {
         armNext()
     }
 
-    private func seekTransport(item id: Int, to seconds: TimeInterval) {
+    private func seekTransport(item key: Int, to seconds: TimeInterval) {
         unansweredCalls += 1
-        transport.seek(item: id, toSeconds: seconds)
+        transport.seek(item: key, toSeconds: seconds)
     }
 
     /// The gapless join into the armed next reached the speaker; any other crossing is the first
     /// audio of an item already current.
-    private func crossed(into id: Int) {
-        guard id == armedID, let from = currentIndex, let index = index(of: id) else { return }
+    private func crossed(into key: Int) {
+        guard key == armedKey, let from = currentIndex, let index = armedEntryID.flatMap(index(of:)) else { return }
         currentIndex = index
-        loadedID = id
-        armedID = nil
+        loadedKey = key
+        armedKey = nil
         seekTarget = nil
         position = 0
         duration = nil
@@ -393,7 +399,7 @@ public final class Player<Item: Hashable & Sendable> {
         position = max(seconds, 0)
         duration = nil
         isLive = false
-        armedID = nil
+        armedKey = nil
         seekTarget = nil
         let source: any ItemSource
         do {
@@ -402,9 +408,10 @@ public final class Player<Item: Hashable & Sendable> {
             unload(as: .idle)
             return reportFailure(at: index, PlaybackError(kind: .source, underlying: error))
         }
+        let key = newKey(for: entry.id, replacing: true)
         unansweredCalls += 1
-        transport.setCurrent(item: entry.id, source: source, startSeconds: position)
-        loadedID = entry.id
+        transport.setCurrent(item: key, source: source, startSeconds: position)
+        loadedKey = key
         error = nil
         if intent { transport.play() }
         armNext()
@@ -413,44 +420,55 @@ public final class Player<Item: Hashable & Sendable> {
     /// Stops the transport and forgets what it held, keeping the list and position.
     private func unload(as state: PlaybackState) {
         transport.stop()
-        loadedID = nil
-        armedID = nil
+        keyedEntries = [:]
+        loadedKey = nil
+        armedKey = nil
         seekTarget = nil
         unloadedState = state
         refreshState()
     }
 
+    /// A transport key for `entryID`; `replacing` forgets the keys of everything a `setCurrent` drops.
+    private func newKey(for entryID: Int, replacing: Bool = false) -> Int {
+        lastKey += 1
+        if replacing { keyedEntries = [:] }
+        keyedEntries[lastKey] = entryID
+        return lastKey
+    }
+
     /// Arms the list's next after the current, if it is not armed already.
     private func armNext() {
-        guard let current = currentIndex, loadedID != nil, error == nil else { return }
+        guard let current = currentIndex, loadedKey != nil, error == nil else { return }
         let next = current + 1 < entries.count ? entries[current + 1] : nil
-        guard next?.id != armedID else { return }
+        guard next?.id != armedEntryID else { return }
         guard let next else {
             transport.clearNext()
-            armedID = nil
+            armedKey = nil
             return
         }
         do {
-            transport.setNext(item: next.id, source: try makeSource(next.item))
-            armedID = next.id
+            let source = try makeSource(next.item)
+            let key = newKey(for: next.id)
+            transport.setNext(item: key, source: source)
+            armedKey = key
         } catch {
-            if armedID != nil { transport.clearNext() }
-            armedID = nil
+            if armedKey != nil { transport.clearNext() }
+            armedKey = nil
             send(.itemFailed(index: current + 1, error: PlaybackError(kind: .source, underlying: error)))
         }
     }
 
-    private func failed(_ id: Int?, _ underlying: any Error) {
+    private func failed(_ key: Int?, _ underlying: any Error) {
         // A source or processor failure names its item; an output failure (nil) stops the current.
-        if let id, id == armedID {
-            armedID = nil
-            if let index = index(of: id) {
+        if let key, key == armedKey {
+            armedKey = nil
+            if let index = keyedEntries[key].flatMap(index(of:)) {
                 send(.itemFailed(index: index, error: PlaybackError(kind: .source, underlying: underlying)))
             }
             return
         }
-        guard id == nil || id == loadedID, let current = currentIndex else { return }
-        reportFailure(at: current, PlaybackError(kind: id == nil ? .output : .source, underlying: underlying))
+        guard key == nil || key == loadedKey, let current = currentIndex else { return }
+        reportFailure(at: current, PlaybackError(kind: key == nil ? .output : .source, underlying: underlying))
     }
 
     private func reportFailure(at index: Int, _ error: PlaybackError) {
@@ -462,7 +480,7 @@ public final class Player<Item: Hashable & Sendable> {
     private func refreshState() {
         state = if currentIndex == nil || error != nil {
             .idle
-        } else if loadedID == nil {
+        } else if loadedKey == nil {
             unloadedState
         } else {
             switch transportStatus {
