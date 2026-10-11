@@ -223,6 +223,7 @@ extension LoopbackMediaServer {
         let lie = _contentLengthLie
         let rate = _bytesPerSecond
         let bursts = _burstPattern
+        let resets = _resetsDroppedConnections
         lock.unlock()
 
         // How much of the body goes out, and whether the connection is then held (a stall) or
@@ -233,7 +234,8 @@ extension LoopbackMediaServer {
         if let stallAfter, stallAfter < limit { limit = stallAfter; holdsOpen = true }
         if let closeAfter, closeAfter < limit { limit = closeAfter; holdsOpen = false; outageOnClose = outage }
         if let lie, slice.count - lie < limit { limit = max(slice.count - lie, 0); holdsOpen = false; outageOnClose = nil }
-        let written = chunks ? Self.chunked(slice.prefix(limit)) : Data(slice.prefix(limit))
+        // A chunked body cut short (a stall, a drop, a lie) never sends its last-chunk, as a real one doesn't.
+        let written = chunks ? Self.chunked(slice.prefix(limit), terminated: limit == slice.count) : Data(slice.prefix(limit))
 
         // A stalled body is never finished and never closed: closing would look like a short read
         // the source retries, which is the recoverable failure, not this one. An outage starts
@@ -247,7 +249,9 @@ extension LoopbackMediaServer {
             guard !holdsOpen else { return }
             if let outageOnClose { self?.refuseRequests(for: outageOnClose) }
             if endsShort {
-                queue.asyncAfter(deadline: .now() + Self.shortBodyCloseDelay) { connection.cancel() }
+                queue.asyncAfter(deadline: .now() + Self.shortBodyCloseDelay) {
+                    if resets { connection.forceCancel() } else { connection.cancel() }
+                }
             } else {
                 connection.cancel()
             }

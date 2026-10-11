@@ -46,8 +46,9 @@ extension LoopbackMediaServer {
         })
     }
 
-    /// `body` as `Transfer-Encoding: chunked`, in 4 KiB chunks.
-    static func chunked(_ body: Data) -> Data {
+    /// `body` as `Transfer-Encoding: chunked`, in 4 KiB chunks. Without the `last-chunk` the body
+    /// never ends, so a close after it is a dropped connection rather than the end of the body.
+    static func chunked(_ body: Data, terminated: Bool = true) -> Data {
         var out = Data()
         var index = body.startIndex
         while index < body.endIndex {
@@ -57,7 +58,7 @@ extension LoopbackMediaServer {
             out.append(Data("\r\n".utf8))
             index = end
         }
-        out.append(Data("0\r\n\r\n".utf8))
+        if terminated { out.append(Data("0\r\n\r\n".utf8)) }
         return out
     }
 

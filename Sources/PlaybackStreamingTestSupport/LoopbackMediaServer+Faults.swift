@@ -105,6 +105,14 @@ extension LoopbackMediaServer {
         set { lock.lock(); _outageAfterClose = newValue; lock.unlock() }
     }
 
+    /// End a body cut short (``closesAfterBodyBytes``, ``contentLengthLie``) with a reset instead
+    /// of an orderly close: a crashed or killed origin. URLSession reports a reset mid chunked
+    /// body as `NSURLErrorNetworkConnectionLost`; after a close it hands the body over as whole.
+    public var resetsDroppedConnections: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _resetsDroppedConnections }
+        set { lock.lock(); _resetsDroppedConnections = newValue; lock.unlock() }
+    }
+
     /// On every body response, declare the full `Content-Length` but write `k` bytes fewer and
     /// close: a host whose length lies, so the body always ends short. Unlike
     /// ``closesAfterBodyBytes`` it never clears, so every retry comes up short too. Nil is honest.

@@ -71,6 +71,37 @@ final class LoopbackFaultKnobTests: XCTestCase {
         XCTAssertEqual(whole.data, body)
     }
 
+    /// What URLSession says of a body with no length cut short: only a reset mid chunked body is an
+    /// error. A close is the end of a close-delimited body, and URLSession takes it for the end of
+    /// a chunked one too, though no last-chunk came; a reset of a close-delimited one likewise.
+    func testOnlyAResetMidChunkedBodyIsATransportError() async throws {
+        let (origin, body) = try start(bodyBytes: 64 * 1024)
+        origin.streamsWithoutLength = true
+        origin.usesChunkedEncoding = true
+        origin.closesAfterBodyBytes = 16 * 1024
+        origin.resetsDroppedConnections = true
+        let request = URLRequest(url: origin.url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 10)
+        do {
+            let data = try await session.data(for: request).0
+            XCTFail("a reset chunked body completed with \(data.count) bytes")
+        } catch {
+            XCTAssertEqual((error as NSError).code, NSURLErrorNetworkConnectionLost, "\(error)")
+        }
+        let whole = await fetch(origin.url)
+        XCTAssertEqual(whole.data, body, "a chunked body sent whole did not end cleanly")
+
+        origin.resetsDroppedConnections = false
+        origin.closesAfterBodyBytes = 16 * 1024
+        let closedChunked = await fetch(origin.url)
+        XCTAssertEqual(closedChunked.data, body.prefix(16 * 1024), "a close mid chunked body is no error to URLSession")
+
+        origin.usesChunkedEncoding = false
+        origin.resetsDroppedConnections = true
+        origin.closesAfterBodyBytes = 16 * 1024
+        let resetUnframed = await fetch(origin.url)
+        XCTAssertEqual(resetUnframed.data, body.prefix(16 * 1024), "a reset close-delimited body is no error to URLSession")
+    }
+
     func testContentLengthLieShortensEveryBody() async throws {
         let (origin, body) = try start(bodyBytes: 64 * 1024)
         origin.contentLengthLie = 1000
