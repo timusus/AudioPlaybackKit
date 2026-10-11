@@ -5,8 +5,9 @@
 ![SwiftPM](https://img.shields.io/badge/SwiftPM-compatible-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)
 
-Play the audio AVPlayer won't, and own the PCM on the way out. A Swift package over FFmpeg for iOS and macOS,
-used in production by Shuttle Podcasts and Shuttle2.
+Play the audio AVPlayer won't, and own the PCM on the way out. A Swift package over FFmpeg for iOS and macOS:
+a decoder, a streaming byte source, an output layer, and a `Player` with the audio session and lock screen
+on top. Built for Shuttle Podcasts and Shuttle2.
 
 What an app gets:
 
@@ -15,6 +16,8 @@ What an app gets:
 - **Seeks that land on the sample** (VBR MP3 excepted), gapless joins between items (even at different sample rates), and decode that can be cancelled while blocked on the network.
 - **A decoder checked against goldens.** Over a hundred fixtures run through a faulting reader and a seek matrix against committed PCM hashes, modelled on androidx/media's tests ([ADR-0008](docs/decisions/0008-conformance-testing-modelled-on-media3.md)).
 - **An output layer to replace your `AVAudioEngine` graph** (`PlaybackRender`). One `Transport` drives an `AVSampleBufferAudioRenderer` and its synchronizer: play, pause, seek, speed, a gapless next item, and your effects as `AudioProcessor`s. Position comes back as the frame being heard. A failed renderer or a media-services reset is recovered once, landing paused where it was ([ADR-0018](docs/decisions/0018-render-layer.md)).
+- **A player on top** (`PlaybackPlayer`). `Player<Item>` takes your list and keeps the next item armed for a gapless join, with repeat, pause at the end of an item, seconds-based seeks across items, and observable `state`, `position` and `duration`. It owns the `AVAudioSession`: lazy activation, interruptions that resume only when they should, headphones and Bluetooth loss, media-services resets. A failed item stops with an event rather than skipping ([ADR-0019](docs/decisions/0019-player.md)).
+- **The lock screen.** `NowPlayingSession` (`PlaybackNowPlaying`) shows a `Player` in Now Playing and routes the remote commands back to it.
 - **Testable seams.** Bytes come from a `StreamByteReader`, items from an `ItemSource`, effects are `AudioProcessor`s, and `LoopbackMediaServer` is a fault-injecting local server for your own streaming tests.
 - **LGPL done for you.** FFmpeg ships as a dynamic framework Xcode embeds without a build-phase change, so users can relink ([ADR-0001](docs/decisions/0001-ffmpeg-for-demux-and-decode.md)).
 
@@ -34,10 +37,15 @@ Link only the products you import.
 | `PlaybackPlayerTestSupport` | `FakeAudioSession` and `PlayerTestRig`: a `Player` on a fake output and manual clock, for testing an app's coordinator. |
 | `FFmpeg` | The LGPL-only FFmpeg as a dynamic framework, for an app with its own C code against libavformat. |
 
+**Which product do I need?** PCM only: `PlaybackDecode` (plus `PlaybackStreaming` for URLs). Your own queue and
+audio session over a renderer: add `PlaybackRender`. Playback with the queue, session and interruptions done:
+`PlaybackPlayer`, plus `PlaybackNowPlaying` for the lock screen. Each `*TestSupport` product goes in your test
+target only. `FFmpeg` is for an app with its own C code against libavformat.
+
 ## Install
 
 ```swift
-.package(url: "https://github.com/timusus/AudioPlaybackKit.git", from: "0.9.0")
+.package(url: "https://github.com/timusus/AudioPlaybackKit.git", from: "0.10.0")
 ```
 
 ```swift
@@ -66,15 +74,25 @@ while let chunk = decoder.nextChunk() {          // interleaved Float32, up to 4
 `open()`, `nextChunk()` and `seek(toSeconds:)` block, so call them from a thread of your own. To have the
 package play it as well, see [the render section](docs/usage.md#play-through-the-render-layer).
 
-## Not yet a player
+## Play a list
 
-The package decodes, streams and, optionally, renders; today the app drives `Transport` and keeps the queue,
-audio session, Now Playing and effects. A player layer above `Transport` is planned ([ADR-0019](docs/decisions/0019-player.md)).
+```swift
+import PlaybackDecode
+import PlaybackPlayer
+import PlaybackRender
+
+let player = Player<URL>(makeSource: { FFmpegItemSource(reader: try FileByteReader(url: $0)) })
+player.setItems(urls)
+player.play()          // then read player.state, player.position and player.duration
+```
+
+Effects (skip-silence, Voice Boost) are `AudioProcessor`s you give the player; shuffle, ads and UI stay in the app. [Usage](docs/usage.md#play-a-list-with-player) covers the rest.
 
 ## Documentation
 
-- [Usage](docs/usage.md): decode a file, stream a URL, seek, cancel, show buffering state, play through the render layer.
-- [Migrating to PlaybackRender](docs/migrating.md): moving an `AVAudioEngine` player over, step by step.
+- [Usage](docs/usage.md): decode a file, stream a URL, seek, cancel, show buffering state, play through the render layer, run a `Player`, show it on the lock screen, test it.
+- [Migrating to Player](docs/migrating.md): moving Shuttle Podcasts and Shuttle2 off their `AVAudioEngine` players.
+- [Device checklist](docs/device-checklist.md): what no test covers, to run on an iPhone before relying on a release.
 - [Architecture](docs/architecture.md): how the decoder and the download source work.
 - [Decisions](docs/decisions/README.md): why it is built this way.
 - [Contributing](CONTRIBUTING.md) and [docs/contributing.md](docs/contributing.md): tests, rebuilding FFmpeg, releasing.
