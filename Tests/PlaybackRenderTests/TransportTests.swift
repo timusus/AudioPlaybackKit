@@ -100,9 +100,8 @@ final class TransportTests: XCTestCase {
 
     private var positions: [Heard] {
         recorder.events.compactMap {
-            guard case let .position(item, frame, sampleRate, _) = $0 else { return nil }
-            XCTAssertEqual(sampleRate, 8)
-            return Heard(item: item, frame: frame)
+            guard case let .position(item, seconds, _) = $0 else { return nil }
+            return Heard(item: item, frame: Int64(seconds * 8))
         }
     }
 
@@ -177,7 +176,7 @@ final class TransportTests: XCTestCase {
         pump()
         XCTAssertEqual(output.volume, 0.5, "item change")
 
-        transport.seek(item: "b", toFrame: 8)
+        transport.seek(item: "b", toSeconds: 1)
         pump()
         XCTAssertEqual(output.volume, 0.5, "seek")
 
@@ -254,13 +253,13 @@ final class TransportTests: XCTestCase {
         pump()
         run(for: 0.5)
 
-        transport.seek(item: "a", toFrame: 16)
+        transport.seek(item: "a", toSeconds: 2)
         pump()
         run(for: 0.75)
         // B's first frames are already written, so decode is past the join.
         XCTAssertTrue(output.enqueues.contains { $0.samples == [1000, 1001] })
 
-        transport.seek(item: "a", toFrame: 4)
+        transport.seek(item: "a", toSeconds: 0.5)
         pump()
         run(for: 6)
 
@@ -272,7 +271,7 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(crossed, ["a", "b"])
 
         // A is behind the item heard, so the sequencer has let it go and the seek does nothing.
-        transport.seek(item: "a", toFrame: 0)
+        transport.seek(item: "a", toSeconds: 0)
         pump()
         run(for: 1)
         XCTAssertEqual(heard, expected)
@@ -287,7 +286,7 @@ final class TransportTests: XCTestCase {
         run(for: 0.75)
         XCTAssertEqual(crossed, ["a", "b"])
 
-        transport.seek(item: "a", toFrame: 0)
+        transport.seek(item: "a", toSeconds: 0)
         pump()
         run(for: 1)
 
@@ -305,7 +304,7 @@ final class TransportTests: XCTestCase {
         run(for: 0.75)
 
         // B was replaced, so the transport has forgotten it.
-        transport.seek(item: "b", toFrame: 0)
+        transport.seek(item: "b", toSeconds: 0)
         pump()
         run(for: 1)
 
@@ -335,13 +334,13 @@ final class TransportTests: XCTestCase {
         run(for: 0.25)
 
         // The first is still set, so the seek lands there.
-        transport.seek(item: "a", toFrame: 0)
+        transport.seek(item: "a", toSeconds: 0)
         pump()
         run(for: 0.75)
         XCTAssertEqual(crossed, ["a", "a"])
 
         // Now only the second is.
-        transport.seek(item: "a", toFrame: 0)
+        transport.seek(item: "a", toSeconds: 0)
         pump()
         run(for: 1)
 
@@ -359,14 +358,14 @@ final class TransportTests: XCTestCase {
         run(for: 6)
 
         let durations = recorder.events.compactMap { event -> String? in
-            guard case let .position(item, _, _, duration) = event else { return nil }
-            return "\(item) \(duration.map(String.init) ?? "nil")"
+            guard case let .position(item, _, duration) = event else { return nil }
+            return "\(item) \(duration.map { "\($0)" } ?? "nil")"
         }
-        XCTAssertEqual(Set(durations), ["a 24", "b nil"])
+        XCTAssertEqual(Set(durations), ["a 3.0", "b nil"])
     }
 
-    func testAPositionBeforeTheItemsRateIsKnownIsHeldUntilItIs() {
-        transport.setCurrent(item: "a", source: a, startFrame: 4)
+    func testAStartIsReportedOnceItsFirstAudioGivesTheFrame() {
+        transport.setCurrent(item: "a", source: a, startSeconds: 0.5)
         timer.sync()
         timer.fire()
         XCTAssertEqual(positions, [])
@@ -436,7 +435,7 @@ final class TransportTests: XCTestCase {
     func testAPendingChainRacingASeekIsAppliedOnceFromTheNewPosition() {
         playLongThenChange(processors: []) {
             transport.setProcessors([GainProcessor()])
-            transport.seek(item: "a", toFrame: 40)
+            transport.seek(item: "a", toSeconds: 5)
             pump()
         }
 
@@ -566,7 +565,7 @@ final class TransportTests: XCTestCase {
         pump()
         run(for: 0.75)
 
-        transport.seek(item: "b", toFrame: 6)
+        transport.seek(item: "b", toSeconds: 0.75)
         pump()
         run(for: 1.5)
 
@@ -582,7 +581,7 @@ final class TransportTests: XCTestCase {
         pump()
         run(for: 0.75)
 
-        transport.seek(item: "b", toFrame: 6)
+        transport.seek(item: "b", toSeconds: 0.75)
         pump()
         run(for: 1)
 
@@ -612,7 +611,7 @@ final class TransportTests: XCTestCase {
 
         // Nothing is left to play, seek to or follow.
         transport.play()
-        transport.seek(item: "a", toFrame: 0)
+        transport.seek(item: "a", toSeconds: 0)
         transport.setNext(item: "c", source: c)
         pump()
         run(for: 2)
@@ -737,7 +736,7 @@ final class TransportTests: XCTestCase {
         DispatchQueue.concurrentPerform(iterations: 64) { index in
             switch index % 3 {
             case 0: transport.setRate(1 + Double(index % 4) / 4)
-            case 1: transport.seek(item: "a", toFrame: Int64(index % 4))
+            case 1: transport.seek(item: "a", toSeconds: Double(index % 4) / 8)
             default: transport.pause()
             }
         }

@@ -84,7 +84,7 @@ final class SequencerTests: XCTestCase {
         executor.runUntilIdle()
         _ = sequencer.pull()
 
-        sequencer.seek(item: 1, mediaFrame: 555)
+        sequencer.seek(item: 1, to: .frame(555))
         XCTAssertEqual(sequencer.pullIsPending, true)
         let drained = drain(sequencer, executor)
 
@@ -96,7 +96,7 @@ final class SequencerTests: XCTestCase {
     func testAChunkDecodedAcrossASeekIsDroppedAndTheSourceInterrupted() {
         let a = FakeItemSource(format: mono44, frames: 1000)
         sequencer.setCurrent(item: 1, source: a)
-        a.duringRead = { [sequencer] in sequencer.seek(item: 1, mediaFrame: 700) }
+        a.duringRead = { [sequencer] in sequencer.seek(item: 1, to: .frame(700)) }
 
         let drained = drain(sequencer, executor)
 
@@ -112,7 +112,7 @@ final class SequencerTests: XCTestCase {
         sequencer.setNext(item: 2, source: FakeItemSource(format: mono44, frames: 100))
         executor.runUntilIdle()
 
-        sequencer.setCurrent(item: 3, source: c, startFrame: 40)
+        sequencer.setCurrent(item: 3, source: c, start: .frame(40))
         let drained = drain(sequencer, executor)
 
         XCTAssertEqual(a.interrupts, 1)
@@ -130,7 +130,7 @@ final class SequencerTests: XCTestCase {
         let head = drain(sequencer, executor, limit: 3)
         XCTAssertEqual(head.tags.last, tag(2, 0, 100))
 
-        sequencer.seek(item: 1, mediaFrame: 120)
+        sequencer.seek(item: 1, to: .frame(120))
         let drained = drain(sequencer, executor)
 
         XCTAssertTrue(drained.ended)
@@ -148,7 +148,7 @@ final class SequencerTests: XCTestCase {
         XCTAssertEqual(head.tags.last, tag(2, 0, 100))
         sequencer.setNext(item: 3, source: c)
 
-        sequencer.seek(item: 1, mediaFrame: 120)
+        sequencer.seek(item: 1, to: .frame(120))
         let drained = drain(sequencer, executor)
 
         XCTAssertTrue(drained.ended)
@@ -169,7 +169,7 @@ final class SequencerTests: XCTestCase {
         let head = drain(sequencer, executor)
         XCTAssertEqual(head.tags, [tag(1, 0, 30), tag(2, 0, 0), tag(3, 0, 20)])
 
-        sequencer.seek(item: 1, mediaFrame: 10)
+        sequencer.seek(item: 1, to: .frame(10))
         let drained = drain(sequencer, executor)
 
         XCTAssertTrue(drained.ended)
@@ -204,7 +204,7 @@ final class SequencerTests: XCTestCase {
 
         sequencer.release(before: 2)
         XCTAssertNil(released)
-        sequencer.seek(item: 2, mediaFrame: 50)
+        sequencer.seek(item: 2, to: .frame(50))
         let drained = drain(sequencer, executor)
 
         XCTAssertTrue(drained.ended)

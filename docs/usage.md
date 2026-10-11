@@ -192,7 +192,7 @@ import PlaybackRender
 
 let transport = Transport<Track.ID> { event in          // called on the transport's queue
     switch event {
-    case .position(let id, let frame, let sampleRate, let duration): break   // seconds = Double(frame) / sampleRate
+    case .position(let id, let seconds, let duration): break   // media time of `id`; duration nil when unknown
     case .crossed(let id): break                        // `id` is now heard; advance your queue
     case .status(let status): break                     // .paused, .buffering, .playing, .ended
     case .failed(let id, let error): break              // paused on an error
@@ -200,18 +200,18 @@ let transport = Transport<Track.ID> { event in          // called on the transpo
 }
 
 let source = FFmpegItemSource(reader: try FileByteReader(url: fileURL))   // or a GrowingFileByteSource
-transport.setCurrent(item: track.id, source: source, startFrame: 0)
+transport.setCurrent(item: track.id, source: source, startSeconds: 0)
 transport.play()
-transport.seek(item: track.id, toFrame: Int64(90 * sampleRate))
+transport.seek(item: track.id, toSeconds: 90)
 transport.setRate(1.5)           // pitch kept; pause() stops, rate 0 is not allowed
 transport.setVolume(0.5)         // 0...1, applied at once
 ```
 
 Every method returns at once and runs in call order on the transport's queue. `Item` is any
-`Hashable & Sendable` name for a queue entry. Positions are frames at the item's own rate, so a stored
-resume point is a frame count (or seconds times the rate you opened it at). Use the `position` events
-for the UI and for `MPNowPlayingInfoCenter`; their `duration` is the item's length in frames as FFmpeg
-probed it, nil for a live stream or a body of unknown length. `.ended` is not final, a later `setNext` plays on.
+`Hashable & Sendable` name for a queue entry. Positions are seconds of the item's media time; a start or
+seek lands on the nearest frame, so a stored resume point seeks back to the frame it was reported at. Use
+the `position` events for the UI and for `MPNowPlayingInfoCenter`; their `duration` is the item's length
+in seconds as FFmpeg probed it, nil for a live stream or a body of unknown length. `.ended` is not final, a later `setNext` plays on.
 `setCurrent` replaces everything set, so it is also how a skip or a track change by the user works.
 A source belongs to one `setCurrent` or `setNext`; make a new `FFmpegItemSource` each time.
 

@@ -25,14 +25,14 @@ final class SequencerInterruptTests: XCTestCase {
         reader.beforeNextClear {
             let done = DispatchSemaphore(value: 0)
             DispatchQueue.global().async {
-                sequencer.seek(item: 1, mediaFrame: 44100)
+                sequencer.seek(item: 1, to: .frame(44100))
                 done.signal()
             }
             done.wait()
         }
         let start = Date()
         // Far past what the open buffered, so the seek has to go to the reader.
-        sequencer.seek(item: 1, mediaFrame: 80000)
+        sequencer.seek(item: 1, to: .frame(80000))
         let chunk = firstChunk(sequencer)
 
         XCTAssertEqual(chunk?.tags.first?.mediaStartFrame, 44100)

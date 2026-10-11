@@ -43,7 +43,9 @@ final class FakeUpstream: FeederUpstream {
         return .chunk(TaggedChunk(samples: samples, format: item.format, tags: [tag]))
     }
 
-    func resupply(from position: MediaPositionMap.Position) {
+    func resupply(from target: SeekTarget) {
+        guard case let .frame(start) = target.offset else { preconditionFailure("the feeder's own restarts are frames") }
+        let position = MediaPositionMap.Position(item: target.item, mediaFrame: start)
         resupplies.append(position)
         index = items.firstIndex { $0.id == position.item }!
         frame = position.mediaFrame

@@ -59,7 +59,7 @@ final class SampleBufferAudioOutputIntegrationTests: XCTestCase {
 
         let ended = recorder.expect { $0.status == .ended }
         let seekAt = recorder.now
-        transport.seek(item: "tone", toFrame: 36000)
+        transport.seek(item: "tone", toSeconds: 0.75)
         wait(for: [ended], timeout: 5)
 
         // The seek's restart reports `.buffering` before any position of its own.
@@ -124,7 +124,7 @@ private final class TimedRecorder: @unchecked Sendable {
         var at: TimeInterval
 
         var status: TransportStatus? { if case let .status(status) = event { status } else { nil } }
-        var frame: Int64? { if case let .position(_, frame, _, _) = event { frame } else { nil } }
+        var frame: Int64? { if case let .position(_, seconds, _) = event { Int64((seconds * 48000).rounded()) } else { nil } }
     }
 
     private let lock = NSLock()

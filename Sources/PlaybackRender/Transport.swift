@@ -10,12 +10,12 @@ public enum TransportStatus: Equatable, Sendable {
 }
 
 public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
-    /// What is heard now, as a media frame of `item` at its own `sampleRate`. Sent when it changes,
-    /// at most once a pump; frames a processor dropped are skipped when they would have played.
-    /// Within an item it never goes back except on a `seek` or `setCurrent`, so position deltas are
-    /// listening time. `duration` is the item's length in frames at `sampleRate` as its source
-    /// probed it, for the progress bar and Now Playing; nil when unknown (a live stream).
-    case position(item: Item, frame: Int64, sampleRate: Double, duration: Int64?)
+    /// What is heard now, in seconds of `item`'s media time. Sent when it changes, at most once a
+    /// pump; frames a processor dropped are skipped when they would have played. Within an item it
+    /// never goes back except on a `seek` or `setCurrent`, so position deltas are listening time.
+    /// `duration` is the item's length as its source probed it, for the progress bar and Now
+    /// Playing; nil when unknown (a live stream).
+    case position(item: Item, seconds: TimeInterval, duration: TimeInterval?)
     /// `item` is now the one at the playhead: the gapless join reached the speaker, or the first
     /// item's audio was written there, playing or paused.
     case crossed(item: Item)
@@ -39,9 +39,9 @@ let pumpInterval: TimeInterval = 0.1
 /// `Item` is whatever the app names a queue entry with. It may repeat (a track on repeat); events
 /// carry it back, and a seek to a repeated item lands in the earliest one still set.
 ///
-/// Positions are frames at the item's own rate, the unit every layer below keeps: seeks are
-/// sample-accurate (ADR-0009) and a start frame needs no rate before the item is opened. Position
-/// events carry the rate for converting to seconds.
+/// Positions are seconds here and frames at the item's own rate below (ADR-0019): a start or seek
+/// becomes the nearest frame once the item's source has opened, so it stays sample-accurate
+/// (ADR-0009) and a reported position seeks back to the frame it came from.
 public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private let queue = DispatchQueue(label: "PlaybackRender.Transport", qos: .userInitiated)
     private let output: any AudioOutput
@@ -57,8 +57,6 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// reports and never holds an item the sequencer has dropped, so a seek to one is always valid.
     private var ids: [Int: Item] = [:]
     private var failed = false
-    /// A position reported before its item's first chunk gave the rate; sent once the rate is known.
-    private var unratedPosition: MediaPositionMap.Position?
 
     /// Plays through the device's audio output (`AVSampleBufferAudioRenderer`). The transport never
     /// touches `AVAudioSession`: on iOS the app sets the category and activates the session before
@@ -110,7 +108,6 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     public func stop() {
         queue.async { [self] in
             ids = [:]
-            unratedPosition = nil
             Self.tearDown(upstream, feeder)
         }
     }
@@ -120,16 +117,16 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         feeder.stop()
     }
 
-    /// Replaces everything set, next items included, and plays `item` from `startFrame` once
+    /// Replaces everything set, next items included, and plays `item` from `startSeconds` once
     /// playing. Audio queued from the item before is dropped.
-    public func setCurrent(item: Item, source: any ItemSource, startFrame: Int64 = 0) {
-        precondition(startFrame >= 0)
+    public func setCurrent(item: Item, source: any ItemSource, startSeconds: TimeInterval = 0) {
+        precondition(startSeconds >= 0 && startSeconds.isFinite)
         queue.async { [self] in
             let id = newID()
             ids = [id: item]
             failed = false
-            upstream.setCurrent(item: id, source: source, startFrame: startFrame)
-            feeder.seek(to: MediaPositionMap.Position(item: id, mediaFrame: startFrame))
+            upstream.setCurrent(item: id, source: source, startSeconds: startSeconds)
+            feeder.seek(to: SeekTarget(item: id, offset: .seconds(startSeconds)))
         }
     }
 
@@ -169,14 +166,14 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         queue.async { [self] in feeder.setRate(rate) }
     }
 
-    /// Plays on from `frame` of `item`, which must be the item heard now or one set after it. A seek
-    /// to an item already passed (a `crossed` raced the call) is ignored.
-    public func seek(item: Item, toFrame frame: Int64) {
-        precondition(frame >= 0)
+    /// Plays on from `seconds` into `item`, which must be the item heard now or one set after it. A
+    /// seek to an item already passed (a `crossed` raced the call) is ignored.
+    public func seek(item: Item, toSeconds seconds: TimeInterval) {
+        precondition(seconds >= 0 && seconds.isFinite)
         queue.async { [self] in
             guard let id = ids.filter({ $0.value == item }).keys.min() else { return }
             failed = false
-            feeder.seek(to: MediaPositionMap.Position(item: id, mediaFrame: frame))
+            feeder.seek(to: SeekTarget(item: id, offset: .seconds(seconds)))
         }
     }
 
@@ -208,19 +205,13 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
 
     private func pump() {
         feeder.pump()
-        // The feeder reports a position once, so one that came before its rate goes out now.
-        if let position = unratedPosition { report(position) }
     }
 
+    /// Every frame position comes from audio already pulled, so its item's rate is known.
     private func report(_ position: MediaPositionMap.Position) {
-        unratedPosition = nil
-        guard let item = ids[position.item] else { return }
-        guard let rate = upstream.sampleRates[position.item] else {
-            unratedPosition = position
-            return
-        }
-        let duration = sequencer.duration(of: position.item)
-        onEvent(.position(item: item, frame: position.mediaFrame, sampleRate: rate, duration: duration))
+        guard let item = ids[position.item], let rate = upstream.sampleRates[position.item] else { return }
+        let duration = sequencer.duration(of: position.item).map { Double($0) / rate }
+        onEvent(.position(item: item, seconds: Double(position.mediaFrame) / rate, duration: duration))
     }
 
     private func forget(_ change: Sequencer.TailChange) {

@@ -10,8 +10,8 @@ enum UpstreamSupply: Sendable {
 /// What the feeder pulls from: the pipeline, later. Called on the feeder's queue.
 protocol FeederUpstream: AnyObject {
     func pull() -> UpstreamSupply
-    /// Drop everything buffered and supply again from this media frame, sample-accurately (ADR-0009).
-    func resupply(from position: MediaPositionMap.Position)
+    /// Drop everything buffered and supply again from this point, sample-accurately (ADR-0009).
+    func resupply(from target: SeekTarget)
 }
 
 enum FeederStatus: Equatable, Sendable {
@@ -60,7 +60,7 @@ final class Feeder {
     /// instead of rebuilding again, as media3's `pendingRecoverableRendererError` allows one retry.
     private var recovering = false
     // Where the last restart asked upstream to start, the position until audio of that epoch is written.
-    private var restartPosition: MediaPositionMap.Position?
+    private var restartTarget: SeekTarget?
     private var reportedPosition: MediaPositionMap.Position?
     private var status = FeederStatus.paused
 
@@ -123,9 +123,9 @@ final class Feeder {
     }
 
     /// The one place the reported position may go back within an item.
-    func seek(to position: MediaPositionMap.Position) {
+    func seek(to target: SeekTarget) {
         reportedPosition = nil
-        restart(from: position)
+        restart(from: target)
         pump()
     }
 
@@ -181,12 +181,19 @@ final class Feeder {
         map.playhead(currentTime: output.currentTime(), outputLatency: output.outputLatency)
     }
 
-    private func currentPosition(at playhead: TimeInterval) -> MediaPositionMap.Position? {
-        map.position(at: playhead) ?? restartPosition
+    private func currentPosition(at playhead: TimeInterval) -> SeekTarget? {
+        map.position(at: playhead).map(SeekTarget.init) ?? restartTarget
+    }
+
+    /// A restart in seconds is not reported: its first audio carries the frame they became.
+    private func reportablePosition(at playhead: TimeInterval) -> MediaPositionMap.Position? {
+        if let position = map.position(at: playhead) { return position }
+        guard let restartTarget, case let .frame(frame) = restartTarget.offset else { return nil }
+        return MediaPositionMap.Position(item: restartTarget.item, mediaFrame: frame)
     }
 
     /// The one recovery path: an auto-flush, a stall, a transport flush, a seek and a stop all land here.
-    private func restart(from position: MediaPositionMap.Position?, status: FeederStatus? = nil) {
+    private func restart(from position: SeekTarget?, status: FeederStatus? = nil) {
         // Flush times already posted predate this flush, which covers them; a failure does not.
         _ = inbox.drainTime()
         output.flush()
@@ -197,7 +204,7 @@ final class Feeder {
         map.reset(at: anchor)
         upstreamEnded = false
         failed = false
-        restartPosition = position
+        restartTarget = position
         // With no position nothing was consumed, so upstream's next chunk is still the right one.
         if let position { upstream.resupply(from: position) }
         setStatus(status ?? (playWhenReady ? .buffering : .paused))
@@ -267,7 +274,7 @@ final class Feeder {
         // Within an item the position only goes forward, as media3's renderers take
         // max(current, new) unless a seek allowed a discontinuity: the clock steps back on a rate
         // change, a resume or a re-anchor, and apps count listening time from position deltas.
-        if let position = currentPosition(at: playhead),
+        if let position = reportablePosition(at: playhead),
            reportedPosition.map({ $0.item != position.item || $0.mediaFrame < position.mediaFrame }) ?? true {
             reportedPosition = position
             onEvent(.position(position))

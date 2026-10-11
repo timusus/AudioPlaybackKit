@@ -16,7 +16,7 @@ final class SequencedUpstream: FeederUpstream {
     private var pendingProcessors: [any AudioProcessor]?
     private var failed = false
     /// Where `Sequencer.setCurrent` already starts decode, so the feeder's restart there needs no seek.
-    private var freshStart: MediaPositionMap.Position?
+    private var freshStart: SeekTarget?
 
     /// Each item's sample rate, known once its first chunk is pulled. Processors cannot resample,
     /// so it is also the rate of the item's frames at the output.
@@ -27,10 +27,10 @@ final class SequencedUpstream: FeederUpstream {
         self.onFailure = onFailure
     }
 
-    func setCurrent(item: Int, source: any ItemSource, startFrame: Int64) {
+    func setCurrent(item: Int, source: any ItemSource, startSeconds: TimeInterval) {
         sampleRates = [:]
-        sequencer.setCurrent(item: item, source: source, startFrame: startFrame == 0 ? nil : startFrame)
-        freshStart = MediaPositionMap.Position(item: item, mediaFrame: startFrame)
+        sequencer.setCurrent(item: item, source: source, start: startSeconds == 0 ? nil : .seconds(startSeconds))
+        freshStart = SeekTarget(item: item, offset: .seconds(startSeconds))
     }
 
     /// Takes effect at the next chunk pulled: the old chain drains first, as at a format change, so
@@ -105,11 +105,11 @@ final class SequencedUpstream: FeederUpstream {
         return .pending
     }
 
-    func resupply(from position: MediaPositionMap.Position) {
+    func resupply(from target: SeekTarget) {
         restartPipeline()
         defer { freshStart = nil }
-        guard position != freshStart else { return }
-        sequencer.seek(item: position.item, mediaFrame: position.mediaFrame)
+        guard target != freshStart else { return }
+        sequencer.seek(item: target.item, to: target.offset)
     }
 
     private func applyPendingProcessors() {

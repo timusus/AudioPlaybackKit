@@ -13,6 +13,32 @@ struct SerialQueueExecutor: SequencerExecutor {
     }
 }
 
+/// Where decode starts in an item: a heard frame, or the app's seconds, which become a frame only once
+/// the item's source has opened and given its rate.
+struct SeekTarget: Equatable, Sendable {
+    enum Offset: Equatable, Sendable {
+        case frame(Int64)
+        case seconds(TimeInterval)
+
+        /// The nearest frame, so a position reported in seconds seeks back to the frame it came from.
+        func frame(at sampleRate: Double) -> Int64 {
+            switch self {
+            case let .frame(frame): frame
+            case let .seconds(seconds): Int64((seconds * sampleRate).rounded())
+            }
+        }
+    }
+
+    var item: Int
+    var offset: Offset
+}
+
+extension SeekTarget {
+    init(_ position: MediaPositionMap.Position) {
+        self.init(item: position.item, offset: .frame(position.mediaFrame))
+    }
+}
+
 /// Owns a window of items in play order and the joins between them (ADR-0018): it decodes ahead on
 /// its executor into a small buffer and hands out `TaggedChunk`s tagged (item, media frame).
 ///
@@ -68,7 +94,7 @@ final class Sequencer: @unchecked Sendable {
     /// The item being decoded and where it has got to.
     private struct Cursor {
         var entry: Entry
-        var seekTo: Int64?
+        var seekTo: SeekTarget.Offset?
         var nextFrame: Int64 = 0
         var tagged = false
         var ended = false
@@ -92,13 +118,13 @@ final class Sequencer: @unchecked Sendable {
         self.onSupply = onSupply
     }
 
-    /// Replaces the whole window with `item` and decodes it from `startFrame` (its start when nil).
-    func setCurrent(item: Int, source: any ItemSource, startFrame: Int64? = nil) {
+    /// Replaces the whole window with `item` and decodes it from `start` (its start when nil).
+    func setCurrent(item: Int, source: any ItemSource, start: SeekTarget.Offset? = nil) {
         let interruptStale = lock.withLock {
             let entry = Entry(item: item, source: source)
             entry.started = true
             window = [entry]
-            return restart(Cursor(entry: entry, seekTo: startFrame))
+            return restart(Cursor(entry: entry, seekTo: start))
         }
         interruptStale()
     }
@@ -150,15 +176,15 @@ final class Sequencer: @unchecked Sendable {
         interruptStale()
     }
 
-    /// Restarts decode at `mediaFrame` of `item`, which must still be in the window; the feeder's
-    /// `resupply(from:)` passes its `MediaPositionMap.Position` straight through.
-    func seek(item: Int, mediaFrame: Int64) {
+    /// Restarts decode at `offset` of `item`, which must still be in the window; the feeder's
+    /// `resupply(from:)` passes its `SeekTarget` straight through.
+    func seek(item: Int, to offset: SeekTarget.Offset) {
         let interruptStale = lock.withLock {
             guard let entry = window.first(where: { $0.item == item }) else {
                 preconditionFailure("seek to item \(item), which is not in the window")
             }
             entry.started = true
-            return restart(Cursor(entry: entry, seekTo: mediaFrame))
+            return restart(Cursor(entry: entry, seekTo: offset))
         }
         interruptStale()
     }
@@ -250,7 +276,8 @@ final class Sequencer: @unchecked Sendable {
                 let duration = entry.source.duration
                 lock.withLock { entry.duration = duration }
             }
-            let landed = try cursor.seekTo.map { try entry.source.seek(toFrame: $0) }
+            let sampleRate = entry.format!.sampleRate
+            let landed = try cursor.seekTo.map { try entry.source.seek(toFrame: $0.frame(at: sampleRate)) }
             return (landed, try entry.source.nextChunk())
         }
 
@@ -292,6 +319,6 @@ final class Sequencer: @unchecked Sendable {
     private func joinGapless(to next: Entry) {
         next.started = true
         // A source read before (a seek back replaying the window) is rewound to its start.
-        cursor = Cursor(entry: next, seekTo: next.format == nil ? nil : 0)
+        cursor = Cursor(entry: next, seekTo: next.format == nil ? nil : .frame(0))
     }
 }

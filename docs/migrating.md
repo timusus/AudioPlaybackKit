@@ -21,12 +21,12 @@ this page has the order of work and the traps. Paths are relative to each app's 
 
 | Here | Is | In `PlaybackRender` |
 |---|---|---|
-| Current and next track handed over | what to play | `setCurrent(item:source:startFrame:)`, `setNext(item:source:)`, `clearNext()` |
+| Current and next track handed over | what to play | `setCurrent(item:source:startSeconds:)`, `setNext(item:source:)`, `clearNext()` |
 | The queue entry's id | its name in events | the transport's `Item` type (`Hashable & Sendable`) |
 | Decoder behind a byte source | PCM for one track | `FFmpegItemSource(reader:)` over `FileByteReader` or `GrowingFileByteSource` |
 | A DSP stage | PCM in, PCM out | `AudioProcessor`, passed to `setProcessors(_:)` |
 | Frames a stage removes | keeps position in media time | `ProcessorOutput.dropped` (`DroppedFrames`) |
-| Position tick | what is heard | `TransportEvent.position(item:frame:sampleRate:duration:)` |
+| Position tick | what is heard | `TransportEvent.position(item:seconds:duration:)` |
 | Next track reached the speaker | | `TransportEvent.crossed(item:)` |
 | Playing, buffering, paused, ended | | `TransportEvent.status(_:)` with `TransportStatus` |
 | A track or output failed | | `TransportEvent.failed(item:error:)` |
@@ -86,15 +86,14 @@ Each step ships on its own. Put the new path behind a flag until step 5.
 
 ## Shuttle Podcasts
 
-1. `play(url:episodeId:startPositionMs:)` becomes `setCurrent(item: episodeId, source:, startFrame:)`,
-   with `startFrame` computed from the saved position times the sample rate the episode was last opened at
-   (store frames, or convert after the first `.position`).
+1. `play(url:episodeId:startPositionMs:)` becomes `setCurrent(item: episodeId, source:, startSeconds:)`,
+   with `startSeconds` the saved position over 1000.
 2. Build the `GrowingFileByteSource` as `StreamingPCMReader` does today, including the `GrowingFileListener`
    the ad-skip scan reads the file through (`onEvent`); the bytes the scan sees are still the bytes decoded.
 3. Map events: `.position` to `currentPosition` and `playerEvents.playbackPositionChanged`; `.status(.buffering)`
    to `PlaybackControllerState.buffering`; `.status(.ended)` to `.ended` and `episodeEnded`; `.failed` to
    `.error`. `isPlayIntended` stays the app's own flag, set on the call and not on the event.
-4. `seek` calls `seek(item:toFrame:)`; the `seekLanded` event is sent when the app next sees a `.position`
+4. `seek` calls `seek(item:toSeconds:)`; the `seekLanded` event is sent when the app next sees a `.position`
    at or past the target.
 5. Order the chain as it runs today: `SilenceGate`, then `VoiceEnhanceProcessor`. Toggling either sets a
    flag the processor reads under its lock, or calls `setProcessors`; neither flushes.
@@ -108,12 +107,12 @@ Each step ships on its own. Put the new path behind a flag until step 5.
   podcast samples only. As a processor the chime would sound about two seconds late, and `setVolume`
   would duck the chime too. Play the chime on a separate player until the render layer has a playhead-time
   mix; keep the duck as a `setVolume` ramp.
-- **Duration.** `durationChanged` comes from the `duration` on `.position`, in frames as FFmpeg probed
+- **Duration.** `durationChanged` comes from the `duration` on `.position`, in seconds as FFmpeg probed
   the file; fall back to the episode's metadata only when it is nil.
 
 ## Shuttle2
 
-1. `load(current:next:startMs:playWhenReady:)` becomes `setCurrent(item: uid, source:, startFrame:)`,
+1. `load(current:next:startMs:playWhenReady:)` becomes `setCurrent(item: uid, source:, startSeconds:)`,
    then `setNext(item:source:)` for the following track, and again whenever the queue changes. Create a
    new `FFmpegItemSource` for each call.
 2. Delete `PreopenLead`, `UnderrunResumeRule` and the pre-open queue; the transport decodes the next item
@@ -129,14 +128,14 @@ Each step ships on its own. Put the new path behind a flag until step 5.
 6. **ReplayGain.** `gainDb` is per track and processors do not see which item a chunk belongs to. Apply it
    in an `ItemSource` that wraps `FFmpegItemSource` and scales each chunk in `nextChunk()`, ahead of the
    chain, so the EQ and limiter see gained audio as they do now.
-7. Map events: `.position` to `onPosition` (frames over `sampleRate` for milliseconds), `.crossed` to
+7. Map events: `.position` to `onPosition` (seconds times 1000 for milliseconds), `.crossed` to
    `onTransition`, `.failed` to `onFailed`, `.status` to `onStateChanged`. `idle` and `loading` stay the
    app's states. The command count in `onStateChanged` stays with the wrapper.
 8. **Pause at end.** `setPauseAtEnd(true)` becomes not calling `setNext` until the app wants the next
    track: the transport reports `.status(.ended)` at the last frame, and a later `setNext` plays on.
 9. **Progressive transcodes** (`isSeekable` false, `onSeekUnsupported`): the app re-opens the stream at the
-   position with a new `setCurrent(item:source:startFrame:)`. An `ItemSource.seek` that throws arrives as
-   `.failed`, so the wrapper must decide before calling `seek(item:toFrame:)`.
+   position with a new `setCurrent(item:source:startSeconds:)`. An `ItemSource.seek` that throws arrives as
+   `.failed`, so the wrapper must decide before calling `seek(item:toSeconds:)`.
 
 ## Pitfalls
 
@@ -151,8 +150,8 @@ Each step ships on its own. Put the new path behind a flag until step 5.
   lands paused at the same position. The app calls `play()` again when it still means to play. A second
   failure surfaces as `TransportEvent.failed`, and `play()` does nothing until a `seek`, `setCurrent` or
   `setProcessors`. Do not add a second recovery layer.
-- **Position is in frames at the item's own rate.** Convert with the `sampleRate` in the event; do not
-  assume the rate of the previous item. A stored resume point should be frames or seconds with its rate.
+- **Positions are seconds; frames stay inside.** A start or seek lands on the nearest frame once the item
+  has opened, so a reported position seeks back to the frame it came from at any rate.
 - **`setRate` is not pause.** Rate 0 is not allowed; call `pause()`.
 - **Set the session before `play()`**, and handle interruptions yourself: pause on `began`, call `play()`
   on `ended` with `shouldResume`.

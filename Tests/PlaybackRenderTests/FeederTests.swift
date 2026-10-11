@@ -199,7 +199,7 @@ final class FeederTests: XCTestCase {
         feeder.play()
         run(for: 1)
         feeder.pause()
-        feeder.seek(to: pos(0, 20))
+        feeder.seek(to: SeekTarget(pos(0, 20)))
 
         XCTAssertEqual(positions.last, pos(0, 20))
         XCTAssertEqual(statuses.last, .paused)
@@ -301,7 +301,7 @@ final class FeederTests: XCTestCase {
         makeFeeder([item(0, 40)])
         feeder.play()
         run(for: 2)
-        feeder.seek(to: pos(0, 2))
+        feeder.seek(to: SeekTarget(pos(0, 2)))
         run(for: 0.5)
 
         XCTAssertEqual(positions.map(\.mediaFrame), Array(0...8) + [2, 3, 4])
@@ -512,7 +512,7 @@ final class FeederTests: XCTestCase {
         feeder.play()
         run(for: 1)
         output.injectFailure()
-        feeder.seek(to: pos(0, 20))
+        feeder.seek(to: SeekTarget(pos(0, 20)))
 
         XCTAssertEqual(output.rebuilds, 1)
         XCTAssertEqual(upstream.resupplies.last, pos(0, 20))

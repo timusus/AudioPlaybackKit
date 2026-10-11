@@ -30,10 +30,10 @@ final class ExternalConsumerTests: XCTestCase {
         }
         timer.fire()
 
-        let frames = events.all.compactMap { event -> Int64? in
-            guard case let .position(item, frame, sampleRate, _) = event, item == "a", sampleRate == 8 else { return nil }
-            return frame
+        let seconds = events.all.compactMap { event -> TimeInterval? in
+            guard case let .position(item, seconds, _) = event, item == "a" else { return nil }
+            return seconds
         }
-        XCTAssertEqual(frames.last, 8)
+        XCTAssertEqual(seconds.last, 1)
     }
 }

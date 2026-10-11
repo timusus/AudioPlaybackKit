@@ -94,7 +94,7 @@ final class SequencerGaplessTests: XCTestCase {
         executor.runUntilIdle()
         _ = sequencer.pull()
 
-        sequencer.seek(item: 1, mediaFrame: 22050)
+        sequencer.seek(item: 1, to: .frame(22050))
         let drained = drain(sequencer, executor)
 
         XCTAssertTrue(drained.ended)
@@ -105,7 +105,7 @@ final class SequencerGaplessTests: XCTestCase {
 
     func testAStartFrameIsSampleAccurate() throws {
         let reference = try decode("test-cbr-info-header.mp3")
-        sequencer.setCurrent(item: 1, source: try source("test-cbr-info-header.mp3"), startFrame: 10000)
+        sequencer.setCurrent(item: 1, source: try source("test-cbr-info-header.mp3"), start: .frame(10000))
 
         let drained = drain(sequencer, executor)
 
