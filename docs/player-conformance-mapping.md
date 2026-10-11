@@ -1,7 +1,7 @@
 # Player conformance mapping: media3 ExoPlayerTest to PlaybackPlayer
 
 Each row is one `@Test` method of media3's `ExoPlayerTest`
-(`libraries/exoplayer/src/test/java/androidx/media3/exoplayer/ExoPlayerTest.java`, main as of October 2026)
+(`libraries/exoplayer/src/test/java/androidx/media3/exoplayer/ExoPlayerTest.java` on main at `cd36f10d2e8e`, its last change before 12 October 2026)
 and where `Tests/PlaybackPlayerTests` covers it: a named test, `n/a` with the reason, or `gap` for a
 rule of ours that has no test yet. A **deviation** is behaviour ADR-0019 chose to do differently; the row
 says what we do. A ported test cites its media3 test in a comment, so `grep` finds the pair both ways.
@@ -167,15 +167,15 @@ an app processor).
 | `moveMediaItem` | `PlayerEditTests.testMoveTheCurrentAndMoveAcrossItKeepPlaying` |
 | `removeMediaItem` | `PlayerEditTests.testRemoveALaterItemReArmsTheNext` |
 | `removeMediaItems` | n/a: API, `remove(at:)` takes one index |
-| `clearMediaItems` | gap: **deviation**, an empty list is `.idle` (ADR-0019 State), not `.ended`; `removeAll` has no test |
+| `clearMediaItems` | `PlayerEditTests.testRemoveAllWhilePlayingStopsAndLeavesIdle`; **deviation**, an empty list is `.idle` (ADR-0019 State), not `.ended` |
 | `multipleModificationWithRecursiveListenerInvocations` | n/a: API |
 | `modifyPlaylistUnprepared_remainsInIdle_needsPrepareForBuffering` | n/a: API, no `prepare`; `setItems` prepares |
 | `addMediaSource_toEndedPlaylist_remainsInEndedAndNeedsSeekForBuffering` | `PlayerAdvanceTests.testAddingToAnEndedListStaysEndedUntilASeek` |
 | `addMediaSource_toEmptyPreparedPlaylist_startsBuffering` | `PlayerEditTests.testInsertIntoAnEmptyListSetsIt` |
 | `addMediaSources_afterSeekOnEmptyPreparedPlaylist_startsBufferingAtRequestedPosition` | n/a: range |
 | `addMediaSources_afterInvalidSeekOnEmptyPreparedPlaylist_remainsInEndedState` | n/a: range |
-| `clearMediaItemsAndSeek_inStateEnded_remainsInEnded` | gap: **deviation**, an empty list is `.idle` (ADR-0019 State), not `.ended`; `removeAll` has no test; a seek on an empty list traps (range) |
-| `stop_modifyingPlaylistRemainsInIdleState_needsPrepareForBuffering` | `PlayerTransportEventTests.testSeeksAndSkipsAfterStopStayIdleUntilPlay`; seeks and skips; an edit after `stop` is a gap |
+| `clearMediaItemsAndSeek_inStateEnded_remainsInEnded` | `PlayerEditTests.testRemoveAllWhilePlayingStopsAndLeavesIdle`; **deviation**, an empty list is `.idle` (ADR-0019 State), not `.ended`; a seek on an empty list traps (range) |
+| `stop_modifyingPlaylistRemainsInIdleState_needsPrepareForBuffering` | `PlayerEditTests.testEditsAfterStopStayIdleUntilPlay`; seeks and skips in `PlayerTransportEventTests.testSeeksAndSkipsAfterStopStayIdleUntilPlay` |
 | `prepareWithInvalidInitialSeek_expectEndedImmediately` | n/a: range |
 | `prepareWhenAlreadyPreparedIsANoop` | n/a: API, no `prepare` |
 | `prepare_preloadingEnabledRepeatModeOne_sameWindowPeriodCreatedForPreloading` | `PlayerAdvanceTests.testRepeatOneReplaysTheCurrentItemUntilItIsTurnedOff`; the same entry is armed again |
@@ -236,9 +236,9 @@ an app processor).
 | `setMediaSource_notifiesMediaItemTransition` | n/a: **deviation**, `setItems` sends no `itemTransition`: the app made the change (ADR-0019 Edits) |
 | `setMediaSource_replaceWithSameMediaItem_notifiesMediaItemTransition` | n/a: **deviation**, as `setMediaSource_notifiesMediaItemTransition` |
 | `automaticWindowTransition_notifiesMediaItemTransition` | `PlayerTransportEventTests.testCrossingIntoTheNextAdvancesAndArmsTheOneAfter` |
-| `clearMediaItems_notifiesMediaItemTransition` | gap: `removeAll` sends `itemTransition(to: nil, .seek)` but has no test |
+| `clearMediaItems_notifiesMediaItemTransition` | `PlayerEditTests.testRemoveAllWhilePlayingStopsAndLeavesIdle` |
 | `seekTo_otherWindow_notifiesMediaItemTransition` | `PlayerCoreTests.testSeekToALaterAndAnEarlierItemSetsItCurrent` |
-| `seekTo_sameWindow_doesNotNotifyMediaItemTransition` | gap: no test asserts that a seek within the item sends no transition |
+| `seekTo_sameWindow_doesNotNotifyMediaItemTransition` | `PlayerTransportEventTests.testASeekWithinTheItemSendsNoTransition` |
 | `seekToNextPrevious_singleItemRepeat_notifiesMediaItemTransition` | `PlayerAdvanceTests.testASkipThatWrapsOntoTheSameItemRestartsItAsATransition` |
 | `repeat_notifiesMediaItemTransition` | `PlayerAdvanceTests.testRepeatAllWithOneItemIsARepeat` |
 | `stop_doesNotNotifyMediaItemTransition` | `PlayerTransportEventTests.testSeeksAndSkipsAfterStopStayIdleUntilPlay` |
@@ -399,8 +399,8 @@ an app processor).
 | `play_withRecoverableErrorAfterAdvancingReadingPeriod_advancesPlayingPeriodWhileErrorHandling` | n/a: internal |
 | `prepareMaskingMediaSource_withRealSourcePrepareError_reportsPlaybackException` | n/a: masking |
 | `rendererReadToEndButNotReady_whilePaused_keepsCallingRenderFrequently` | n/a: internal |
-| `clearMediaItems_afterReady_transitionsToEnded` | gap: **deviation**, an empty list is `.idle` (ADR-0019 State), not `.ended`; `removeAll` has no test |
-| `settingMediaItems_withEmptyListAfterReady_transitionsToEnded` | gap: **deviation**, `setItems([])` is `.idle`, not `.ended`; untested |
+| `clearMediaItems_afterReady_transitionsToEnded` | `PlayerEditTests.testRemoveAllWhilePlayingStopsAndLeavesIdle`; **deviation**, an empty list is `.idle` (ADR-0019 State), not `.ended` |
+| `settingMediaItems_withEmptyListAfterReady_transitionsToEnded` | `PlayerEditTests.testSetItemsEmptyWhilePlayingStopsAndLeavesIdle`; **deviation**, `setItems([])` is `.idle`, not `.ended` |
 | `setSeekBackIncrementMs_updatesSeekBackIncrementAndCallsListener` | n/a: API |
 | `setSeekForwardIncrementMs_updatesSeekForwardIncrementAndCallsListener` | n/a: API |
 | `setMaxSeekToPreviousPositionMs_updatesMaxSeekToPreviousPositionAndCallsListener` | n/a: API, no threshold (see `seekToPrevious_notCloseToStart_seeksToZero`) |

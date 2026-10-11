@@ -45,6 +45,23 @@ final class PlayerTransportEventTests: XCTestCase {
         XCTAssertEqual(PlayerRig.seeksLanded(events), [.init(index: 0, position: 5)])
     }
 
+    // media3 ExoPlayerTest.seekTo_sameWindow_doesNotNotifyMediaItemTransition.
+    func testASeekWithinTheItemSendsNoTransition() async {
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 1)
+
+        player.seek(to: 5)
+        rig.run(for: 1)
+        player.seek(by: -3)
+        rig.run(for: 1)
+        XCTAssertEqual(player.currentItem, "a")
+
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [])
+        XCTAssertEqual(PlayerRig.seeksLanded(events).map(\.index), [0, 0])
+    }
+
     func testRapidSeekByPressesAddUpBeforeTheFirstLands() async {
         player.setItems(["a", "b"])
         player.play()
