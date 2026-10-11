@@ -57,6 +57,10 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
         }
     }
 
+    func setVolume(_ volume: Float) {
+        renderer.volume = volume
+    }
+
     func currentTime() -> TimeInterval {
         synchronizer.currentTime().seconds
     }

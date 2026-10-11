@@ -174,6 +174,43 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(heard, allOfA)
     }
 
+    // #108
+    func testVolumeIsAppliedAtOnceAndClamped() {
+        transport.setVolume(0.25)
+        timer.sync()
+        XCTAssertEqual(output.volume, 0.25)
+
+        transport.setVolume(3)
+        timer.sync()
+        XCTAssertEqual(output.volume, 1)
+
+        transport.setVolume(-1)
+        timer.sync()
+        XCTAssertEqual(output.volume, 0)
+    }
+
+    func testVolumeHoldsAcrossAnItemChangeASeekAndARouteChange() {
+        transport.setVolume(0.5)
+        transport.setCurrent(item: "a", source: a)
+        transport.setNext(item: "b", source: b)
+        transport.play()
+        pump()
+        run(for: 1)
+
+        transport.setCurrent(item: "b", source: b)
+        pump()
+        XCTAssertEqual(output.volume, 0.5, "item change")
+
+        transport.seek(item: "b", toFrame: 8)
+        pump()
+        XCTAssertEqual(output.volume, 0.5, "seek")
+
+        output.injectAutoFlush()
+        pump()
+        run(for: 1)
+        XCTAssertEqual(output.volume, 0.5, "route change")
+    }
+
     // #102: after a route-change auto-flush the output stayed silent until a pump took the event,
     // then until another wrote the re-decoded audio: up to two pump intervals.
     func testAnAutoFlushAndTheReDecodeEachWakeThePumpAtOnce() {

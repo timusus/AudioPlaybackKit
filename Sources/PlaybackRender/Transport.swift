@@ -43,6 +43,7 @@ let pumpInterval: TimeInterval = 0.1
 /// events carry the rate for converting to seconds.
 public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private let queue = DispatchQueue(label: "PlaybackRender.Transport", qos: .userInitiated)
+    private let output: any AudioOutput
     private let timer: any PumpTimer
     private let sequencer: Sequencer
     private let onEvent: @Sendable (TransportEvent<Item>) -> Void
@@ -71,6 +72,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         executor: any SequencerExecutor = SerialQueueExecutor(),
         onEvent: @escaping @Sendable (TransportEvent<Item>) -> Void
     ) {
+        self.output = output
         self.timer = timer
         self.onEvent = onEvent
         // A restart is silent until decode lands and the output event is taken, so neither waits
@@ -164,6 +166,12 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
             failed = false
             feeder.seek(to: MediaPositionMap.Position(item: id, mediaFrame: frame))
         }
+    }
+
+    /// Output gain, clamped to 0...1, heard at once (unlike a processor, which acts on audio queued
+    /// ~2 s ahead). It holds across items, seeks and route changes. No ramp: an app fades by calling it repeatedly.
+    public func setVolume(_ volume: Float) {
+        queue.async { [self] in output.setVolume(min(max(volume, 0), 1)) }
     }
 
     /// Replaces the processor chain, applied from what is heard now by re-feeding (a flush). Call it

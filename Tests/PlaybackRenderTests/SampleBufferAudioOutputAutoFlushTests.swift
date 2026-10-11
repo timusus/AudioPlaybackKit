@@ -191,6 +191,10 @@ private final class RecordingOutput: AudioOutput, @unchecked Sendable {
         base.setRate(rate, at: time)
     }
 
+    func setVolume(_ volume: Float) {
+        base.setVolume(volume)
+    }
+
     func currentTime() -> TimeInterval {
         let time = base.currentTime()
         lock.withLock { readings.append(time) }

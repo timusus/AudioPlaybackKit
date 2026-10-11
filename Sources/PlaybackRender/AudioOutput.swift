@@ -40,6 +40,8 @@ protocol AudioOutput: AnyObject, Sendable {
     /// Rate 0 pauses. A `time` re-anchors the clock there (a seek); nil keeps it running from
     /// where it is (resume or speed change).
     func setRate(_ rate: Double, at time: TimeInterval?)
+    /// Gain on what is heard now, 0...1: it acts on audio already queued, unlike a processor.
+    func setVolume(_ volume: Float)
     func currentTime() -> TimeInterval
     var outputLatency: TimeInterval { get }
     var isReadyForMoreData: Bool { get }

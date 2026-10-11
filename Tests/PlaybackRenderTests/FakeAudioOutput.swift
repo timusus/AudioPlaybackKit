@@ -26,6 +26,7 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
     private let lock = NSLock()
     private var clock: TimeInterval = 0
     private var _rate: Double = 0
+    private var _volume: Float = 1
     private var _outputLatency: TimeInterval = 0
     private var queue: [Buffer] = []
     // End of everything enqueued since the last flush, played or not: an overlap is trimmed to it.
@@ -51,6 +52,8 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
     var played: [Played] { locked { _played } }
     var events: [AudioOutputEvent] { locked { _events } }
     var rate: Double { locked { _rate } }
+    /// The output's gain, which a flush leaves alone as the renderer's does.
+    var volume: Float { locked { _volume } }
 
     var outputLatency: TimeInterval {
         get { locked { _outputLatency } }
@@ -86,6 +89,10 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
             _rate = rate
             if let time { clock = time }
         }
+    }
+
+    func setVolume(_ volume: Float) {
+        locked { _volume = volume }
     }
 
     func currentTime() -> TimeInterval { locked { clock } }
