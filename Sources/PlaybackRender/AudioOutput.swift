@@ -13,8 +13,8 @@ public struct PCMFormat: Hashable, Sendable {
 }
 
 enum AudioOutputEvent: Equatable, Sendable {
-    /// The output dropped everything queued from `at` on (a route or category change); the caller
-    /// re-feeds from that time.
+    /// The output dropped everything queued from `at` on (a route or category change), or its
+    /// output configuration changed so queued audio is stale; the caller re-feeds from that time.
     case autoFlushed(at: TimeInterval)
     /// The output stopped consuming audio until the next `flush()`; its clock no longer tracks
     /// what is heard.

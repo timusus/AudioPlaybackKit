@@ -2,8 +2,8 @@ import AVFoundation
 @testable import PlaybackRender
 import XCTest
 
-/// The adapter's `rebuild()` without playing: a fresh renderer with the settings it had, and no
-/// event from the renderer it replaced. The failure itself is checked on device (Settings >
+/// The adapter's `rebuild()` and renderer events without playing: a fresh renderer with the
+/// settings it had, and no event from the renderer it replaced. The failure itself is checked on device (Settings >
 /// Developer > Reset Media Services).
 final class SampleBufferAudioOutputRebuildTests: XCTestCase {
     func testARebuildReplacesTheRendererAndKeepsItsSettings() throws {
@@ -29,6 +29,20 @@ final class SampleBufferAudioOutputRebuildTests: XCTestCase {
         postAutoFlush(from: output.renderer, at: 2)
 
         XCTAssertEqual(events.all, [.autoFlushed(at: 2)])
+    }
+
+    /// A new output configuration (e.g. spatial audio) applies only to audio enqueued after it, so
+    /// the output asks for a re-feed from what is heard now; the renderer is kept.
+    func testAnOutputConfigurationChangeAsksForARefeedFromNow() {
+        let output = SampleBufferAudioOutput()
+        let events = EventBox()
+        output.setEventHandler { events.append($0) }
+        let renderer = output.renderer
+
+        NotificationCenter.default.post(name: .AVSampleBufferAudioRendererOutputConfigurationDidChange, object: renderer)
+
+        XCTAssertEqual(events.all, [.autoFlushed(at: 0)])
+        XCTAssertTrue(output.renderer === renderer)
     }
 
     private func postAutoFlush(from renderer: AVSampleBufferAudioRenderer, at seconds: Double) {

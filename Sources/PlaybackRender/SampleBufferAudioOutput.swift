@@ -133,11 +133,20 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
             let flushTime = (note.userInfo?[AVSampleBufferAudioRendererFlushTimeKey] as? NSValue)?.timeValue
             send(.autoFlushed(at: flushTime?.seconds ?? currentTime()), from: renderer)
         }
+        // Apple's answer to a new configuration (e.g. spatial audio) is to flush and re-enqueue from
+        // what is heard, the same restart as an auto-flush; the renderer itself is fine.
+        let configurationChange = NotificationCenter.default.addObserver(
+            forName: .AVSampleBufferAudioRendererOutputConfigurationDidChange,
+            object: renderer, queue: nil
+        ) { [weak self, weak renderer] _ in
+            guard let self, let renderer else { return }
+            send(.autoFlushed(at: currentTime() - outputLatency), from: renderer)
+        }
         let status = renderer.observe(\.status) { [weak self] renderer, _ in
             guard renderer.status == .failed else { return }
             self?.send(.failed(renderer.error ?? AudioOutputError.rendererFailed), from: renderer)
         }
-        return Observers(notifications: [autoFlush], status: status)
+        return Observers(notifications: [autoFlush, configurationChange], status: status)
     }
 
     /// Under `lock`, which `rebuild()` swaps under, so nothing from a replaced renderer reaches the
