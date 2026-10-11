@@ -1,7 +1,8 @@
 #!/bin/bash
 # Builds the probe against this checkout's PlaybackRender, installs it on the paired iPhone over Wi-Fi,
 # runs the device check (--check) and copies check.json, check.md, check.log and the mic WAVs into
-# results/<timestamp>/. Extra arguments go to the app: --skip-guided runs the automatic scenarios only.
+# results/<timestamp>/. Extra arguments go to the app: --skip-guided runs the automatic scenarios only;
+# --only G3,G4 runs just those ids (G3P,G4P and G3L,G4L are reachable only this way).
 # Needs the phone unlocked and awake; the guided scenarios prompt on its screen.
 set -euo pipefail
 cd "$(dirname "$0")"

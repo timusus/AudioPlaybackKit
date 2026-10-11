@@ -122,8 +122,38 @@ struct RoutePicker: UIViewRepresentable {
     func makeUIView(context: Context) -> AVRoutePickerView {
         let view = AVRoutePickerView()
         view.prioritizesVideoDevices = false
+        view.delegate = context.coordinator
         return view
     }
 
     func updateUIView(_ view: AVRoutePickerView, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator: NSObject, AVRoutePickerViewDelegate {
+        func routePickerViewWillBeginPresentingRoutes(_ routePickerView: AVRoutePickerView) {
+            PickerMarks.shared.record(open: true)
+        }
+
+        func routePickerViewDidEndPresentingRoutes(_ routePickerView: AVRoutePickerView) {
+            PickerMarks.shared.record(open: false)
+        }
+    }
+}
+
+/// Host times of the route picker opening and closing, so a gap can be placed against them.
+final class PickerMarks: @unchecked Sendable {
+    static let shared = PickerMarks()
+    private let lock = NSLock()
+    private var _opens: [Double] = []
+    private var _closes: [Double] = []
+
+    var opens: [Double] { lock.withLock { _opens } }
+    var closes: [Double] { lock.withLock { _closes } }
+
+    func record(open: Bool) {
+        let host = hostNow()
+        lock.withLock { if open { _opens.append(host) } else { _closes.append(host) } }
+        Log.shared.write("PICKER \(open ? "OPEN" : "CLOSE") outputs \(Session.outputs)")
+    }
 }

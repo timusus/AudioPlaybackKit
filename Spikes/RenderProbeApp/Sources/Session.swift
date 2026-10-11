@@ -24,6 +24,14 @@ enum Session {
         Log.shared.write("session .playAndRecord .measurement preferredRate=\(preferredRate.map { fmt($0, 0) } ?? "unset"): \(snapshot) inputLatency=\(fmt(shared.inputLatency * 1000, 1))ms")
     }
 
+    /// The mic open while AirPlay stays routable; .playback has no input, and .longFormAudio is refused with a record category.
+    static func configureRecordingAirPlay() throws {
+        try? shared.setActive(false, options: [])
+        try shared.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowAirPlay])
+        try shared.setActive(true)
+        Log.shared.write("session .playAndRecord .default allowAirPlay: \(snapshot) inputLatency=\(fmt(shared.inputLatency * 1000, 1))ms")
+    }
+
     static var category: String { shared.category == .playAndRecord ? "playAndRecord" : shared.category == .playback ? "playback" : shared.category.rawValue }
 
     static var snapshot: String {

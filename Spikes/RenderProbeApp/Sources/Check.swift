@@ -10,6 +10,13 @@ enum CheckRun {
     /// Lets an unattended run finish without anyone at the phone.
     static let skipGuided = CommandLine.arguments.contains("--skip-guided")
 
+    /// `--only A1,G3`: just these, which are the only way to reach the opt-in variants.
+    static let only: Set<String>? = {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "--only"), i + 1 < args.count else { return nil }
+        return Set(args[i + 1].split(separator: ",").map { String($0).uppercased() })
+    }()
+
     struct Scenario {
         let id: String
         let question: String
@@ -35,7 +42,9 @@ enum CheckRun {
         let header: [String: Any] = ["device": model, "ios": version, "started": ISO8601DateFormatter().string(from: started),
                                      "micPermission": mic, "skipGuided": skipGuided]
         var results: [[String: Any]] = []
-        for scenario in CheckScenarios.automatic + CheckScenarios.guided {
+        let scenarios = only.map { ids in (CheckScenarios.automatic + CheckScenarios.guided + CheckScenarios.airPlayVariants).filter { ids.contains($0.id) } }
+            ?? CheckScenarios.automatic + CheckScenarios.guided
+        for scenario in scenarios {
             AutoRun.current = "check-\(scenario.id)"
             await CheckUI.shared.show(scenario.id, scenario.question)
             if scenario.guided, !results.contains(where: { $0["guided"] as? Bool == true }) {

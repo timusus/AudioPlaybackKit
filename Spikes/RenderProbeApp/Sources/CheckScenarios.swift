@@ -41,12 +41,23 @@ enum CheckScenarios {
         route("G1", "Connect Bluetooth", "Turn on Bluetooth headphones or a speaker and let it connect, or pick it with the button.",
               ports: [.bluetoothA2DP, .bluetoothLE, .bluetoothHFP], arriving: true, picker: true),
         route("G2", "Disconnect Bluetooth", "Turn the Bluetooth device off.", ports: [.bluetoothA2DP, .bluetoothLE, .bluetoothHFP], arriving: false, picker: false),
-        route("G3", "Pick AirPlay", "Tap the button and choose an AirPlay 2 speaker, or the Mac with AirPlay Receiver on (System Settings > General > AirDrop & Handoff).",
-              ports: [.airPlay], arriving: true, picker: true),
-        route("G4", "Back to the iPhone", "Tap the button and choose iPhone.", ports: [.airPlay], arriving: false, picker: true),
+        route("G3", "Pick AirPlay", airPlayBody, ports: [.airPlay], arriving: true, picker: true, policy: .mic),
+        route("G4", "Back to the iPhone", backBody, ports: [.airPlay], arriving: false, picker: true, policy: .mic),
         // G5 (take a real call) is replaced by the automatic A11.
         interruption("G6", "Ask Siri", "Hold the side button and ask Siri the time."),
         .init(id: "G7", question: "Reset media services (#100)", guided: true, run: mediaReset),
+    ]
+
+    static let airPlayBody = "Tap the button and choose an AirPlay 2 speaker, or the Mac with AirPlay Receiver on (System Settings > General > AirDrop & Handoff)."
+    static let backBody = "Tap the button and choose iPhone."
+
+    /// The AirPlay pair under the other session policies, run only by name (`--only G3P,G4P,G3L,G4L`):
+    /// G3/G4 need a record category for the mic, so .playback as before (P) and .longFormAudio (L) listen to nothing.
+    static let airPlayVariants: [CheckRun.Scenario] = [
+        route("G3P", "Pick AirPlay (.playback)", airPlayBody, ports: [.airPlay], arriving: true, picker: true, policy: .plain),
+        route("G4P", "Back to the iPhone (.playback)", backBody, ports: [.airPlay], arriving: false, picker: true, policy: .plain),
+        route("G3L", "Pick AirPlay (.longFormAudio)", airPlayBody, ports: [.airPlay], arriving: true, picker: true, policy: .longForm),
+        route("G4L", "Back to the iPhone (.longFormAudio)", backBody, ports: [.airPlay], arriving: false, picker: true, policy: .longForm),
     ]
 
     // MARK: Automatic
@@ -265,9 +276,10 @@ enum CheckScenarios {
 
     // MARK: Guided
 
-    static func route(_ id: String, _ title: String, _ body: String, ports: Set<AVAudioSession.Port>, arriving: Bool, picker: Bool) -> CheckRun.Scenario {
+    static func route(_ id: String, _ title: String, _ body: String, ports: Set<AVAudioSession.Port>, arriving: Bool, picker: Bool,
+                      policy: GuidedPolicy = .plain) -> CheckRun.Scenario {
         .init(id: id, question: title, guided: true) {
-            try await guidedPlayback(id) { probe in
+            try await guidedPlayback(id, policy: policy) { probe in
                 let answer = await CheckUI.shared.ask(title, body + "\n\nA tone is playing.", buttons: ["Skip (no device)"], routePicker: picker, cap: 600) { note in
                     guard note.name == AVAudioSession.routeChangeNotification else { return nil }
                     let previous = Set((note.userInfo?[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription)?.outputs.map(\.portType) ?? [])
@@ -321,11 +333,19 @@ enum CheckScenarios {
 
     /// A 60 s tone under .playback; `trigger` waits for the owner and returns "fired: ..." or why not.
     /// Then 10 s of playing on, a seek to 2 s before the end to see `.ended`, and one question.
-    static func guidedPlayback(_ id: String, _ trigger: (CheckProbe) async throws -> String) async throws -> [String: Any] {
-        try Session.configure(longForm: false)
+    static func guidedPlayback(_ id: String, policy: GuidedPolicy = .plain, _ trigger: (CheckProbe) async throws -> String) async throws -> [String: Any] {
+        switch policy {
+        case .plain: try Session.configure(longForm: false)
+        case .longForm: try Session.configure(longForm: true)
+        case .mic: try Session.configureRecordingAirPlay()
+        }
+        // Started before the tone so the room noise is measured, and kept to the end so a gap before the trigger is on tape.
+        let ear = policy == .mic ? try await Ear.start() : nil
+        defer { ear?.stop() }
         let probe = try CheckProbe()
         let source = ToneSource(rate: 48000, channels: 2, seconds: 60)
         probe.transport.setCurrent(item: "G", source: source)
+        let playHost = hostNow()
         probe.transport.play()
         try await probe.until(5) { $0.status == .playing }
         let before: [String: Any] = ["outputs": Session.outputs, "outputLatencyMs": round3(Session.shared.outputLatency * 1000), "hwRate": Session.shared.sampleRate]
@@ -340,6 +360,7 @@ enum CheckScenarios {
         let statuses = probe.events.filter { $0.host > start && $0.kind != "crossed" }.map { "\(fmt($0.host - fired, 2))s \($0.kind) \($0.detail)" }
         let rate = probe.slope(from: fired + 3, to: hostNow())
         let stall = probe.maxStall(from: fired - 1, to: hostNow())
+        let window = gapWindow(probe, ear: ear, playHost: playHost, fired: fired, end: hostNow())
 
         let seekHost = hostNow()
         await CheckUI.shared.show(id, "Checking that .ended still fires (about 2 s).")
@@ -352,11 +373,12 @@ enum CheckScenarios {
             "trigger": answer, "triggerAfterS": round3(fired - start), "before": before, "after": after, "flushes": flushes, "events": statuses,
             "positionRateLast7s": round3(rate), "maxPositionStallMs": round3(stall * 1000), "positionJumpMs": round3(probe.maxJump(from: fired - 1, to: seekHost) * 1000),
             "endedFired": ended, "endedAfterSeekS": endedAfter.map(round3) ?? NSNull(), "heardGlitch": glitch,
+            "policy": "\(policy)", "gapWindow": window.metrics,
         ]
         let refeed = flushes.map { "re-feed \($0["refeedMinusHeardMs"].map { "\($0)" } ?? "?") ms vs heard" }
         let ok = ended && abs(rate - 1) < 0.05 && probe.events("failed").isEmpty
         return result(ok ? "pass" : "fail",
-                      "\(answer); \(flushes.count) auto-flush(es) \(refeed); latency \(before["outputLatencyMs"] ?? "?") -> \(after["outputLatencyMs"] ?? "?") ms; position rate \(fmt(rate, 2)), stall \(fmt(stall * 1000, 0)) ms; .ended \(ended ? "after \(fmt(endedAfter ?? 0, 2)) s" : "never"); owner: \(glitch)",
+                      "\(answer); \(flushes.count) auto-flush(es) \(refeed); latency \(before["outputLatencyMs"] ?? "?") -> \(after["outputLatencyMs"] ?? "?") ms; position rate \(fmt(rate, 2)), stall \(fmt(stall * 1000, 0)) ms; \(window.summary); .ended \(ended ? "after \(fmt(endedAfter ?? 0, 2)) s" : "never"); owner: \(glitch)",
                       metrics)
     }
 
