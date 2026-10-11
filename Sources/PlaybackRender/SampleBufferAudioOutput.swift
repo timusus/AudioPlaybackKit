@@ -51,7 +51,7 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
 
     func setRate(_ rate: Double, at time: TimeInterval?) {
         if let time {
-            synchronizer.setRate(Float(rate), time: CMTime(seconds: time, preferredTimescale: anchorTimescale))
+            synchronizer.setRate(Float(rate), time: anchorTime(time))
         } else {
             synchronizer.rate = Float(rate)
         }
@@ -81,9 +81,14 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     }
 }
 
-/// Nanoseconds: an anchor is a clock reading or a written end at some item's rate, so no one
-/// sample-rate timescale fits every anchor.
-private let anchorTimescale: CMTimeScale = 1_000_000_000
+/// `time` in nanoseconds, since an anchor is a clock reading or a written end at any item's rate.
+/// Rounded up so the clock reads back at least `time`: the feeder pauses an underrun at the written
+/// end and waits for the clock to reach it, which a nanosecond short never does.
+func anchorTime(_ time: TimeInterval) -> CMTime {
+    var nanoseconds = CMTimeValue((time * 1e9).rounded(.up))
+    if Double(nanoseconds) / 1e9 < time { nanoseconds += 1 }
+    return CMTime(value: nanoseconds, timescale: 1_000_000_000)
+}
 
 /// `time` as a frame count in the buffer's own sample-rate timescale. Rounded to a frame, so a
 /// buffer stamped at the previous one's end in the same format joins with no gap or overlap.

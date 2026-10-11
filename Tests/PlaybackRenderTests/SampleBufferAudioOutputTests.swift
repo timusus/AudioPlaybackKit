@@ -53,6 +53,16 @@ final class SampleBufferAudioOutputTests: XCTestCase {
         XCTAssertEqual(end.value, 159_304_444)
     }
 
+    func testAnAnchorReadsBackAtLeastTheTimeSet() {
+        // A clock reading plus a quarter second of written audio, as the feeder pauses an underrun.
+        let writtenEnd = 0.345083709 + 0.25
+        XCTAssertEqual(anchorTime(writtenEnd).value, 595_083_710)
+        XCTAssertGreaterThanOrEqual(anchorTime(writtenEnd).seconds, writtenEnd)
+        // A clock reading is already whole nanoseconds and stays put.
+        XCTAssertEqual(anchorTime(0.345083709).value, 345_083_709)
+        XCTAssertEqual(anchorTime(10).value, 10_000_000_000)
+    }
+
     func testFormatDescriptionIsPackedInterleavedFloat32() throws {
         let description = try makeFormatDescription(PCMFormat(sampleRate: 48000, channelCount: 2))
         let asbd = try XCTUnwrap(description.audioStreamBasicDescription)
