@@ -112,6 +112,9 @@ final class Feeder {
         precondition(rate > 0, "pause() stops playback")
         self.rate = rate
         if outputRunning { output.setRate(rate, at: nil) }
+        // The depths scale with the rate, so refill now: the next tick plays faster than the last fill
+        // allowed for. Paused, `play()` pumps.
+        if playWhenReady { pump() }
     }
 
     /// The one place the reported position may go back within an item.

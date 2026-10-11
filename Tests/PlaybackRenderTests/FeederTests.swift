@@ -242,6 +242,21 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(gaps, [])
     }
 
+    // Started at 1x with only the resume depth queued, a switch to 3x must refill before the next
+    // tick, which plays more than that depth.
+    func testASpeedUpRefillsBeforeTheNextTick() {
+        makeFeeder([item(0, 40)])
+        upstream.available = 1
+        feeder.play()
+        upstream.available = nil
+        feeder.setRate(3)
+        output.advance(by: 0.25)
+        feeder.pump()
+
+        XCTAssertEqual(statuses, [.buffering, .playing])
+        XCTAssertEqual(output.played.filter { if case .silence = $0 { true } else { false } }, [])
+    }
+
     // #102: the iPhone clock steps back about 50 ms on a rate change, an interruption's resume and a
     // late auto-flush; an app counting listening time from position deltas must never see one go back.
     func testThePositionHoldsWhenTheClockStepsBackOnARateChange() {
