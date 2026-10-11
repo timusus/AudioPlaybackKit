@@ -129,16 +129,23 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
         }
     }
 
-    /// The route-change auto-flush: drops everything queued and reports the flush time.
-    func injectAutoFlush() {
+    /// The route-change auto-flush: drops everything queued and reports the flush time, by default
+    /// the clock. A notification can arrive late, with the flush time behind the clock.
+    func injectAutoFlush(at time: TimeInterval? = nil) {
         let (time, handler) = locked {
+            let time = time ?? clock
             _flushes.append(clock)
             queue = []
             timelineEnd = nil
-            _events.append(.autoFlushed(at: clock))
-            return (clock, self.handler)
+            _events.append(.autoFlushed(at: time))
+            return (time, self.handler)
         }
         handler?(.autoFlushed(at: time))
+    }
+
+    /// The iPhone synchronizer's clock steps back tens of milliseconds on a rate change or a resume.
+    func stepClockBack(by seconds: TimeInterval) {
+        locked { clock -= seconds }
     }
 
     /// The output plays silence until the next `flush()`, with its clock still running.

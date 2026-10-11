@@ -222,6 +222,55 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(output.rate, 2)
     }
 
+    // #102: the iPhone clock steps back about 50 ms on a rate change, an interruption's resume and a
+    // late auto-flush; an app counting listening time from position deltas must never see one go back.
+    func testThePositionHoldsWhenTheClockStepsBackOnARateChange() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1)
+        feeder.setRate(2)
+        output.stepClockBack(by: 0.25)
+        feeder.pump()
+        run(for: 5)
+
+        XCTAssertEqual(positions.map(\.mediaFrame), Array(0...4) + Array(stride(from: 5, through: 39, by: 2)) + [40])
+    }
+
+    func testThePositionHoldsWhenTheClockStepsBackOnResume() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1)
+        feeder.pause()
+        output.stepClockBack(by: 0.25)
+        feeder.play()
+        run(for: 10)
+
+        XCTAssertEqual(positions.map(\.mediaFrame), Array(0...40))
+        XCTAssertEqual(heard, ramp(0, 0..<40))
+    }
+
+    func testThePositionHoldsWhenALateAutoFlushReAnchorsBehindIt() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1.25)
+        output.injectAutoFlush(at: 1)
+        feeder.pump()
+
+        XCTAssertEqual(upstream.resupplies, [pos(0, 4)])
+        run(for: 10)
+        XCTAssertEqual(positions.map(\.mediaFrame), Array(0...40))
+    }
+
+    func testASeekWhilePlayingStillMovesThePositionBack() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 2)
+        feeder.seek(to: pos(0, 2))
+        run(for: 0.5)
+
+        XCTAssertEqual(positions.map(\.mediaFrame), Array(0...8) + [2, 3, 4])
+    }
+
     func testAZeroFrameItemIsStillReportedCrossed() {
         makeFeeder([item(0, 2), item(1, 0), item(2, 2)])
         feeder.play()

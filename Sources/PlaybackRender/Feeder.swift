@@ -108,7 +108,9 @@ final class Feeder {
         if outputRunning { output.setRate(rate, at: nil) }
     }
 
+    /// The one place the reported position may go back within an item.
     func seek(to position: MediaPositionMap.Position) {
+        reportedPosition = nil
         restart(from: position)
         pump()
     }
@@ -219,7 +221,11 @@ final class Feeder {
     private func report() {
         let playhead = playhead()
         for item in map.advance(to: playhead) { onEvent(.crossed(item: item)) }
-        if let position = currentPosition(at: playhead), position != reportedPosition {
+        // Within an item the position only goes forward, as media3's renderers take
+        // max(current, new) unless a seek allowed a discontinuity: the clock steps back on a rate
+        // change, a resume or a re-anchor, and apps count listening time from position deltas.
+        if let position = currentPosition(at: playhead),
+           reportedPosition.map({ $0.item != position.item || $0.mediaFrame < position.mediaFrame }) ?? true {
             reportedPosition = position
             onEvent(.position(position))
         }

@@ -73,15 +73,12 @@ final class SampleBufferAudioOutputAutoFlushTests: XCTestCase {
     }
 
     /// The item plays to its last frame, every restart after audio was written follows an auto-flush
-    /// and resumes at the media frame that was at the flush time, and positions go back only to there.
+    /// and resumes at the media frame that was at the flush time, and positions never go back.
     private func assertContinuous(file: StaticString = #filePath, line: UInt = #line) {
         let runs = output.runs
-        // A pump between the flush time and the notification reports audio the flush then dropped,
-        // so the next position steps back to the resumed frame.
-        let resumedFrames = Set(runs.dropFirst().map(\.enqueues[0].firstFrame))
         let positions = log.positions
         for (previous, next) in zip(positions, positions.dropFirst()) where next < previous {
-            XCTAssertTrue(resumedFrames.contains(next), "position \(previous) went back to \(next)", file: file, line: line)
+            XCTFail("position \(previous) went back to \(next)", file: file, line: line)
         }
         XCTAssertEqual(positions.last, RampSource.frames, file: file, line: line)
 
