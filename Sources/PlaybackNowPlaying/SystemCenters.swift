@@ -40,21 +40,29 @@ extension MPNowPlayingInfoCenter: NowPlayingInfoCenter {}
 final class SystemRemoteCommandCenter: RemoteCommandCenter {
     private let center = MPRemoteCommandCenter.shared()
     private var targets: [RemoteCommand: Any] = [:]
+    private var handlers: [RemoteCommand: (RemoteCommandEvent) -> MPRemoteCommandHandlerStatus] = [:]
 
     func setHandler(for command: RemoteCommand, _ handler: ((RemoteCommandEvent) -> MPRemoteCommandHandlerStatus)?) {
         let remote = self.command(command)
         if let target = targets.removeValue(forKey: command) {
             remote.removeTarget(target)
         }
-        guard let handler else {
+        handlers[command] = handler
+        guard handler != nil else {
             remote.isEnabled = false
             return
         }
         remote.isEnabled = true
-        targets[command] = remote.addTarget { event in
+        targets[command] = remote.addTarget { [weak self] event in
             // The system calls command targets on the main thread.
-            MainActor.assumeIsolated { handler(Self.payload(of: event)) }
+            MainActor.assumeIsolated { self?.send(command, Self.payload(of: event)) ?? .commandFailed }
         }
+    }
+
+    /// What the command's target runs for an event; the device tests call it, as the events cannot be
+    /// constructed. Nil while the command has no handler, when the system sends it nothing.
+    func send(_ command: RemoteCommand, _ event: RemoteCommandEvent) -> MPRemoteCommandHandlerStatus? {
+        handlers[command]?(event)
     }
 
     func setSkipIntervals(_ intervals: (forward: TimeInterval, backward: TimeInterval)?) {
