@@ -73,7 +73,7 @@ Roadmap: a render layer that feeds the PCM to `AVAudioEngine`.
 
 ## Documentation
 
-- [Usage](docs/usage.md): decode a file, stream a URL, seek, cancel, show buffering state.
+- [Usage](docs/usage.md): decode a file, stream a URL, seek, cancel, show buffering state, play through the render layer.
 - [Architecture](docs/architecture.md): how the decoder and the download source work.
 - [Decisions](docs/decisions/README.md): why it is built this way.
 - [Contributing](CONTRIBUTING.md) and [docs/contributing.md](docs/contributing.md): tests, rebuilding FFmpeg, releasing.

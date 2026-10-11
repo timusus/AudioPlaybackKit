@@ -178,6 +178,83 @@ file already on disk. A host that wants protocol-shaped callbacks implements `Gr
 calls it from `onEvent`; the source does not take a listener. A listener reads the file back through
 `fileURL`, so it never sees a byte the decoder did not have.
 
+## Play through the render layer
+
+`PlaybackRender` (depends on `PlaybackDecode`) replaces an `AVAudioEngine` graph with one `Transport`
+([ADR-0018](decisions/0018-render-layer.md)). It owns the `AVSampleBufferAudioRenderer` and its
+synchronizer, keeps about two seconds of PCM written ahead of the playhead, joins items gaplessly, and
+reports what is heard. The app keeps the `AVAudioSession` (category, activation, interruptions), Now
+Playing and remote commands, the queue, and the effects. The transport never touches the session: set
+the category and activate it before `play()`.
+
+```swift
+import PlaybackRender
+
+let transport = Transport<Track.ID> { event in          // called on the transport's queue
+    switch event {
+    case .position(let id, let frame, let sampleRate): break   // seconds = Double(frame) / sampleRate
+    case .crossed(let id): break                        // `id` is now heard; advance your queue
+    case .status(let status): break                     // .paused, .buffering, .playing, .ended
+    case .failed(let id, let error): break              // paused on an error
+    }
+}
+
+let source = FFmpegItemSource(reader: try FileByteReader(url: fileURL))   // or a GrowingFileByteSource
+transport.setCurrent(item: track.id, source: source, startFrame: 0)
+transport.play()
+transport.seek(item: track.id, toFrame: Int64(90 * sampleRate))
+transport.setRate(1.5)           // pitch kept; pause() stops, rate 0 is not allowed
+transport.setVolume(0.5)         // 0...1, applied at once
+```
+
+Every method returns at once and runs in call order on the transport's queue. `Item` is any
+`Hashable & Sendable` name for a queue entry. Positions are frames at the item's own rate, so a stored
+resume point is a frame count (or seconds times the rate you opened it at). Use the `position` events
+for the UI and for `MPNowPlayingInfoCenter`; `.ended` is not final, a later `setNext` plays on.
+`setCurrent` replaces everything set, so it is also how a skip or a track change by the user works.
+A source belongs to one `setCurrent` or `setNext`; make a new `FFmpegItemSource` each time.
+
+**Gapless.** Call `setNext(item:source:)` for the track after the current one as soon as the app
+knows it, and again when the queue changes (the last next item is replaced if decode has not reached it;
+`clearNext()` removes it). Items of different sample rates join in one stream. `.crossed` says when the
+speaker reached the new item.
+
+**Effects.** Skip-silence, Voice Boost, ReplayGain, EQ and limiters are `AudioProcessor`s passed to
+`setProcessors(_:)`. They run on interleaved Float32 PCM on the transport's queue, in order, and
+may drop frames (`ProcessorOutput.dropped`, so positions stay in media time) but never add them. A
+processor cannot change the sample rate; `configure(_:)` receives the item's format, so a filter that
+depends on the rate (an EQ) derives its coefficients there and again after each `flush()`. Toggling a
+processor or changing its `isActive` or output format needs another `setProcessors` call, which
+re-feeds from the playhead. A processor's own parameters (a gain value) are read under its own lock.
+
+**Processed PCM is heard about one feed depth later.** A change a processor makes at "now" reaches the
+speaker roughly two seconds on, and a call to `setProcessors` re-feeds, which can click. Fades,
+ducks and mutes therefore go through `setVolume`, which acts at once: the app calls it repeatedly
+from its own timer or display link.
+
+**Failure.** A failed renderer or a media-services reset is recovered once: the transport rebuilds
+the output and lands paused at the same position, and the app calls `play()` again. A second failure
+surfaces as `.failed`, and `play()` does nothing until a `seek`, `setCurrent` or `setProcessors`.
+A source or processor error that stops an item also arrives as `.failed(item:error:)`.
+
+### Moving an app over
+
+Shuttle Podcasts:
+
+- The streaming PCM reader becomes `FFmpegItemSource(reader: GrowingFileByteSource(...))`.
+- The silence gate, Voice Boost and the Smart Skip mixer become `AudioProcessor`s. Report the frames a
+  gate drops in `dropped` so the position and the ad-skip arithmetic stay in media time.
+- Fades and ducks use `setVolume`, not a processor.
+- Keep the `AVAudioSession` handling and Now Playing; feed them from `.position` and `.status`.
+
+Shuttle2:
+
+- ReplayGain, the EQ and the limiter become `AudioProcessor`s. The EQ computes its coefficients from
+  the sample rate given to `configure(_:)`, never from a fixed 44.1 kHz.
+- Call `setNext` with the next track as the queue changes; delete the pre-open and underrun code, the
+  transport joins items and rides through an underrun itself.
+- There is no crossfade: the join is gapless. Fades at a track end are `setVolume` ramps.
+
 ## Write a byte source of your own
 
 Conform to `StreamByteReader`: `read` blocks until at least one byte, returning 0 only at end of
