@@ -264,6 +264,29 @@ Shuttle2:
   transport joins items and rides through an underrun itself.
 - There is no crossfade: the join is gapless. Fades at a track end are `setVolume` ramps.
 
+## Show a `Player` on the lock screen
+
+`PlaybackNowPlaying` binds a `Player` to `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter`. Keep one
+session for the app's life, since both centres are global:
+
+```swift
+let nowPlaying = NowPlayingSession(
+    player: player,
+    skipMode: .intervals(forward: 30, backward: 15),   // or .tracks for next/previous
+    supportedRates: [1, 1.5, 2],                       // empty leaves the rate command off
+    metadata: { episode in NowPlayingMetadata(title: episode.title, artist: episode.show, duration: episode.duration) },
+    artwork: { episode in await artworkCache.artwork(for: episode) }   // MPMediaItemArtwork?
+)
+```
+
+The metadata closure runs once per item change; its `duration` is shown until the player has opened the
+item. Artwork that arrives after the item changed is dropped. Elapsed time and rate are written on a seek,
+a play or pause, a rate change and an item change, never on each position update: the system
+extrapolates between them. Commands are enabled only while they apply, as media3's available commands:
+next and previous while there is a neighbour (repeat `.all` wraps), skips and scrubbing once the item's
+duration is known, play and pause always. `skipMode` can change at any time. `release()` disables every
+command and clears the info.
+
 ## Write a byte source of your own
 
 Conform to `StreamByteReader`: `read` blocks until at least one byte, returning 0 only at end of

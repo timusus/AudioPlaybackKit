@@ -407,7 +407,12 @@ Cases each slice must have:
 - **Now Playing**: the info centre gets title, duration, elapsed and rate on item change and state
   change and not on each position tick; a 15 s skip interval registers `skipForward` and not
   `nextTrack`, and the reverse; each remote command calls the player method; `changePlaybackRate`
-  registers only with `supportedRates`.
+  registers only with `supportedRates`. The player's event stream has one consumer, so the session
+  reads a seek from the position: any move while the shown rate is 0, a move back, or more than 1 s
+  off the extrapolation (Shuttle2's tolerance); a forward seek under 1 s while playing goes unseen.
+  Commands follow media3's availability: play and pause always, next and previous while
+  `hasNext`/`hasPrevious`, skips and scrubbing once the duration is known (unseekable before it opens
+  and when live). Artwork is an async loader whose late result is dropped; `release()` ends a session.
 
 ### Migration impact
 

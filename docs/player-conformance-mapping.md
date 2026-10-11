@@ -2,7 +2,7 @@
 
 Each row is one `@Test` method of media3's `ExoPlayerTest`
 (`libraries/exoplayer/src/test/java/androidx/media3/exoplayer/ExoPlayerTest.java` on main at `cd36f10d2e8e`, its last change before 12 October 2026)
-and where `Tests/PlaybackPlayerTests` covers it: a named test, `n/a` with the reason, or `gap` for a
+and where `Tests/PlaybackPlayerTests` (or `Tests/PlaybackNowPlayingTests`, for available commands) covers it: a named test, `n/a` with the reason, or `gap` for a
 rule of ours that has no test yet. A **deviation** is behaviour ADR-0019 chose to do differently; the row
 says what we do. A ported test cites its media3 test in a comment, so `grep` finds the pair both ways.
 
@@ -11,7 +11,7 @@ output), assert what media3 asserts in our terms (`itemTransition` for `onMediaI
 for `onPlaybackStateChanged`, `seekLanded` for a seek's `onPositionDiscontinuity`), and update the row.
 
 `n/a` reasons used below: **API** (a media3 class, listener, command or setting with no counterpart:
-`PlayerMessage`, available commands, device volume, audio session ids, metadata, release, Wear output
+`PlayerMessage`, device volume, audio session ids, metadata, release, Wear output
 checks), **internal** (renderers, track selection, load control, scheduling, offload, period holders),
 **timeline** (`Timeline` windows and periods, live, `MediaSource` composition; the player has a flat item
 list), **masking** (media3 masks state while its playback thread catches up; `Player` writes the list,
@@ -248,26 +248,26 @@ personal output. `PlayerSessionTests` drives them through `FakeAudioSession`.
 | `repeat_notifiesMediaItemTransition` | `PlayerAdvanceTests.testRepeatAllWithOneItemIsARepeat` |
 | `stop_doesNotNotifyMediaItemTransition` | `PlayerTransportEventTests.testSeeksAndSkipsAfterStopStayIdleUntilPlay` |
 | `timelineRefresh_withModifiedMediaItem_doesNotNotifyMediaItemTransition` | n/a: timeline |
-| `isCommandAvailable_isTrueForAvailableCommands` | n/a: API |
+| `isCommandAvailable_isTrueForAvailableCommands` | `NowPlayingCommandTests.testPlayPauseIsAvailableWithNoItemAndAnswersNoActionableItem`, `testSeekingIsUnavailableUntilTheItemOpens`; available commands are the enabled remote commands |
 | `isCommandAvailable_withDeviceVolumeControlEnabled_isTrueForDeviceVolumeCommands` | n/a: API |
 | `isCommandAvailable_withoutDeviceVolumeControlEnabled_isFalseForDeviceVolumeCommands` | n/a: API |
-| `isCommandAvailable_duringAd_isFalseForSeekCommands` | n/a: API |
-| `isCommandAvailable_duringUnseekableItem_isFalseForSeekInCurrentCommands` | n/a: API |
-| `isCommandAvailable_duringUnseekableLiveItem_isFalseForSeekToPrevious` | n/a: API |
-| `isCommandAvailable_duringUnseekableLiveItemWithPreviousWindow_isTrueForSeekToPrevious` | n/a: API |
-| `isCommandAvailable_duringLiveItem_isTrueForSeekToNext` | n/a: API |
-| `seekTo_nextWindow_notifiesAvailableCommandsChanged` | n/a: API |
-| `seekTo_previousWindow_notifiesAvailableCommandsChanged` | n/a: API |
-| `seekTo_sameWindow_doesNotNotifyAvailableCommandsChanged` | n/a: API |
-| `automaticWindowTransition_notifiesAvailableCommandsChanged` | n/a: API |
-| `addMediaSource_atTheEnd_notifiesAvailableCommandsChanged` | n/a: API |
-| `addMediaSource_atTheStart_notifiesAvailableCommandsChanged` | n/a: API |
-| `removeMediaItem_atTheEnd_notifiesAvailableCommandsChanged` | n/a: API |
-| `removeMediaItem_atTheStart_notifiesAvailableCommandsChanged` | n/a: API |
-| `removeMediaItem_current_notifiesAvailableCommandsChanged` | n/a: API |
-| `setRepeatMode_all_notifiesAvailableCommandsChanged` | n/a: API |
-| `setRepeatMode_one_doesNotNotifyAvailableCommandsChanged` | n/a: API |
-| `setShuffleModeEnabled_notifiesAvailableCommandsChanged` | n/a: API |
+| `isCommandAvailable_duringAd_isFalseForSeekCommands` | n/a: ads |
+| `isCommandAvailable_duringUnseekableItem_isFalseForSeekInCurrentCommands` | `NowPlayingCommandTests.testSeekingIsUnavailableForALiveItem`; an item without a duration is the unseekable one |
+| `isCommandAvailable_duringUnseekableLiveItem_isFalseForSeekToPrevious` | n/a: API, `previousTrack` is `SEEK_TO_PREVIOUS_MEDIA_ITEM`, which ignores seekability |
+| `isCommandAvailable_duringUnseekableLiveItemWithPreviousWindow_isTrueForSeekToPrevious` | n/a: API, as above |
+| `isCommandAvailable_duringLiveItem_isTrueForSeekToNext` | n/a: API, `nextTrack` is `SEEK_TO_NEXT_MEDIA_ITEM` |
+| `seekTo_nextWindow_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testNextAndPreviousFollowTheCurrentIndex` |
+| `seekTo_previousWindow_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testNextAndPreviousFollowTheCurrentIndex` |
+| `seekTo_sameWindow_doesNotNotifyAvailableCommandsChanged` | n/a: API, the command centre has no change notification |
+| `automaticWindowTransition_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testAnAutomaticAdvanceToTheLastItemDisablesNext` |
+| `addMediaSource_atTheEnd_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testEditsAroundTheCurrentItemUpdateNextAndPrevious` |
+| `addMediaSource_atTheStart_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testEditsAroundTheCurrentItemUpdateNextAndPrevious` |
+| `removeMediaItem_atTheEnd_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testEditsAroundTheCurrentItemUpdateNextAndPrevious` |
+| `removeMediaItem_atTheStart_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testEditsAroundTheCurrentItemUpdateNextAndPrevious` |
+| `removeMediaItem_current_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testRemovingTheCurrentItemUpdatesNextAndPrevious` |
+| `setRepeatMode_all_notifiesAvailableCommandsChanged` | `NowPlayingCommandTests.testRepeatAllEnablesNextAndPreviousAtTheEndsAndRepeatOneDoesNot` |
+| `setRepeatMode_one_doesNotNotifyAvailableCommandsChanged` | `NowPlayingCommandTests.testRepeatAllEnablesNextAndPreviousAtTheEndsAndRepeatOneDoesNot` |
+| `setShuffleModeEnabled_notifiesAvailableCommandsChanged` | n/a: shuffle |
 | `mediaSourceMaybeThrowSourceInfoRefreshError_isNotThrownUntilPlaybackReachedFailingItem` | `PlayerErrorTests.testANextTheFactoryRejectsIsReportedWhenPlaybackReachesIt` |
 | `mediaPeriodMaybeThrowPrepareError_isNotThrownUntilPlaybackReachedFailingItem` | `PlayerErrorTests.testANextThatFailsToOpenIsReportedWhenPlaybackReachesIt` |
 | `mediaPeriodMaybeThrowPrepareError_bufferedDurationUnderMinimumBufferForPlayback_keepPlayingUntilBufferedDataExhausts` | `PlayerErrorTests.testANextThatFailsToOpenIsReportedWhenPlaybackReachesIt` |
@@ -454,6 +454,39 @@ main at `c1a51872970d` (10 February 2026), in the terms above. A `_v26` variant 
 | `onAudioFocusChange_withFocusLoss_sendsDoNotPlayAndAbandonsFocus` | `PlayerSessionTests.testInterruptionEndedWithoutShouldResumeSetsPlayWhenReadyFalse` |
 | `onAudioFocusChange_withFocusLoss_sendsDoNotPlayAndAbandonsFocus_v26` | `PlayerSessionTests.testInterruptionEndedWithoutShouldResumeSetsPlayWhenReadyFalse` |
 | `release_doesNotCallPlayerControlToRestoreVolume` | n/a: API |
+
+## MediaSessionPlayerTest and MediaControllerTest
+
+The media3 tests of a session routing controller commands to its player, and of what a controller
+reads back, from `libraries/test_session_current/src/androidTest/java/androidx/media3/session/` at
+`cd36f10d2e8e`. `NowPlayingSession` is the session: a remote command is a controller command, and
+`MPNowPlayingInfoCenter` is what the controller reads. Only the tests with an iOS counterpart are listed;
+the rest drive media3 API (custom layouts, browsing, playlist metadata, volume) with none.
+
+| media3 test | Ours |
+|---|---|
+| `MediaSessionPlayerTest.play` | `NowPlayingCommandTests.testPlayAndPauseSetPlayWhenReady` |
+| `MediaSessionPlayerTest.pause` | `NowPlayingCommandTests.testPlayAndPauseSetPlayWhenReady` |
+| `MediaSessionPlayerTest.executeCommandButtonAction_playPauseWithoutParam_togglesPlayWhenReady` | `NowPlayingCommandTests.testTogglePausesWhilePlayingAndPlaysWhilePaused`, `testTogglePlaysOnEndedFromTheStart`, `testTogglePlaysWhileSuppressed` (`Util.shouldShowPlayButton`, `playIfSuppressed` true) |
+| `MediaSessionPlayerTest.seekTo` | `NowPlayingCommandTests.testChangePlaybackPositionSeeks` |
+| `MediaSessionPlayerTest.setPlaybackSpeed` | `NowPlayingCommandTests.testChangePlaybackRateSetsTheRate` |
+| `MediaSessionPlayerTest.seekToNextMediaItem` | `NowPlayingCommandTests.testNextAndPreviousSkip` |
+| `MediaSessionPlayerTest.seekToPreviousMediaItem` | `NowPlayingCommandTests.testNextAndPreviousSkip` |
+| `MediaSessionPlayerTest.seekForward` | `NowPlayingCommandTests.testSkipsSeekByTheirInterval`; the interval is the app's `SkipMode`, not the player's |
+| `MediaSessionPlayerTest.seekBack` | `NowPlayingCommandTests.testSkipsSeekByTheirInterval` |
+| `MediaControllerTest.isCommandAvailable_withAvailableCommand_returnsTrue` | `NowPlayingCommandTests.testTracksModeEnablesNextAndPreviousAndNoSkips`, `testIntervalsModeEnablesSkipsWithTheirIntervalsAndNoTracks` |
+| `MediaControllerTest.isCommandAvailable_withUnavailableCommand_returnsFalse` | `NowPlayingCommandTests.testChangePlaybackRateIsEnabledOnlyWithSupportedRates` |
+| `MediaControllerTest.getMediaMetadata` | `NowPlayingInfoTests.testAnItemPublishesItsMetadataDurationElapsedAndRate` |
+| `MediaControllerTest.getCurrentPosition_whenPlaying_advances` | `NowPlayingInfoTests.testAnItemPublishesItsMetadataDurationElapsedAndRate`; the system extrapolates from elapsed time and rate |
+| `MediaControllerTest.getCurrentPosition_whenNotPlaying_doesNotAdvance` | `NowPlayingInfoTests.testPauseWritesTheElapsedTimeAndRateZero` |
+| `MediaControllerTest.getCurrentPosition_afterPause_returnsCorrectPosition` | `NowPlayingInfoTests.testPauseWritesTheElapsedTimeAndRateZero` |
+
+Rules of the session with no media3 test: elapsed time and rate are written only on a seek, a play or
+pause, a rate change or an item change (`NowPlayingInfoTests.testPositionPumpsWriteNothing` and the
+seek, rate, skip, advance and repeat tests); a forward seek under a second while playing is not seen,
+since the player sends no seek the session can share. Artwork for an item no longer current is dropped
+(`testArtworkThatArrivesAfterTheItemChangedIsDropped`), and `release()` disables every command
+(`NowPlayingCommandTests.testReleaseDisablesEveryCommandAndClearsTheInfo`).
 
 ## Ours without a media3 test
 
