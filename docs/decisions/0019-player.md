@@ -206,8 +206,11 @@ later or earlier item that the transport no longer holds is a `setCurrent` of th
 `setNext` of the one after it. The target is clamped to `0...duration` when the duration is known. A
 live item ignores seeks (`isLive`). Stopped or failed, a seek only moves the index and position and the
 state stays `.idle` until `play()`, as media3 waits for `prepare`. `position` shows the target at once;
-transport events sent before the transport answers the call with `.sought` are dropped (media3's
-`pendingOperationAcks`), and the first position after it sends `seekLanded`. `seek(by:)` adds to a
+transport events sent before the transport answers the call with `.sought` are held (media3's
+`pendingOperationAcks`). An applied call drops them but the last status, which a restart changes only
+by reporting a new one, so `state` always comes from the transport; a seek the transport ignored,
+because a crossing passed its item, drops nothing, so that crossing still advances the index. The
+first position after the answer sends `seekLanded`. `seek(by:)` adds to a
 target not yet heard, so rapid presses add up. An `ItemSource.seek` that throws (a forward-only transcode) arrives
 as `itemFailed` for that item; the app, which knows the stream can be re-resolved at an offset
 (Shuttle2's `onSeekUnsupported`), replaces the item.

@@ -19,11 +19,14 @@ final class FakeItemFactory {
     var live: Set<String> = []
     /// Items the factory throws for.
     var failing: Set<String> = []
+    /// Items whose source throws when decode opens it, as a dead URL does.
+    var unopenable: Set<String> = []
     private(set) var calls: [String] = []
 
     func make(_ item: String) throws -> any ItemSource {
         calls.append(item)
         if failing.contains(item) { throw FakeOpenError(item: item) }
+        if unopenable.contains(item) { return UnopenableItemSource(item: item) }
         let source = FakeItemSource(format: Self.format, frames: frames, chunkFrames: 2, base: Self.base(of: item))
         if live.contains(item) { source.duration = nil }
         return source
@@ -32,4 +35,18 @@ final class FakeItemFactory {
     static func base(of item: String) -> Float {
         Float(names.firstIndex(of: item)! * 1000)
     }
+}
+
+private final class UnopenableItemSource: ItemSource, @unchecked Sendable {
+    let item: String
+
+    init(item: String) {
+        self.item = item
+    }
+
+    func begin(epoch: UInt64) {}
+    func open() throws -> PCMFormat { throw FakeOpenError(item: item) }
+    func seek(toFrame frame: Int64) throws -> Int64 { frame }
+    func nextChunk() throws -> [Float]? { nil }
+    func interrupt(through epoch: UInt64) {}
 }

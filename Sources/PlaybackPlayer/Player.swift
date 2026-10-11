@@ -53,9 +53,11 @@ public final class Player<Item: Hashable & Sendable> {
     @ObservationIgnored private var transportStatus = TransportStatus.paused
     /// The state while nothing is loaded: `.ended` once the current last item was removed (media3).
     @ObservationIgnored private var unloadedState = PlaybackState.idle
-    /// `setCurrent` and `seek` calls the transport has not yet answered with `.sought`; events before
-    /// the last answer describe what those calls replaced (media3's `pendingOperationAcks`).
+    /// `setCurrent` and `seek` calls the transport has not yet answered with `.sought` (media3's
+    /// `pendingOperationAcks`); events meanwhile wait in `held` until each call says whether it
+    /// replaced them.
     @ObservationIgnored private var unansweredCalls = 0
+    @ObservationIgnored private var held: [TransportEvent<Int>] = []
     /// A seek within the current item whose audio has not been heard yet.
     @ObservationIgnored private var seekTarget: TimeInterval?
 
@@ -243,7 +245,8 @@ public final class Player<Item: Hashable & Sendable> {
         guard let current = currentIndex, index != current else { return seek(to: position) }
         let seconds = position.isFinite ? max(position, 0) : 0
         currentIndex = index
-        if state == .idle {
+        // Not `state`, which waits for the transport to answer a load.
+        if error != nil || (loadedID == nil && unloadedState == .idle) {
             self.position = seconds
             duration = nil
             isLive = false
@@ -290,39 +293,55 @@ public final class Player<Item: Hashable & Sendable> {
     /// Applies every transport event posted so far, in order. Tests call it after a pump.
     func drainTransportEvents() {
         for event in inbox.drain() {
-            if case .sought = event {
+            if case let .sought(_, _, applied) = event {
                 unansweredCalls -= 1
+                // An applied call restarted from a new place, so what was heard before it is moot.
+                // A status is kept: the restart reports one only if it changed, so the last stands.
+                // An ignored seek changed nothing, so everything before it stands (a crossing above all).
+                if applied { held.removeAll { if case .status = $0 { false } else { true } } }
+                if unansweredCalls == 0 {
+                    let replay = held
+                    held = []
+                    replay.forEach(apply)
+                    refreshState()
+                }
                 continue
             }
             // A failed armed next is dropped by the transport whatever was called since.
-            if unansweredCalls > 0 {
-                guard case let .failed(id, _) = event, id != nil, id == armedID else { continue }
+            let armedFailed = if case let .failed(id?, _) = event { id == armedID } else { false }
+            if unansweredCalls > 0, !armedFailed {
+                held.append(event)
+                continue
             }
-            switch event {
-            case let .position(id, seconds, duration):
-                guard id == loadedID, let current = currentIndex else { continue }
-                position = seconds
-                self.duration = duration
-                // The source has opened by the time audio is reported, so no duration means live.
-                isLive = duration == nil
-                if seekTarget != nil {
-                    seekTarget = nil
-                    send(.seekLanded(index: current, position: seconds))
-                }
-            case let .status(status):
-                transportStatus = status
-                refreshState()
-            case let .failed(id, underlying):
-                failed(id, underlying)
-            case let .crossed(id):
-                crossed(into: id)
-            case .sought:
-                break
-            }
+            apply(event)
         }
     }
 
     // MARK: Private
+
+    private func apply(_ event: TransportEvent<Int>) {
+        switch event {
+        case let .position(id, seconds, duration):
+            guard id == loadedID, let current = currentIndex else { return }
+            position = seconds
+            self.duration = duration
+            // The source has opened by the time audio is reported, so no duration means live.
+            isLive = duration == nil
+            if seekTarget != nil {
+                seekTarget = nil
+                send(.seekLanded(index: current, position: seconds))
+            }
+        case let .status(status):
+            transportStatus = status
+            refreshState()
+        case let .failed(id, underlying):
+            failed(id, underlying)
+        case let .crossed(id):
+            crossed(into: id)
+        case .sought:
+            break
+        }
+    }
 
     private func newEntry(_ item: Item) -> Entry {
         lastID += 1
@@ -351,13 +370,6 @@ public final class Player<Item: Hashable & Sendable> {
     private func seekTransport(item id: Int, to seconds: TimeInterval) {
         unansweredCalls += 1
         transport.seek(item: id, toSeconds: seconds)
-        expectRestartStatus()
-    }
-
-    /// A restart reports its status only if it changed, and the statuses before it are dropped.
-    private func expectRestartStatus() {
-        transportStatus = intent ? .buffering : .paused
-        refreshState()
     }
 
     /// The gapless join into the armed next reached the speaker; any other crossing is the first
@@ -395,7 +407,6 @@ public final class Player<Item: Hashable & Sendable> {
         loadedID = entry.id
         error = nil
         if intent { transport.play() }
-        expectRestartStatus()
         armNext()
     }
 

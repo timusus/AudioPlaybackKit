@@ -144,6 +144,126 @@ final class PlayerTransportEventTests: XCTestCase {
         XCTAssertEqual(player.currentIndex, 0)
     }
 
+    // The transport crossed into b before it took the seek on a, so it ignores the seek: b is heard.
+    func testACrossingInFlightAcrossASeekTheTransportIgnoresStillAdvances() async {
+        player.setItems(["a", "b", "c"])
+        player.play()
+        rig.run(for: 9.75)
+        let crossing = rig.inFlight {
+            rig.output.advance(by: 0.5)
+            rig.timer.fire()
+        }
+        XCTAssertTrue(crossing.contains { if case .crossed = $0 { true } else { false } })
+
+        let answer = rig.inFlight { player.seek(to: 2) }
+        rig.deliver(crossing)
+        rig.deliver(answer)
+        XCTAssertEqual(player.currentItem, "b")
+        rig.run(for: 1)
+        XCTAssertEqual(player.position, 1.25)
+        rig.run(for: 10)
+        XCTAssertEqual(player.currentItem, "c")
+
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [
+            .init(from: 0, to: 1, reason: .auto),
+            .init(from: 1, to: 2, reason: .auto),
+        ])
+        XCTAssertEqual(PlayerRig.seeksLanded(events), [])
+    }
+
+    // The skip to the armed b is taken after the crossing into it, so the skip is what is heard.
+    func testACrossingInFlightAcrossASkipToTheArmedNextIsTheSkip() async {
+        player.setItems(["a", "b", "c"])
+        player.play()
+        rig.run(for: 9.75)
+        let crossing = rig.inFlight {
+            rig.output.advance(by: 0.5)
+            rig.timer.fire()
+        }
+        let written = rig.output.enqueues.count
+
+        let skip = rig.inFlight { player.skipToNext() }
+        rig.deliver(crossing)
+        rig.deliver(skip)
+        rig.pump()
+        XCTAssertEqual(rig.firstSampleWritten(skipping: written), 1000)
+        XCTAssertEqual(player.currentItem, "b")
+        XCTAssertEqual(player.position, 0)
+        rig.run(for: 10.5)
+        XCTAssertEqual(player.currentItem, "c")
+
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [
+            .init(from: 0, to: 1, reason: .seek),
+            .init(from: 1, to: 2, reason: .auto),
+        ])
+    }
+
+    // The transport drops a failed next whatever the app called since, so the failure still counts.
+    func testAFailedArmedNextInFlightWhileASeekIsPendingIsReported() async {
+        rig.factory.unopenable = ["b"]
+        player.setItems(["a", "b", "c"])
+        player.play()
+        rig.run(for: 3)
+        // Decode reaches b about two seconds ahead of the playhead.
+        let failure = rig.inFlight { rig.run(for: 6) }
+        XCTAssertTrue(failure.contains { if case .failed(2?, _) = $0 { true } else { false } })
+        let answer = rig.inFlight { player.seek(to: 8) }
+        rig.deliver(failure)
+        rig.deliver(answer)
+        rig.run(for: 3)
+        XCTAssertEqual(player.currentItem, "a")
+        XCTAssertEqual(player.state, .ended)
+
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.failedIndices(events), [1])
+        XCTAssertEqual(PlayerRig.transitions(events), [])
+    }
+
+    // A recovery restarts paused whatever the app intends; a seek after it must not show buffering.
+    func testASeekAfterARecoveryKeepsTheTransportsPausedStatus() {
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 1)
+        rig.output.injectFailure()
+        rig.pump()
+        XCTAssertEqual(player.state, .ready)
+
+        player.seek(to: 5)
+        rig.settle()
+        XCTAssertEqual(player.state, .ready)
+        rig.run(for: 1)
+        XCTAssertEqual(player.state, .ready)
+        XCTAssertEqual(rig.output.rate, 0, "still paused")
+    }
+
+    func testASeekWhilePausedStaysReady() {
+        player.setItems(["a"])
+        rig.run(for: 1)
+        XCTAssertEqual(player.state, .ready)
+
+        player.seek(to: 5)
+        rig.settle()
+        XCTAssertEqual(player.state, .ready)
+        rig.pump()
+        XCTAssertEqual(player.state, .ready)
+    }
+
+    func testASeekWhilePlayingBuffersThenPlays() {
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 1)
+        XCTAssertEqual(player.state, .ready)
+
+        player.seek(to: 5)
+        rig.settle()
+        XCTAssertEqual(player.state, .buffering)
+        rig.pump()
+        XCTAssertEqual(player.state, .ready)
+        XCTAssertTrue(player.isPlaying)
+    }
+
     func testSeeksAndSkipsAfterStopStayIdleUntilPlay() async {
         player.setItems(["a", "b", "c"])
         player.play()
