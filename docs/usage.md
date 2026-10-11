@@ -1,6 +1,8 @@
 # Usage
 
-From adding the package to decoding a file and playing a URL while it downloads. Signatures and
+From adding the package to decoding a file, playing a URL while it downloads, and running a `Player` with
+its lock-screen controls (an app that wants playback rather than PCM starts at
+[Play a list with `Player`](#play-a-list-with-player)). Signatures and
 parameters are in the doc comments of the types named here; this page covers the order of calls and the
 behaviour you must know. Threading and blocking apply throughout: `open()`, `nextChunk()`,
 `read(into:maxFrames:)` and `seek(toSeconds:)` block, so run them on a thread of your own, one thread per decoder.
@@ -9,7 +11,7 @@ behaviour you must know. Threading and blocking apply throughout: `open()`, `nex
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/timusus/AudioPlaybackKit.git", from: "0.9.0"),
+    .package(url: "https://github.com/timusus/AudioPlaybackKit.git", from: "0.10.0"),
 ],
 targets: [
     .target(name: "MyApp", dependencies: [
@@ -246,23 +248,171 @@ the app chooses what follows; the heard item's failure pauses.
 
 ### Moving an app over
 
-The order of work, a concept map and a device checklist for each app are in [migrating.md](migrating.md).
+Both apps move onto `Player`, not `Transport`, because the player owns the session, the advance and the
+recovery an app would otherwise write twice. The per-app tables are in [migrating.md](migrating.md).
 
-Shuttle Podcasts:
+## Play a list with `Player`
 
-- The streaming PCM reader becomes `FFmpegItemSource(reader: GrowingFileByteSource(...))`.
-- The silence gate, Voice Boost and the Smart Skip mixer become `AudioProcessor`s. Report the frames a
-  gate drops in `dropped` so the position and the ad-skip arithmetic stay in media time.
-- Fades and ducks use `setVolume`, not a processor.
-- Keep the `AVAudioSession` handling and Now Playing; feed them from `.position` and `.status`.
+`PlaybackPlayer` (depends on `PlaybackRender`) is the layer an app's playback controller wraps
+([ADR-0019](decisions/0019-player.md)): an ordered list of your items, play intent and state, position
+in seconds, seeks across items, gapless advance, repeat, and the `AVAudioSession` rules. It is
+`@MainActor` and `@Observable`, and follows media3's `Player`: `playWhenReady` is what the app wants,
+`state` is what the transport reports, and neither writes the other. Shuffle, sleep timers, and
+what an item is stay in the app.
 
-Shuttle2:
+### Create one
 
-- ReplayGain, the EQ and the limiter become `AudioProcessor`s. The EQ computes its coefficients from
-  the sample rate given to `configure(_:)`, never from a fixed 44.1 kHz.
-- Call `setNext` with the next track as the queue changes; delete the pre-open and underrun code, the
-  transport joins items and rides through an underrun itself.
-- There is no crossfade: the join is gapless. Fades at a track end are `setVolume` ramps.
+`Item` is your own `Hashable & Sendable` type (an episode, a track). The factory runs on the main actor
+when the player is about to decode an item, so construct a source and return; `FFmpegItemSource`
+opens lazily. The same item may appear twice in the list.
+
+```swift
+import PlaybackDecode
+import PlaybackPlayer
+import PlaybackRender
+import PlaybackStreaming
+
+let player = Player<Episode>(
+    makeSource: { episode in
+        FFmpegItemSource(reader: GrowingFileByteSource(url: episode.url, authHeaders: [:]))
+    },
+    audioSession: .spokenAudio      // or .longFormAudio (the default) for music
+)
+player.setItems(episodes, startIndex: 0, startPosition: saved)   // seconds
+player.play()
+```
+
+The category is set at init, but the session is activated on the first `play()`, off the main thread.
+`.spokenAudio` is `.playback` in mode `.spokenAudio`, so another app's prompt pauses you instead of
+ducking you; `.longFormAudio` keeps long-form route sharing for AirPlay 2. On iOS,
+`AudioSessionConfiguration(category:mode:routeSharingPolicy:options:)` builds a custom one; macOS has only
+the two presets. `timePitchAlgorithm:` picks the `AVAudioTimePitchAlgorithm` for rate changes.
+
+### The list and its edits
+
+`items` is a mirror of your queue, in play order, and `currentIndex` points into it. The app owns the
+order, shuffle included; call `replaceItems` whenever the queue changes, or the player plays a stale next item.
+
+```swift
+player.replaceItems(episodes, currentIndex: 1)   // current keeps playing if it is the same item
+player.insert([third], at: 2)
+player.move(from: 2, to: 0)
+player.remove(at: 2)                              // removing the current plays its successor
+player.skipToNext()
+player.skipToPrevious()
+player.seek(to: 90)                               // within the current item
+player.seek(by: -15)                              // clamped to the item
+player.seek(to: 10, itemAt: 0)                    // across items
+player.rate = 1.5                                 // 0.25...4, pitch kept; pause is not rate 0
+player.volume = 0.5                               // 0...1, applied at once; a fade is a ramp from your timer
+player.setProcessors([silenceGate, voiceBoost])   // AudioProcessors, as for Transport
+player.stop()                                     // idle, session deactivated; play() starts again
+```
+
+`replaceItems` with a different current item behaves as `setItems`. `setItems` with an empty list is
+`removeAll()`. `skipToNext` and `skipToPrevious` ignore `repeatMode == .one`.
+
+### Observe it
+
+```swift
+struct NowPlayingBar: View {
+    let player: Player<Episode>
+    var body: some View {
+        HStack {
+            Button(player.playWhenReady ? "Pause" : "Play") { player.playWhenReady.toggle() }
+            if player.state == .buffering { ProgressView() }
+            if player.suppression == .interruption { Text("Paused by another app") }
+            Slider(value: Binding(get: { player.position }, set: { player.seek(to: $0) }),
+                   in: 0...(player.duration ?? 1)).disabled(player.isLive)
+        }
+    }
+}
+```
+
+- **`state`** is `.idle` (nothing prepared, or stopped on an error), `.buffering` (play intent with decode
+  behind, or an item opening), `.ready` or `.ended` (the last item finished; `play()` restarts at 0).
+  `isPlaying` is `state == .ready && playWhenReady && suppression == .none`. Show a play button from
+  `playWhenReady`, not from `isPlaying`, or the button flickers while buffering.
+- **`position`** is what is heard, in seconds of the current item's media time, written on every pump
+  while it changes. `duration` is nil until the item opens and for a live stream (`isLive`).
+- **`discontinuityCount`** changes when `position` jumps instead of playing on: a seek, skip, load,
+  transition or repeat. Compare it to its last value to tell a jump from listening; a position saver counts
+  deltas only while it is unchanged. It may move more than once for one call.
+
+```swift
+func watch() {
+    withObservationTracking {
+        _ = (player.state, player.position, player.discontinuityCount)
+    } onChange: {
+        Task { @MainActor in
+            save(player.position)
+            watch()
+        }
+    }
+}
+```
+
+`events` is an `AsyncStream` of what state cannot carry. Each is sent once, in order, after the state
+that caused it is written; the stream ends when the player is deallocated.
+
+```swift
+Task {
+    for await event in player.events {
+        switch event {
+        case .itemTransition(let from, let to, let reason): break   // .auto, .seek or .repeat
+        case .itemFailed(let index, let error): break               // error.kind: .source, .output, .session
+        case .seekLanded(let index, let position): break            // the seek's audio reached the speaker
+        case .recoveredPaused: break                                // see Errors and recovery
+        case .playWhenReadyChanged(let value, let reason): break    // the player changed intent: .routeLost, .interruptionEnded, .endOfItem
+        }
+    }
+}
+```
+
+### Repeat and pause at the end of an item
+
+`repeatMode` is `.off`, `.all` (wraps from the last item to the first) or `.one` (the same entry again,
+gapless). `pauseAtEndOfItem = true` is a sleep timer's "end of episode": when the current item finishes
+the player sets `playWhenReady` to false (reason `.endOfItem`), moves `currentIndex` to the next item and
+prepares it paused at 0, so the UI shows what `play()` starts. On the last item it ends. Set it before the
+crossing; it also stops the next item being armed early.
+
+### Errors and recovery
+
+- **A failed item stops the player.** The state is `.idle` on that item with `error` set, `itemFailed`
+  is sent, the audio session is released, and nothing skips ahead: your policy (skip up to N, show an
+  alert) lives in one `itemFailed` handler, which calls `skipToNext()` if it wants to. `play()` retries
+  from `position`.
+- **A next item that fails** while the current one plays does not interrupt it. It is reported once
+  playback reaches it, after its `itemTransition`, and never if you removed it first.
+- **A session failure** (activation refused) sets `error.kind == .session` and leaves `playWhenReady` true, so
+  the next `play()` tries again.
+- **Recovery lands paused.** A renderer failure or a media-services reset is rebuilt once by the
+  transport; the player sets `playWhenReady` to false, clears `suppression`, and sends `recoveredPaused`
+  without a `playWhenReadyChanged`. Position is where it was. There is no auto-resume: call `play()` if
+  the user was playing. A second failure is an `itemFailed`.
+
+### The audio session
+
+The player owns the session; the app does not observe interruptions or route changes for playback.
+
+- **Interruption began** (call, Siri, another app) while playing: `suppression == .interruption`, the
+  transport is paused, `playWhenReady` stays true. Paused or stopped, nothing happens, so a stopped
+  player never shows "paused by another app".
+- **Interruption ended** with `shouldResume`: the session is activated, playback resumes, `suppression`
+  clears. Without it: `playWhenReady` becomes false (reason `.interruptionEnded`). If the user pressed
+  pause during the interruption, nothing resumes. A `play()` during an interruption takes the session back at once.
+- **Route lost.** Unplugging headphones, or losing Bluetooth, USB, line out, a car or AirPlay with none of
+  that kind left, pauses (`playWhenReady` false, reason `.routeLost`). A Bluetooth profile switch does not.
+  A new device does nothing: auto-play on connect is an app preference.
+- **Media-services reset**: the category is set again and the next `play()` activates; see recovery above.
+- An app `seek` or `skipToNext` during an interruption is applied paused.
+
+### Test it
+
+`PlaybackPlayerTestSupport` runs the whole player with no device; see
+[Test code built on `Player`](#test-code-built-on-player) for the rig and
+`Tests/PlaybackPlayerExternalConsumerTests/CoordinatorTests.swift` for a test to copy.
 
 ## Show a `Player` on the lock screen
 
