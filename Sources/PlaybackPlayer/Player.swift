@@ -323,8 +323,8 @@ public final class Player<Item: Hashable & Sendable> {
             if case let .sought(_, _, applied) = event {
                 unansweredCalls -= 1
                 // An applied call restarted from a new place, so what was heard before it is moot.
-                // The last status is kept, as the restart reports one only if it changed, but taken as
-                // is: an end it reported is stale, so nothing acts on it.
+                // The last status is kept, as the restart reports one only if it changed. It is never
+                // `.ended`: the restart always reports a status that replaces an end, so none is skipped.
                 // An ignored seek changed nothing, so everything before it stands (a crossing above all).
                 if applied {
                     for case let .status(status) in held { transportStatus = status }

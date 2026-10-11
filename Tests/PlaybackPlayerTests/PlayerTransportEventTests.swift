@@ -91,6 +91,38 @@ final class PlayerTransportEventTests: XCTestCase {
         XCTAssertNotEqual(player.state, .ended)
     }
 
+    // The player adopts the last status held across an applied seek without the end handling, which
+    // is sound only because the transport's restart always reports a status after `.sought` that
+    // replaces an `.ended` before it.
+    func testAnEndHeldAcrossAnAppliedSeekIsFollowedByAFreshStatus() async {
+        player.setItems(["a"])
+        player.pauseAtEndOfItem = true
+        player.play()
+        rig.run(for: 9.75)
+        let stale = rig.inFlight {
+            rig.output.advance(by: 0.25)
+            rig.timer.fire()
+        }
+        XCTAssertTrue(stale.contains { if case .status(.ended) = $0 { true } else { false } })
+
+        let answer = rig.inFlight { player.seek(to: 5) }
+        let sought = answer.firstIndex { if case .sought(_, _, true) = $0 { true } else { false } }
+        let restart = answer.lastIndex { if case .status(.buffering) = $0 { true } else { false } }
+        XCTAssertNotNil(sought)
+        XCTAssertNotNil(restart)
+        XCTAssertGreaterThan(restart ?? 0, sought ?? .max)
+        rig.deliver(stale)
+        rig.deliver(answer)
+        XCTAssertEqual(player.state, .buffering)
+        XCTAssertTrue(player.playWhenReady, "a's end was replaced by the seek, so it never paused")
+        rig.pump()
+        XCTAssertEqual(player.state, .ready)
+        XCTAssertEqual(player.position, 5)
+
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [])
+    }
+
     func testCrossingIntoTheNextAdvancesAndArmsTheOneAfter() async {
         player.setItems(["a", "b", "c"])
         player.play()
