@@ -101,6 +101,18 @@ final class PlayerRig {
         }
     }
 
+    static func playWhenReadyChanges(_ events: [PlayerEvent<String>]) -> [PlayWhenReadyChange] {
+        events.compactMap {
+            guard case let .playWhenReadyChanged(value, reason) = $0 else { return nil }
+            return PlayWhenReadyChange(value: value, reason: reason)
+        }
+    }
+
+    struct PlayWhenReadyChange: Equatable {
+        var value: Bool
+        var reason: PlayWhenReadyChangeReason
+    }
+
     struct Landing: Equatable {
         var index: Int
         var position: TimeInterval

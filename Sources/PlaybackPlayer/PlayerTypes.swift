@@ -12,6 +12,12 @@ public enum PlaybackState: Sendable {
     case idle, buffering, ready, ended
 }
 
+/// media3 `Player.RepeatMode`. Only the advance at the end of an item follows `.one`; `skipToNext`
+/// and `skipToPrevious` treat it as `.off`.
+public enum RepeatMode: Sendable {
+    case off, all, one
+}
+
 /// Why audio is not heard although `playWhenReady` is true and the state is `.ready`.
 public enum PlaybackSuppression: Sendable {
     case none

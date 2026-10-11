@@ -65,6 +65,8 @@ public final class Player<Item: Hashable & Sendable> {
     @ObservationIgnored private var held: [TransportEvent<Int>] = []
     /// A seek within the current item whose audio has not been heard yet.
     @ObservationIgnored private var seekTarget: TimeInterval?
+    /// The transport heard the end of the list; nothing is armed until a seek or load restarts it.
+    @ObservationIgnored private var atEnd = false
 
     public convenience init(
         makeSource: @escaping ItemSourceFactory<Item>,
@@ -149,8 +151,9 @@ public final class Player<Item: Hashable & Sendable> {
         armNext()
     }
 
-    /// Removing the current item plays the one that takes its index from 0; if it was the last, the
-    /// player ends at the first item, as media3 does.
+    /// Removing the current item plays the one that takes its index from 0, under `.all` the first
+    /// if it was the last. With nothing to follow, or under `.one`, the player ends at that index, as
+    /// media3 does.
     public func remove(at index: Int) {
         precondition(entries.indices.contains(index), "index out of range")
         guard let current = currentIndex, entries.count > 1 else { return removeAll() }
@@ -158,12 +161,12 @@ public final class Player<Item: Hashable & Sendable> {
         if index < current {
             currentIndex = current - 1
         } else if index == current {
-            if index < entries.count {
-                currentIndex = index
-                if loadedKey != nil || error != nil { jump(to: index, at: 0) }
-            } else {
-                currentIndex = 0
+            let successor = index < entries.count ? index : 0
+            currentIndex = successor
+            if repeatMode == .one || (index == entries.count && repeatMode == .off) {
                 unload(as: .ended)
+            } else if loadedKey != nil || error != nil {
+                jump(to: successor, at: 0)
             }
             position = 0
             duration = nil
@@ -198,6 +201,7 @@ public final class Player<Item: Hashable & Sendable> {
                 load(current, at: state == .ended ? 0 : position)
             } else if state == .ended, let loadedKey {
                 seekTransport(item: loadedKey, to: 0)
+                armNext()
             }
             transport.play()
         }
@@ -212,17 +216,27 @@ public final class Player<Item: Hashable & Sendable> {
         unload(as: .idle)
     }
 
-    public var hasNext: Bool { currentIndex.map { $0 + 1 < entries.count } ?? false }
-    public var hasPrevious: Bool { currentIndex.map { $0 > 0 } ?? false }
+    public var repeatMode = RepeatMode.off {
+        didSet { armNext() }
+    }
+
+    /// At the end of each item, sets `playWhenReady` false and makes the next item current, paused
+    /// at 0; at the end of the last it ends. Nothing is armed meanwhile, so no audio runs on.
+    public var pauseAtEndOfItem = false {
+        didSet { armNext() }
+    }
+
+    public var hasNext: Bool { neighbour(1) != nil }
+    public var hasPrevious: Bool { neighbour(-1) != nil }
 
     public func skipToNext() {
-        guard hasNext, let current = currentIndex else { return }
-        seek(to: 0, itemAt: current + 1)
+        guard let next = neighbour(1) else { return }
+        seek(to: 0, itemAt: next)
     }
 
     public func skipToPrevious() {
-        guard hasPrevious, let current = currentIndex else { return }
-        seek(to: 0, itemAt: current - 1)
+        guard let previous = neighbour(-1) else { return }
+        seek(to: 0, itemAt: previous)
     }
 
     // MARK: Position
@@ -235,6 +249,7 @@ public final class Player<Item: Hashable & Sendable> {
             seekTransport(item: loadedKey, to: target)
             self.position = target
             seekTarget = target
+            armNext()
         } else if unloadedState == .ended, error == nil {
             load(current, at: target)
             seekTarget = target
@@ -301,9 +316,13 @@ public final class Player<Item: Hashable & Sendable> {
             if case let .sought(_, _, applied) = event {
                 unansweredCalls -= 1
                 // An applied call restarted from a new place, so what was heard before it is moot.
-                // A status is kept: the restart reports one only if it changed, so the last stands.
+                // The last status is kept, as the restart reports one only if it changed, but taken as
+                // is: an end it reported is stale, so nothing acts on it.
                 // An ignored seek changed nothing, so everything before it stands (a crossing above all).
-                if applied { held.removeAll { if case .status = $0 { false } else { true } } }
+                if applied {
+                    for case let .status(status) in held { transportStatus = status }
+                    held = []
+                }
                 if unansweredCalls == 0 {
                     let replay = held
                     held = []
@@ -338,6 +357,7 @@ public final class Player<Item: Hashable & Sendable> {
             }
         case let .status(status):
             transportStatus = status
+            if status == .ended, reachedEnd() { return }
             refreshState()
         case let .failed(key, underlying):
             failed(key, underlying)
@@ -357,6 +377,23 @@ public final class Player<Item: Hashable & Sendable> {
         entries.firstIndex { $0.id == id }
     }
 
+    /// Where a skip by `offset` goes: media3 wraps under `.all` and treats `.one` as `.off`.
+    private func neighbour(_ offset: Int) -> Int? {
+        guard let current = currentIndex else { return nil }
+        let index = current + offset
+        if entries.indices.contains(index) { return index }
+        return repeatMode == .all ? (index + entries.count) % entries.count : nil
+    }
+
+    /// The item played when `index` ends.
+    private func following(_ index: Int) -> Int? {
+        switch repeatMode {
+        case .one: index
+        case .all: (index + 1) % entries.count
+        case .off: index + 1 < entries.count ? index + 1 : nil
+        }
+    }
+
     /// Makes `index` current at `seconds`: a seek if the transport already holds it as the armed
     /// next, so its open source is kept, otherwise a fresh `setCurrent`.
     private func jump(to index: Int, at seconds: TimeInterval) {
@@ -374,23 +411,59 @@ public final class Player<Item: Hashable & Sendable> {
     }
 
     private func seekTransport(item key: Int, to seconds: TimeInterval) {
+        atEnd = false
         unansweredCalls += 1
         transport.seek(item: key, toSeconds: seconds)
     }
 
-    /// The gapless join into the armed next reached the speaker; any other crossing is the first
-    /// audio of an item already current.
+    /// A gapless join reached the speaker. It is usually into the armed next, but may be into one
+    /// armed before an edit that decode had already passed, so the item is found by its key.
     private func crossed(into key: Int) {
-        guard key == armedKey, let from = currentIndex, let index = armedEntryID.flatMap(index(of:)) else { return }
-        currentIndex = index
+        // The first audio after a load or seek is the current item's own.
+        guard key != loadedKey, let from = currentIndex, let entryID = keyedEntries[key] else { return }
         loadedKey = key
-        armedKey = nil
+        if key == armedKey { armedKey = nil }
         seekTarget = nil
         position = 0
         duration = nil
         isLive = false
-        send(.itemTransition(from: from, to: index, reason: .auto))
+        guard let index = index(of: entryID) else {
+            // Removed since it was armed: on to what the list armed after it, else the list ended.
+            guard let next = armedEntryID.flatMap(index(of:)) else { return unload(as: .ended) }
+            currentIndex = next
+            jump(to: next, at: 0)
+            return send(.itemTransition(from: from, to: next, reason: .auto))
+        }
+        currentIndex = index
+        if pauseAtEndOfItem {
+            // Set after decode reached this item, so the end of the last went unpaused.
+            pauseAtEnd()
+            seekTransport(item: key, to: 0)
+        }
+        send(.itemTransition(from: from, to: index, reason: index == from ? .repeat : .auto))
         armNext()
+    }
+
+    /// The transport heard everything set. Returns true if the state waits for the next item's load.
+    private func reachedEnd() -> Bool {
+        // A next armed since the transport ended plays on.
+        guard let current = currentIndex, loadedKey != nil, armedKey == nil, error == nil else { return false }
+        guard pauseAtEndOfItem, let next = following(current) else {
+            if pauseAtEndOfItem { pauseAtEnd() }
+            atEnd = true
+            return false
+        }
+        pauseAtEnd()
+        currentIndex = next
+        load(next, at: 0)
+        send(.itemTransition(from: current, to: next, reason: next == current ? .repeat : .auto))
+        return true
+    }
+
+    private func pauseAtEnd() {
+        intent = false
+        transport.pause()
+        send(.playWhenReadyChanged(false, reason: .endOfItem))
     }
 
     /// `setCurrent` of the entry at `index`, then the next armed after it.
@@ -409,6 +482,7 @@ public final class Player<Item: Hashable & Sendable> {
             return reportFailure(at: index, PlaybackError(kind: .source, underlying: error))
         }
         let key = newKey(for: entry.id, replacing: true)
+        atEnd = false
         unansweredCalls += 1
         transport.setCurrent(item: key, source: source, startSeconds: position)
         loadedKey = key
@@ -436,10 +510,11 @@ public final class Player<Item: Hashable & Sendable> {
         return lastKey
     }
 
-    /// Arms the list's next after the current, if it is not armed already.
+    /// Arms what follows the current, if it is not armed already. Nothing is armed at the end of
+    /// the list, so an item added there waits for a seek, as in media3.
     private func armNext() {
-        guard let current = currentIndex, loadedKey != nil, error == nil else { return }
-        let next = current + 1 < entries.count ? entries[current + 1] : nil
+        guard let current = currentIndex, loadedKey != nil, error == nil, !atEnd else { return }
+        let next = pauseAtEndOfItem ? nil : following(current).map { entries[$0] }
         guard next?.id != armedEntryID else { return }
         guard let next else {
             transport.clearNext()
