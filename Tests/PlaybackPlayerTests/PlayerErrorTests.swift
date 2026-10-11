@@ -42,6 +42,33 @@ final class PlayerErrorTests: XCTestCase {
         XCTAssertEqual(PlayerRig.transitions(events), [])
     }
 
+    // media3 ExoPlayerTest.seekAfterPlaybackError: the seek moves the index and position, and play
+    // re-prepares there.
+    func testASeekAfterAFailureWaitsForPlayAndPlaysFromTheTarget() async {
+        rig.factory.failingAtFrame = ["b": 40]
+        player.setItems(["a", "b"], startIndex: 1)
+        player.play()
+        rig.run(for: 6)
+        XCTAssertEqual(player.state, .idle)
+        XCTAssertNotNil(player.error)
+
+        player.seek(to: 2, itemAt: 0)
+        rig.pump()
+        XCTAssertEqual(player.state, .idle)
+        XCTAssertEqual(player.currentIndex, 0)
+        XCTAssertEqual(player.position, 2)
+        let written = rig.output.enqueues.count
+
+        player.play()
+        rig.pump()
+        XCTAssertNil(player.error)
+        XCTAssertEqual(player.state, .ready)
+        XCTAssertEqual(rig.firstSampleWritten(skipping: written), 16)
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 1, to: 0, reason: .seek)])
+        XCTAssertEqual(PlayerRig.failedIndices(events), [1])
+    }
+
     // media3 ExoPlayerTest.mediaPeriodMaybeThrowPrepareError_isNotThrownUntilPlaybackReachedFailingItem:
     // the error surfaces once the failed item is current, not while the one before it still plays.
     func testANextThatFailsToOpenIsReportedWhenPlaybackReachesIt() async {
