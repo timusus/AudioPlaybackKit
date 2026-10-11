@@ -1,0 +1,144 @@
+{
+  "complete" : true,
+  "device" : "iPhone",
+  "ios" : "26.6.1",
+  "micPermission" : "granted",
+  "scenarios" : [
+    {
+      "after" : {
+        "hwRate" : 44100,
+        "outputLatencyMs" : 2000,
+        "outputs" : "AirPlay:Timothy’s MacBook Pro"
+      },
+      "before" : {
+        "hwRate" : 48000,
+        "outputLatencyMs" : 15.353999999999999,
+        "outputs" : "Speaker:Speaker"
+      },
+      "endedAfterSeekS" : 4.407,
+      "endedFired" : true,
+      "events" : [
+        "0.04s status buffering",
+        "0.07s status playing"
+      ],
+      "flushes" : [
+        {
+          "clockAtNotification" : 9.5399999999999991,
+          "flushTime" : 9.5090000000000003,
+          "flushTimeMinusClockMs" : -30.556000000000001,
+          "outputLatencyMs" : 2000,
+          "publishedAfterFlush" : 9.5090000000000003,
+          "refeedMinusFlushTimeMs" : 0.77400000000000002,
+          "refeedMinusHeardMs" : 1970.2170000000001,
+          "refeedS" : 9.5090000000000003
+        }
+      ],
+      "gapWindow" : {
+        "firedSincePlayS" : 9.7140000000000004,
+        "pickerClosesSincePlayS" : [
+
+        ],
+        "pickerOpensSincePlayS" : [
+          3.9809999999999999
+        ],
+        "stallsOver250ms" : [
+          {
+            "ms" : 280.54300000000001,
+            "sinceFiredS" : -9.6910000000000007,
+            "sincePickerOpenS" : -3.9580000000000002,
+            "sincePlayS" : 0.023
+          },
+          {
+            "ms" : 2556.1280000000002,
+            "sinceFiredS" : 0.040000000000000001,
+            "sincePickerOpenS" : 5.7729999999999997,
+            "sincePlayS" : 9.7539999999999996
+          }
+        ]
+      },
+      "guided" : true,
+      "heardGlitch" : "Gap or click",
+      "id" : "G3P",
+      "maxPositionStallMs" : 2556.1280000000002,
+      "policy" : "plain",
+      "positionJumpMs" : 0,
+      "positionRateLast7s" : 1,
+      "question" : "Pick AirPlay (.playback)",
+      "seconds" : 26.234000000000002,
+      "status" : "pass",
+      "trigger" : "fired: AirPlay:Timothy’s MacBook Pro",
+      "triggerAfterS" : 9.5709999999999997,
+      "verdict" : "fired: AirPlay:Timothy’s MacBook Pro; 1 auto-flush(es) [\"re-feed 1970.217 ms vs heard\"]; latency 15.354 -> 2000.0 ms; position rate 1.00, stall 2556 ms; picker opened 4.0 s after play, route fired 9.7 s; 2 position stall(s) over 250 ms; .ended after 4.41 s; owner: Gap or click"
+    },
+    {
+      "after" : {
+        "hwRate" : 48000,
+        "outputLatencyMs" : 15.353999999999999,
+        "outputs" : "Speaker:Speaker"
+      },
+      "before" : {
+        "hwRate" : 44100,
+        "outputLatencyMs" : 2000,
+        "outputs" : "AirPlay:Timothy’s MacBook Pro"
+      },
+      "endedAfterSeekS" : 2.3519999999999999,
+      "endedFired" : true,
+      "events" : [
+        "-0.02s status buffering",
+        "0.01s status playing",
+        "0.02s status buffering",
+        "0.05s status playing"
+      ],
+      "flushes" : [
+        {
+          "clockAtNotification" : 8.3629999999999995,
+          "flushTime" : 8.3629999999999995,
+          "flushTimeMinusClockMs" : 0,
+          "outputLatencyMs" : 15.353999999999999,
+          "publishedAfterFlush" : 8.4049999999999994,
+          "refeedMinusFlushTimeMs" : 1.3200000000000001,
+          "refeedMinusHeardMs" : 16.673999999999999,
+          "refeedS" : 8.3629999999999995
+        }
+      ],
+      "gapWindow" : {
+        "firedSincePlayS" : 8.7379999999999995,
+        "pickerClosesSincePlayS" : [
+
+        ],
+        "pickerOpensSincePlayS" : [
+          7.0199999999999996
+        ],
+        "stallsOver250ms" : [
+          {
+            "ms" : 2402.6410000000001,
+            "sinceFiredS" : -8.7300000000000004,
+            "sincePickerOpenS" : -7.0119999999999996,
+            "sincePlayS" : 0.0080000000000000002
+          },
+          {
+            "ms" : 265.089,
+            "sinceFiredS" : -0.001,
+            "sincePickerOpenS" : 1.7170000000000001,
+            "sincePlayS" : 8.7370000000000001
+          }
+        ]
+      },
+      "guided" : true,
+      "heardGlitch" : "Gap or click",
+      "id" : "G4P",
+      "maxPositionStallMs" : 265.089,
+      "policy" : "plain",
+      "positionJumpMs" : 1820.482,
+      "positionRateLast7s" : 1,
+      "question" : "Back to the iPhone (.playback)",
+      "seconds" : 22.620999999999999,
+      "status" : "pass",
+      "trigger" : "fired: Speaker:Speaker",
+      "triggerAfterS" : 8.7029999999999994,
+      "verdict" : "fired: Speaker:Speaker; 1 auto-flush(es) [\"re-feed 16.674 ms vs heard\"]; latency 2000.0 -> 15.354 ms; position rate 1.00, stall 265 ms; picker opened 7.0 s after play, route fired 8.7 s; 2 position stall(s) over 250 ms; .ended after 2.35 s; owner: Gap or click"
+    }
+  ],
+  "skipGuided" : false,
+  "started" : "2026-10-11T11:42:09Z"
+}

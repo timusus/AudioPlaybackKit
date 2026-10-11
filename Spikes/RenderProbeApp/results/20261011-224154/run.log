@@ -1,0 +1,27 @@
+device 00008140-000539602E90401C, app args: --check --only G3P,G4P
+2026-10-11 22:41:57.287 xcodebuild[52005:21440132] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+App installed:
+• bundleID: com.simplecityapps.renderprobe
+• installationURL: file:///private/var/containers/Bundle/Application/A06A5CE0-DEDA-4314-8B27-715FC66796DE/RenderProbe.app/
+• launchServicesIdentifier: unknown
+• databaseUUID: 490CDBE6-833A-43BA-BBD3-156E9580DF4E
+• databaseSequenceNumber: 5824
+• options: 
+2026-10-11 22:42:05.296 xcodebuild[53125:21442237] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+App installed:
+• bundleID: com.simplecityapps.renderprobe.interruptor
+• installationURL: file:///private/var/containers/Bundle/Application/A64F6CD2-FF64-406F-9A01-50BD6D90CCC6/InterruptorApp.app/
+• launchServicesIdentifier: unknown
+• databaseUUID: 490CDBE6-833A-43BA-BBD3-156E9580DF4E
+• databaseSequenceNumber: 5832
+• options: 
+launched; polling for check-done every 5 s (30 min cap)
+# PlaybackRender device check
+
+iPhone iOS 26.6.1, started 2026-10-11T11:42:09Z, mic granted
+
+| Scenario | Status | Result |
+|---|---|---|
+| G3P | pass | fired: AirPlay:Timothy’s MacBook Pro; 1 auto-flush(es) ["re-feed 1970.217 ms vs heard"]; latency 15.354 -> 2000.0 ms; position rate 1.00, stall 2556 ms; picker opened 4.0 s after play, route fired 9.7 s; 2 position stall(s) over 250 ms; .ended after 4.41 s; owner: Gap or click |
+| G4P | pass | fired: Speaker:Speaker; 1 auto-flush(es) ["re-feed 16.674 ms vs heard"]; latency 2000.0 -> 15.354 ms; position rate 1.00, stall 265 ms; picker opened 7.0 s after play, route fired 8.7 s; 2 position stall(s) over 250 ms; .ended after 2.35 s; owner: Gap or click |
+results in results/20261011-224154

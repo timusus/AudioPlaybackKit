@@ -1,0 +1,37 @@
+   0.009 launch 2026-10-11T11:42:09Z iPhone iOS 26.6.1
+   0.051 CHECK start skipGuided=false
+   1.609 === CHECK G3P Pick AirPlay (.playback) ===
+   1.628 session .playback longForm=false preferredRate=unset: hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker
+   1.643 transport status buffering clock 0.000
+   1.663 transport crossed G clock 0.000
+   1.681 transport status playing clock 0.000
+   5.623 PICKER OPEN outputs Speaker:Speaker
+  11.351 ROUTE CHANGE newDeviceAvailable: Speaker:Speaker -> hwRate=44100 ioBuffer=23.2ms outputLatency=2000.0ms outputs=AirPlay:Timothy’s MacBook Pro
+  11.355 prompt 'Pick AirPlay (.playback)': fired: AirPlay:Timothy’s MacBook Pro
+  11.391 AUTO-FLUSH flushTime 9.509 clock 9.540 latency 2000.0 ms AirPlay:Timothy’s MacBook Pro
+  11.393 transport status buffering clock 9.540
+  11.425 transport status playing clock 9.540
+  21.464 transport status buffering clock 19.133
+  21.501 transport status playing clock 19.133
+  25.855 transport status ended clock 21.133
+  27.842 prompt 'Did you hear a glitch?': Gap or click
+  27.843 CHECK G3P: pass - fired: AirPlay:Timothy’s MacBook Pro; 1 auto-flush(es) ["re-feed 1970.217 ms vs heard"]; latency 15.354 -> 2000.0 ms; position rate 1.00, stall 2556 ms; picker opened 4.0 s after play, route fired 9.7 s; 2 position stall(s) over 250 ms; .ended after 4.41 s; owner: Gap or click
+  27.859 === CHECK G4P Back to the iPhone (.playback) ===
+  27.899 session .playback longForm=false preferredRate=unset: hwRate=44100 ioBuffer=23.2ms outputLatency=2000.0ms outputs=AirPlay:Timothy’s MacBook Pro
+  27.913 transport status buffering clock 0.000
+  27.918 transport crossed G clock 0.000
+  27.940 transport status playing clock 0.000
+  34.931 PICKER OPEN outputs AirPlay:Timothy’s MacBook Pro
+  36.629 transport status buffering clock 8.363
+  36.635 ROUTE CHANGE override: AirPlay:Timothy’s MacBook Pro -> hwRate=48000 ioBuffer=21.3ms outputLatency=15.4ms outputs=Speaker:Speaker
+  36.648 prompt 'Back to the iPhone (.playback)': fired: Speaker:Speaker
+  36.663 transport status playing clock 8.363
+  36.663 AUTO-FLUSH flushTime 8.363 clock 8.363 latency 15.4 ms Speaker:Speaker
+  36.665 transport status buffering clock 8.363
+  36.695 transport status playing clock 8.363
+  46.785 transport status buffering clock 18.290
+  46.829 transport status playing clock 18.290
+  49.067 transport status ended clock 20.290
+  50.479 prompt 'Did you hear a glitch?': Gap or click
+  50.480 CHECK G4P: pass - fired: Speaker:Speaker; 1 auto-flush(es) ["re-feed 16.674 ms vs heard"]; latency 2000.0 -> 15.354 ms; position rate 1.00, stall 265 ms; picker opened 7.0 s after play, route fired 8.7 s; 2 position stall(s) over 250 ms; .ended after 2.35 s; owner: Gap or click
+  50.500 CHECK done in 50 s
