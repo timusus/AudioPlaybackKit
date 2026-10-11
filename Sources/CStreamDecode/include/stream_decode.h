@@ -199,7 +199,8 @@ void stream_decoder_cancel(StreamDecoder *decoder);
  * The seek race this exists for: the player's pull loop can be blocked inside a read on a stalled
  * connection, and a seek queued behind it would not be applied until the network answered — which
  * on a dead link is never. Cancelling would answer the seek but destroy the decoder; this leaves it
- * open and reusable, and `stream_decoder_seek` clears the flag. `stream_decoder_read` then reports
+ * open and reusable once `stream_decoder_clear_interrupt` clears the flag, which the caller does
+ * before the seek that answers it. `stream_decoder_read` then reports
  * `STREAM_DECODE_ERR_INTERRUPTED`, which the caller must not read as end of stream.
  *
  * Safe from any thread, idempotent. The reader's own `interrupt` still has to unblock a call that

@@ -186,9 +186,8 @@ int stream_decoder_seek(StreamDecoder *decoder, double seconds, double *landed_s
 static int seek_to(StreamDecoder *decoder, double seconds, double *landed_seconds) {
     *landed_seconds = seconds;
     if (decoder->cancelled) return STREAM_DECODE_ERR_CANCELLED;
-    /* The seek IS the answer to the interruption: clearing it here, before anything reads, is what
-     * makes an interrupted decoder reusable rather than dead. */
-    decoder->interrupted = 0;
+    /* The caller clears the interruption (`stream_decoder_clear_interrupt`) before the seek: only it
+     * knows whether a pending one was meant for the previous call or for this seek. */
     sd_avio_clear_latched_error(decoder);
     if (seconds < 0) seconds = 0;
 

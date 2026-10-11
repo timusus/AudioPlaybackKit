@@ -148,6 +148,11 @@ public final class FFmpegStreamDecoder {
     /// a FLAC, ALAC or PCM WAV/AIFF stream. A caller whose open turns out wrong can retry with
     /// `forcesProbe: true`.
     public private(set) var skippedProbe = false
+    /// Guards `handle` against `interrupt()` and makes a seek's clear atomic with an interrupt, so
+    /// one aimed at the call can never land between the clear and the call.
+    private let interruptLock = NSLock()
+    private var generation: UInt64 = 0
+    private var interruptedThrough: UInt64?
     #if canImport(CStreamDecode)
         private var handle: OpaquePointer?
     #endif
@@ -228,7 +233,11 @@ public final class FFmpegStreamDecoder {
                     throw StreamDecoderError.failed(status: status)
                 }
             }
-            handle = opened
+            interruptLock.withLock {
+                handle = opened
+                // An interrupt that reached only the reader while the open ran reaches the C side too.
+                if let interruptedThrough, interruptedThrough >= generation { stream_decoder_interrupt(opened) }
+            }
             skippedProbe = info.skipped_probe != 0
             let format = StreamAudioFormat(
                 sampleRate: Double(info.sample_rate),
@@ -266,8 +275,12 @@ public final class FFmpegStreamDecoder {
             if reason == .failure, let failure { throw failure }
             // The seek is the answer to an interruption, so both sides of it are cleared before
             // anything reads: leaving either latched would make one interrupted read permanent.
-            reader.clearInterrupt()
-            stream_decoder_clear_interrupt(handle)
+            // Not one aimed at this generation, though: that is meant for this seek.
+            interruptLock.withLock {
+                if let interruptedThrough, interruptedThrough >= generation { return }
+                reader.clearInterrupt()
+                stream_decoder_clear_interrupt(handle)
+            }
             var landed: Double = 0
             let status = stream_decoder_seek(handle, seconds, &landed)
             switch status {
@@ -416,7 +429,9 @@ public final class FFmpegStreamDecoder {
     public func cancel() {
         box.cancel()
         #if canImport(CStreamDecode)
-            if let handle { stream_decoder_cancel(handle) }
+            interruptLock.withLock {
+                if let handle { stream_decoder_cancel(handle) }
+            }
         #endif
     }
 
@@ -427,6 +442,26 @@ public final class FFmpegStreamDecoder {
     /// never happens and on a slow one it lands late. ``cancel()`` would answer it and end the
     /// decode; this ends only the call. Safe from any thread.
     public func interrupt() {
+        interruptLock.withLock(raiseInterrupt)
+    }
+
+    /// The calls that follow belong to `generation`, until the next `begin`. A caller that never
+    /// calls it has every call in generation 0.
+    package func begin(generation: UInt64) {
+        interruptLock.withLock { self.generation = generation }
+    }
+
+    /// Any thread: brings back early every call of `generation` or earlier, the one in flight and
+    /// any still to come, including the seek that would otherwise clear it. Later ones run.
+    package func interrupt(through generation: UInt64) {
+        interruptLock.withLock {
+            interruptedThrough = max(interruptedThrough ?? generation, generation)
+            if self.generation <= generation { raiseInterrupt() }
+        }
+    }
+
+    /// Locked.
+    private func raiseInterrupt() {
         box.interrupt()
         #if canImport(CStreamDecode)
             if let handle { stream_decoder_interrupt(handle) }
