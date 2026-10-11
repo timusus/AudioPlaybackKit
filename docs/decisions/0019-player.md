@@ -1,6 +1,6 @@
 # ADR-0019: A player layer over Transport
 
-Status: Proposed
+Status: Accepted (2026-10-11)
 Date: 2026-10-11
 
 ## Context
@@ -154,7 +154,7 @@ public final class Player<Item: Hashable & Sendable> {
 
     // Position, in seconds of the current item's media time.
     public private(set) var position: TimeInterval   // what is heard; updated every 100 ms while it changes
-    public private(set) var duration: TimeInterval?  // nil until probed, or for a live stream (#115)
+    public private(set) var duration: TimeInterval?  // nil until probed, or for a live stream
     public private(set) var isLive: Bool
     public func seek(to position: TimeInterval)
     public func seek(to position: TimeInterval, itemAt index: Int)
@@ -394,7 +394,7 @@ become:
 
 | # | Title | Scope | Size | Depends on |
 |---|---|---|---|---|
-| 1 | Transport in seconds | `Transport.setCurrent(startSeconds:)` and `seek(item:toSeconds:)` (converted after open, frames kept inside); a failed next item is reported and dropped without pausing the current; `TransportEvent.duration(item:seconds:)` lands with #115. Useful alone: an app on `Transport` stops storing frames | S | #115 |
+| 1 | Transport in seconds | `Transport.setCurrent(startSeconds:)` and `seek(item:toSeconds:)` (converted after open, frames kept inside); a failed next item is reported and dropped without pausing the current. Duration has landed (#115): `ItemSource.duration` in frames, carried by `TransportEvent.position(…, duration:)`. Useful alone: an app on `Transport` stops storing frames | S | #115 (landed) |
 | 2 | `Player` core | product, item list and edits, state and `playWhenReady`, position and duration, seek within and across items, rate, volume, processors, `events`, `@Observable`; `FakeItemFactory`; the core and edit tests | M | 1, #116 |
 | 3 | Advance, repeat, pause at end | pre-arm and `setNext` handoff, `.crossed` to `itemTransition`, `repeatMode`, `pauseAtEndOfItem`, `.ended`, per-item failure rules; the advance and error tests | M | 2 |
 | 4 | Audio session | `AudioSessionControlling`, `SystemAudioSession`, `AudioSessionConfiguration`, activation, interruptions, route changes, media-services reset interplay; `FakeAudioSession`; the session tests | M | 2 |
@@ -402,8 +402,9 @@ become:
 | 6 | `PlaybackNowPlaying` | `NowPlayingSession`: metadata closure, artwork, skip intervals or next/previous, `supportedRates`, elapsed written on change only; tests against a fake info centre and command centre (Shuttle2's `NowPlayingInfoCenter` and `RemoteCommandCenter` protocols are the model) | M | 3 |
 | 7 | Docs and release | `usage.md` player section, `migrating.md` rewritten to the tables above, README product table, 0.10.0 | S | 2 to 6 |
 
-Live processor parameter changes (#114) are needed by both apps before the flag flips but are a render
-change, not a slice here.
+Live processor parameters (#114) have landed, so this is not a slice here: `Transport.setProcessors` no
+longer flushes, and parameter changes apply live. Only a change to a processor's `isActive` or output
+format needs `setProcessors` called again.
 
 ## Alternatives rejected
 
@@ -440,24 +441,23 @@ change, not a slice here.
 - The sleep-timer fade and the Smart Skip chime stay in the apps until the render layer can mix at the
   playhead, so Podcasts keeps a second `AVAudioPlayer` for the chime.
 
-## Open questions
+## Decided
 
-1. **Shuffle in the player or the app?** Recommend the app: both queue models are Kotlin and shared with
-   Android; the player takes the list in play order.
-2. **Auto-resume after a media-services reset when `playWhenReady` was true?** Recommend no, keep
-   ADR-0018's "lands paused" and the `recoveredPaused` event; revisit if users report it.
-3. **Failed-item policy in the player (skip with a cap, as Shuttle2's Kotlin does)?** Recommend no:
-   media3 stops with an error, the apps differ, and the `itemFailed` handler is one place per app.
-4. **Position cadence: every pump (10 Hz) or 2 Hz?** Recommend every pump; `@Observable` only redraws
-   views that read `position`, and a saver samples at its own rate.
-5. **Generic `Player<Item>` or a concrete `PlaybackItem`?** Recommend generic: both apps have a track
-   type with fields a URL cannot carry, and `Transport` is already generic.
-6. **Product name for Now Playing: `PlaybackNowPlaying` or `PlaybackMediaSession`?** Recommend
-   `PlaybackNowPlaying`: it names the Apple API it wraps, and "session" already means `AVAudioSession` here.
-7. **Should a `Transport` failure of a pre-armed next item stop pausing the current (slice 1)?**
-   Recommend yes; today `Transport.fail` pauses on any item's failure, which would stop an album
-   because the track after the current one is corrupt.
-8. **Migrate straight onto `Player`?** Recommend yes, for both apps, as argued above.
+- **Shuffle lives in the app.** Both queue models are Kotlin and shared with Android; the player takes
+  the list in play order.
+- **A failed item stops the player and is reported, with no auto-skip.** media3 stops with an error, the
+  apps' policies differ, and the `itemFailed` handler is one place per app.
+- **`Player<Item>` is generic.** Both apps' track types carry fields a URL cannot, and `Transport` is
+  already generic.
+- **No auto-resume after a media-services reset.** It lands paused with `recoveredPaused`, as ADR-0018
+  says; revisit only if users report it.
+- **Position is published on every pump.** `@Observable` redraws only the views that read `position`,
+  and a saver samples at its own rate.
+- **The product is `PlaybackNowPlaying`.** It names the Apple API it wraps, and "session" already means
+  `AVAudioSession` here.
+- **A pre-armed next item that fails no longer pauses the current one** (slice 1). `Transport` pauses on
+  any item's failure today, which would stop an album because the track after the current one is corrupt.
+- **Both apps migrate straight onto `Player`.** Moving onto `Transport` first writes the adapters twice.
 
 Links: [ADR-0018](0018-render-layer.md), [ADR-0005](0005-shared-engine-repo.md),
 [migrating](../migrating.md), [usage](../usage.md), issues #114, #115, #116; media3 `Player`,
