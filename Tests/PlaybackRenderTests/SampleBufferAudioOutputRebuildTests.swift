@@ -18,6 +18,15 @@ final class SampleBufferAudioOutputRebuildTests: XCTestCase {
         XCTAssertEqual(output.renderer.audioTimePitchAlgorithm, .timeDomain)
     }
 
+    func testAChosenTimePitchAlgorithmSurvivesARebuild() throws {
+        let output = SampleBufferAudioOutput(timePitchAlgorithm: .spectral)
+        XCTAssertEqual(output.renderer.audioTimePitchAlgorithm, .spectral)
+
+        try output.rebuild()
+
+        XCTAssertEqual(output.renderer.audioTimePitchAlgorithm, .spectral)
+    }
+
     func testEventsFromAReplacedRendererAreDropped() throws {
         let output = SampleBufferAudioOutput()
         let events = EventBox()

@@ -1,4 +1,4 @@
-import Foundation
+import AVFoundation
 
 public enum TransportStatus: Equatable, Sendable {
     case paused
@@ -62,8 +62,14 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// Plays through the device's audio output (`AVSampleBufferAudioRenderer`). The transport never
     /// touches `AVAudioSession`: on iOS the app sets the category and activates the session before
     /// `play()`, and handles interruptions. `onEvent` is called on the transport's queue.
-    public convenience init(onEvent: @escaping @Sendable (TransportEvent<Item>) -> Void) {
-        self.init(output: SampleBufferAudioOutput(), onEvent: onEvent)
+    ///
+    /// `timePitchAlgorithm` is how speed keeps pitch: `.timeDomain` (the default) had the shortest
+    /// dropout on a speed change on the iPhone probe (97 ms to 2x, 140 ms back); `.spectral` suits music.
+    public convenience init(
+        timePitchAlgorithm: AVAudioTimePitchAlgorithm = .timeDomain,
+        onEvent: @escaping @Sendable (TransportEvent<Item>) -> Void
+    ) {
+        self.init(output: SampleBufferAudioOutput(timePitchAlgorithm: timePitchAlgorithm), onEvent: onEvent)
     }
 
     init(
