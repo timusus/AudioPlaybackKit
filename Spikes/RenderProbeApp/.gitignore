@@ -1,0 +1,5 @@
+RenderProbe.xcodeproj
+Info.plist
+build/
+# About 30 MB a run; kept locally for listening, results.json and auto.log carry the verdicts.
+results/*/*.wav

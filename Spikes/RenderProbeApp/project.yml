@@ -1,0 +1,38 @@
+name: RenderProbe
+options:
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    DEVELOPMENT_TEAM: 9HYNX943MQ
+    CODE_SIGN_STYLE: Automatic
+packages:
+  AudioPlaybackKit:
+    path: ../..
+targets:
+  RenderProbe:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      # The real fixture for the 44.1k -> 48k join in --check.
+      - path: ../../Tests/PlaybackDecodeTests/Fixtures/tone.mp3
+        buildPhase: resources
+    dependencies:
+      - package: AudioPlaybackKit
+        product: PlaybackRender
+      - package: AudioPlaybackKit
+        product: PlaybackDecode
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.simplecityapps.renderprobe
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Render Probe
+        UILaunchScreen: {}
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UIBackgroundModes: [audio]
+        NSMicrophoneUsageDescription: Records the speaker to detect glitches and measure clock alignment.
