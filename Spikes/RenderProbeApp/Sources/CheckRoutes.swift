@@ -7,6 +7,8 @@ import PlaybackRender
 extension CheckScenarios {
     struct Step {
         let name: String
+        /// The fastest rate in the step, so a position running ahead at it is not reported as a skip.
+        var maxRate = 2.0
         let act: (CheckProbe) async throws -> Void
     }
 
@@ -18,8 +20,8 @@ extension CheckScenarios {
         try Session.configureMeasurement()
         let ear = try await Ear.start()
         // Time-pitch makes the chirp unmatchable across a rate change, so the mic gives silence only.
-        return try await flushRun(ear: ear, replayFromMic: false, [2.0, 1, 0.5].map { rate in
-            Step(name: "rate \(fmt(rate, 1))") { $0.transport.setRate(rate) }
+        return try await flushRun(ear: ear, replayFromMic: false, [2.0, 1, 0.5, 1, 3].map { rate in
+            Step(name: "rate \(fmt(rate, 1))", maxRate: max(rate, 2)) { $0.transport.setRate(rate) }
         })
     }
 
@@ -125,7 +127,7 @@ extension CheckScenarios {
                 }
                 return report
             }
-            let jump = probe.maxJump(from: entry.begin - 0.5, to: end) * 1000
+            let jump = probe.maxJump(from: entry.begin - 0.5, to: end, maxRate: entry.step.maxRate) * 1000
             let stepBack = trace.largestStepBack(from: entry.begin - 0.5, to: end) * 1000
             reports.append([
                 "step": entry.step.name, "outputsBefore": entry.outputs, "outputsAfter": Session.outputs,

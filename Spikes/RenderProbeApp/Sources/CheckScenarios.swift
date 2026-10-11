@@ -22,7 +22,7 @@ enum CheckScenarios {
         .init(id: "A5", question: "seek: silence and landing", guided: false, run: seek),
         .init(id: "A6", question: "setNext near the end, and after .ended", guided: false, run: setNext),
         .init(id: "A7", question: "auto-flush re-feed (port override): replayed or skipped audio", guided: false, run: autoFlush),
-        .init(id: "A8", question: "auto-flush on rate 1 -> 2 -> 1 -> 0.5", guided: false, run: rateFlush),
+        .init(id: "A8", question: "auto-flush on rate 1 -> 2 -> 1 -> 0.5 -> 1 -> 3", guided: false, run: rateFlush),
         .init(id: "A9", question: "forced route: receiver -> speaker override -> receiver, category playback <-> playAndRecord", guided: false, run: forcedRoute),
         .init(id: "A10", question: "interruption by a non-mixable session in another app", guided: false, run: interruptedByApp),
     ]
@@ -393,12 +393,12 @@ extension CheckProbe {
 
     /// The largest step between consecutive positions beyond what the elapsed time explains at
     /// whatever rate held: a skip (positive) or a repeat (negative), in seconds.
-    func maxJump(from: Double, to: Double) -> Double {
+    func maxJump(from: Double, to: Double, maxRate: Double = 2) -> Double {
         let window = positions.filter { $0.host >= from && $0.host <= to }
         let steps = zip(window, window.dropFirst()).map { a, b -> Double in
             let elapsed = b.host - a.host
             let moved = b.seconds - a.seconds
-            return moved < 0 ? moved : max(0, moved - 2 * elapsed)
+            return moved < 0 ? moved : max(0, moved - maxRate * elapsed)
         }
         return steps.max { abs($0) < abs($1) } ?? 0
     }
