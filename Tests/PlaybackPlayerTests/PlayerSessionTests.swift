@@ -307,6 +307,83 @@ final class PlayerSessionTests: XCTestCase {
         XCTAssertEqual(PlayerRig.kinds(events), [.recoveredPaused])
     }
 
+    func testARendererFailureTheTransportRecoversLandsPausedAndSendsRecoveredPaused() async {
+        startPlaying()
+        rig.output.injectFailure()
+        rig.pump()
+        XCTAssertEqual(rig.output.rebuilds, 1)
+        XCTAssertFalse(player.playWhenReady, "the UI shows paused, not playing over silence")
+        XCTAssertEqual(player.state, .ready)
+        XCTAssertNil(player.error)
+        XCTAssertFalse(isHeard())
+
+        player.play()
+        XCTAssertTrue(isHeard())
+        XCTAssertEqual(session.calls, [.configure, .activate], "the session was never lost")
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.kinds(events), [.recoveredPaused])
+    }
+
+    // The seek's answer would drop events held before it, but the recovery's pause outlives the seek.
+    func testARecoveryHeldBehindASeekStillLandsPaused() async {
+        startPlaying()
+        let recovery = rig.inFlight {
+            rig.output.injectFailure()
+            rig.timer.fire()
+        }
+        let answer = rig.inFlight { player.seek(to: 0.5) }
+        rig.deliver(recovery)
+        rig.deliver(answer)
+        XCTAssertFalse(player.playWhenReady)
+        XCTAssertFalse(isHeard())
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.kinds(events).filter { $0 == .recoveredPaused }.count, 1)
+    }
+
+    // A play the transport took after its recovery, before the player heard of it, is paused with it,
+    // so the intent and the transport agree.
+    func testAPlayRacingARecoveryEndsPausedWithTheTransport() {
+        startPlaying()
+        player.pause()
+        let recovery = rig.inFlight {
+            rig.output.injectFailure()
+            rig.timer.fire()
+        }
+        player.play()
+        rig.deliver(recovery)
+        XCTAssertFalse(player.playWhenReady)
+        XCTAssertFalse(isHeard())
+    }
+
+    // With nothing loaded there is nothing to suppress, so nothing resumes onto an empty session.
+    func testAnInterruptionAfterStopThatShouldResumeLeavesTheSessionInactive() async {
+        startPlaying()
+        player.stop()
+        session.interruptionBegan()
+        XCTAssertEqual(player.suppression, .none)
+        session.interruptionEnded(shouldResume: true)
+        XCTAssertEqual(session.calls, [.configure, .activate, .deactivate])
+        XCTAssertEqual(player.state, .idle)
+
+        player.play()
+        XCTAssertTrue(isHeard())
+        XCTAssertEqual(session.calls, [.configure, .activate, .deactivate, .activate])
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [])
+    }
+
+    func testAnInterruptionAfterStopThatEndsForGoodSendsNothing() async {
+        startPlaying()
+        player.stop()
+        session.interruptionBegan()
+        session.interruptionEnded(shouldResume: false)
+        XCTAssertEqual(player.suppression, .none)
+        XCTAssertTrue(player.playWhenReady, "stop keeps the intent, as media3 does")
+        XCTAssertEqual(session.calls, [.configure, .activate, .deactivate])
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [], "the user already stopped it")
+    }
+
     // media3 AudioFocusManagerTest.updateAudioFocus_readyToIdle_abandonsAudioFocus.
     func testStopDeactivatesAndTheNextPlayActivatesAgain() {
         startPlaying()

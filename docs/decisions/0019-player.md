@@ -319,8 +319,11 @@ Rules, taken from Shuttle2's `AudioSessionController` and media3's `AudioFocusMa
   stays true so the user's next tap retries). The category is set at init. `stop()`, and the list
   emptying, call `setActive(false, options: .notifyOthersOnDeactivation)`.
 - **Interruption began**: the system has deactivated the session, so the next play activates again.
-  If `playWhenReady` is true, `suppression = .interruption` and `Transport.pause()`; `playWhenReady` is
-  untouched. Paused already, nothing is suppressed and nothing resumes. A `pause()` from the app during
+  If `playWhenReady` is true and an item is loaded without an error, `suppression = .interruption` and
+  `Transport.pause()`; `playWhenReady` is untouched. Paused, stopped or failed, nothing is suppressed and
+  nothing resumes, so the session is never activated with nothing to play and a stopped player gets no
+  `playWhenReadyChanged`. The guard sits on the suppression rather than on activation, so a stopped
+  player never shows "paused by another app" either. A `pause()` from the app during
   the interruption clears `suppression`, which is the memory of wanting to resume (Shuttle2's "no user
   action in between").
 - **Interruption ended** while still suppressed: with `shouldResume`, `setActive(true)`, then
@@ -336,12 +339,14 @@ Rules, taken from Shuttle2's `AudioSessionController` and media3's `AudioFocusMa
   auto-play on headphones (`HeadphoneObserver`, `pref_auto_play_headphones`) is a preference and stays in
   the app, which observes the route itself.
 - **Media-services reset**: the session seam reports it; the player sets the category again, marks the
-  session inactive, clears `suppression`, sets `playWhenReady = false` without a `playWhenReadyChanged`
-  and, with an item loaded, sends `recoveredPaused` at once. `Transport`'s own rebuild restarts paused at
-  the heard position (ADR-0018: one recovery layer), whichever of the two hears the reset first, so the
-  player need not wait for its `.paused`; the next `play()` activates again. A renderer failure the
-  transport recovers by itself is not yet reported to the player (no transport event says so), so it
-  sets neither. Shuttle2's `rebuildEngine` and
+  session inactive and clears `suppression`; the next `play()` activates again. On iOS
+  `SampleBufferAudioOutput` observes the same notification, and the feeder rebuilds the output and
+  restarts paused at the heard position (ADR-0018: one recovery layer), whichever of the two hears it
+  first. That rebuild, like the one after a renderer failure, sends `TransportEvent.recovered`; on it the
+  player, with an item loaded, sets `playWhenReady = false` without a `playWhenReadyChanged`, clears
+  `suppression`, pauses the transport (covering a `play()` the transport took before the event arrived)
+  and sends `recoveredPaused`. Both recoveries share this one path. `.recovered` is never held behind an
+  unanswered seek: the feeder's pause outlives any restart. Shuttle2's `rebuildEngine` and
   `reloadEngine(positionMs:)` go; Podcasts gains handling it never had.
 - **Pump while suppressed**: an app `seek` or `skipToNext` during an interruption is applied paused;
   the resume rule above decides whether audio starts.
@@ -354,9 +359,16 @@ throw or wait, and
 posts `interruptionBegan`, `interruptionEnded(shouldResume:)`, `routeChanged(reason:previous:current:)`
 and `mediaServicesReset`), and `FakeItemFactory` (hands a `FakeItemSource` per item with a chosen
 format, length and failure point, and records which items were asked for and when). `Player` gets an
-internal initialiser taking a `Transport` built on the fake output, the session seam and the factory;
-`PlaybackPlayerTestSupport` exposes it, so each app tests its own coordinator the same way. Tests
-advance the clock, fire the pump and `await` the main-actor state.
+internal initialiser taking a `Transport` built on the fake output, the session seam and the factory.
+In this slice `FakeAudioSession` lives in the test target, since a separate module cannot see internal
+symbols. For each app to test its own coordinator the same way, slice 5 (#123) widens
+`AudioSessionControlling`, `AudioSessionEvent`, `AudioRouteChangeReason`, `AudioPortKind` and that
+initialiser to
+`@_spi(Testing) public`, and moves `FakeAudioSession` into `PlaybackPlayerTestSupport`, which imports
+`PlaybackPlayer` with `@_spi(Testing)`. Not `package` access: the apps' test targets are in other
+packages, so a `package` symbol cannot reach them, nor appear in TestSupport's public API.
+`@_spi(Testing)` is what `Transport.init(output:timer:executor:onEvent:)` already uses. Tests advance
+the clock, fire the pump and `await` the main-actor state.
 
 Cases each slice must have:
 
@@ -384,7 +396,9 @@ Cases each slice must have:
   throws stays suppressed; `oldDeviceUnavailable` for headphones pauses with reason `.routeLost`; a
   Bluetooth profile switch does not; an unplug during an interruption cancels the resume; a
   media-services reset reconfigures the category, lands paused and sends `recoveredPaused`, twice in a
-  row and during an interruption too; `stop()` deactivates with `notifyOthersOnDeactivation`. Each
+  row and during an interruption too, and so does a renderer failure the transport recovers, even
+  held behind a seek; an interruption after `stop()` neither reactivates nor sends
+  `playWhenReadyChanged`; `stop()` deactivates with `notifyOthersOnDeactivation`. Each
   in-scope `AudioFocusManagerTest` case is mapped in `docs/player-conformance-mapping.md`.
 - **Now Playing**: the info centre gets title, duration, elapsed and rate on item change and state
   change and not on each position tick; a 15 s skip interval registers `skipForward` and not
@@ -429,7 +443,7 @@ become:
 | 2 | `Player` core | product, item list and edits, state and `playWhenReady`, position and duration, seek within and across items, rate, volume, processors, `events`, `@Observable`; `FakeItemFactory`; the core and edit tests | M | 1, #116 |
 | 3 | Advance, repeat, pause at end | pre-arm and `setNext` handoff, `.crossed` to `itemTransition`, `repeatMode`, `pauseAtEndOfItem`, `.ended`, per-item failure rules; the advance and error tests | M | 2 |
 | 4 | Audio session | `AudioSessionControlling`, `SystemAudioSession`, `AudioSessionConfiguration`, activation, interruptions, route changes, media-services reset interplay; `FakeAudioSession`; the session tests | M | 2 |
-| 5 | `PlaybackPlayerTestSupport` | public fakes and the test initialiser, matching `PlaybackStreamingTestSupport`; one example test an app copies | S | 2, 4, #116 |
+| 5 | `PlaybackPlayerTestSupport` | the session seam and test initialiser widened to `@_spi(Testing)` (Testing above); public fakes, matching `PlaybackStreamingTestSupport`; one example test an app copies | S | 2, 4, #116 |
 | 6 | `PlaybackNowPlaying` | `NowPlayingSession`: metadata closure, artwork, skip intervals or next/previous, `supportedRates`, elapsed written on change only; tests against a fake info centre and command centre (Shuttle2's `NowPlayingInfoCenter` and `RemoteCommandCenter` protocols are the model) | M | 3 |
 | 7 | Docs and release | `usage.md` player section, `migrating.md` rewritten to the tables above, README product table, 0.10.0 | S | 2 to 6 |
 

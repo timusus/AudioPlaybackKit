@@ -91,6 +91,7 @@ final class SystemAudioSession: AudioSessionControlling {
             default: .other
             }
             let previous = info[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription
+            // The notification carries only the old route; a newer one read here posts its own change.
             return .routeChanged(
                 reason: reason,
                 previous: kinds(previous),

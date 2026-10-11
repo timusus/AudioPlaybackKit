@@ -360,9 +360,13 @@ public final class Player<Item: Hashable & Sendable> {
                 }
                 continue
             }
-            // A failed armed next is dropped by the transport whatever was called since.
-            let armedFailed = if case let .failed(key?, _) = event { key == armedKey } else { false }
-            if unansweredCalls > 0, !armedFailed {
+            // A failed armed next is dropped, and a recovery's pause stands, whatever was called since.
+            let outlivesCalls = switch event {
+            case let .failed(key?, _): key == armedKey
+            case .recovered: true
+            default: false
+            }
+            if unansweredCalls > 0, !outlivesCalls {
                 held.append(event)
                 continue
             }
@@ -405,7 +409,8 @@ public final class Player<Item: Hashable & Sendable> {
             // The system has deactivated the session, so the next play activates it again.
             sessionActive = false
             pendingActivation = nil
-            guard intent else { return }
+            // Stopped or failed, nothing plays to suppress, so the end has nothing to resume or cancel.
+            guard intent, loadedKey != nil, error == nil else { return }
             suppression = .interruption
             transport.pause()
         case let .interruptionEnded(shouldResume):
@@ -421,17 +426,23 @@ public final class Player<Item: Hashable & Sendable> {
             guard reason == .oldDeviceUnavailable, lost, intent else { return }
             pauseByPlayer(.routeLost)
         case .mediaServicesReset:
-            // Transport rebuilds its output and restarts paused; the player matches it and never resumes.
+            // The session is gone, interruption and all. The transport rebuilds its output on its
+            // own and reports `.recovered`, which lands the player paused.
             session.configure()
             sessionActive = false
             pendingActivation = nil
             suppression = .none
-            if intent {
-                intent = false
-                transport.pause()
-            }
-            if loadedKey != nil { send(.recoveredPaused) }
         }
+    }
+
+    /// The transport rebuilt its output and restarted paused, so the intent follows it and nothing
+    /// resumes. Its pause also covers a play it took before the player heard of the recovery.
+    private func recoveredPaused() {
+        guard loadedKey != nil else { return }
+        intent = false
+        suppression = .none
+        transport.pause()
+        send(.recoveredPaused)
     }
 
     // MARK: Private
@@ -456,7 +467,9 @@ public final class Player<Item: Hashable & Sendable> {
             failed(key, underlying)
         case let .crossed(key):
             crossed(into: key)
-        case .sought, .recovered:
+        case .recovered:
+            recoveredPaused()
+        case .sought:
             break
         }
     }
