@@ -76,9 +76,10 @@ final class Feeder {
         let inbox = inbox
         output.setEventHandler { [output] event in
             switch event {
+            // The flush time is where the output dropped audio, not a clock reading: no latency to take off.
             case let .autoFlushed(at: time): inbox.post(time)
             // A stalled clock stops tracking what is heard, so take the time it stalled at now.
-            case .stalled: inbox.post(output.currentTime())
+            case .stalled: inbox.post(output.currentTime() - output.outputLatency)
             }
         }
     }
@@ -130,7 +131,7 @@ final class Feeder {
     /// ready-for-more callback, often enough that `resumeDepth` outlasts the gap between calls.
     func pump() {
         if let time = inbox.drain() {
-            restart(from: currentPosition(at: map.playhead(currentTime: time, outputLatency: output.outputLatency)))
+            restart(from: currentPosition(at: max(map.epochStart, time)))
         }
 
         // Pause before refilling: audio stamped behind a running clock never plays. Only once the
@@ -234,7 +235,8 @@ final class Feeder {
     }
 }
 
-/// Output events reduced to the output time to restart from; the earliest wins.
+/// Output events reduced to the output time to restart from, heard rather than clock time; the
+/// earliest wins.
 private final class RestartInbox: @unchecked Sendable {
     private let lock = NSLock()
     private var time: TimeInterval?

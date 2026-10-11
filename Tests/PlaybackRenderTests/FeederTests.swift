@@ -162,6 +162,21 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(positions.map(\.mediaFrame), Array(0...40))
     }
 
+    // #102: the flush time is where the output dropped audio, already on the clock's timeline, so
+    // re-feeding a latency earlier replayed that much on every iPhone route change.
+    func testWithOutputLatencyAnAutoFlushResuppliesFromTheFlushTimeNotALatencyEarlier() {
+        makeFeeder([item(0, 40)], latency: 0.25)
+        feeder.play()
+        run(for: 1)
+        output.injectAutoFlush()
+        feeder.pump()
+
+        XCTAssertEqual(upstream.resupplies, [pos(0, 4)])
+        XCTAssertEqual(output.enqueues.last { $0.time == 1 }?.samples.first, FakeUpstream.sample(0, 4))
+        run(for: 10)
+        XCTAssertEqual(heard, ramp(0, 0..<40))
+    }
+
     func testAStallTakesTheSameRecoveryPath() {
         makeFeeder([item(0, 40)])
         feeder.play()
