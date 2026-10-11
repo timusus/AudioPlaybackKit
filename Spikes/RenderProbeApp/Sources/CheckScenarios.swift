@@ -5,14 +5,22 @@ import PlaybackRender
 /// The scenarios behind `--check`. Automatic ones play through the speaker under .playAndRecord /
 /// .measurement and judge the mic; guided ones run under .playback and wait for the owner.
 enum CheckScenarios {
-    static let tone = Signals.sine(1000, 0.5)
+    // About 20 dB under the first versions: the Ear analysis is relative to the measured level, so it
+    // only needs the tone to stay clear of the room noise.
+    static let tone = Signals.sine(1000, 0.05)
+
+    /// 20 dB under `Signals.click`.
+    static let click: Signal = { t, channel, segment in 0.1 * Signals.click(t, channel, segment) }
 
     /// A 300 -> 3000 Hz sweep every second: no two moments within half a second sound alike, so the mic
     /// can tell which media time it hears.
     static let chirp: Signal = { t, _, _ in
         let tau = t - t.rounded(.down)
-        return 0.4 * Float(sin(2 * .pi * (300 * tau + 0.5 * 2700 * tau * tau)))
+        return 0.04 * Float(sin(2 * .pi * (300 * tau + 0.5 * 2700 * tau * tau)))
     }
+
+    /// The chirp 40 dB further down, for checks that read only clocks and events.
+    static let hush: Signal = { t, channel, segment in 0.01 * chirp(t, channel, segment) }
 
     static let automatic: [CheckRun.Scenario] = [
         .init(id: "A1", question: "play to heard; .ended against the heard end", guided: false, run: playEnded),
@@ -75,7 +83,7 @@ enum CheckScenarios {
         let ear = try await Ear.start()
         defer { ear.stop() }
         let probe = try CheckProbe()
-        probe.transport.setCurrent(item: "P", source: ToneSource(rate: 44100, channels: 2, seconds: 13, Signals.click))
+        probe.transport.setCurrent(item: "P", source: ToneSource(rate: 44100, channels: 2, seconds: 13, click))
         probe.transport.play()
         try await probe.until(20) { ($0.positions.last?.seconds ?? 0) >= 12.6 }
         // The first item starts at output time 0, so a position and the clock differ only by the latency.
@@ -138,13 +146,16 @@ enum CheckScenarios {
         defer { ear.stop() }
         let probe = try CheckProbe()
         // The last 3 s of the 20 s fixture, so the first join comes 3 s in.
+        // The fixture's level is fixed, so the volume brings it down 20 dB and the tones are made 20 dB louder to match.
+        probe.transport.setVolume(0.1)
+        let loud = Signals.sine(1000, 0.5)
         probe.transport.setCurrent(item: "F", source: FFmpegItemSource(reader: try FileByteReader(url: url)), startFrame: 17 * 44100)
-        probe.transport.setNext(item: "B", source: ToneSource(rate: 48000, channels: 2, seconds: 3))
+        probe.transport.setNext(item: "B", source: ToneSource(rate: 48000, channels: 2, seconds: 3, loud))
         let playHost = hostNow()
         probe.transport.play()
         // Before decode reaches B a second setNext would replace it, so C waits for the crossing.
         try await probe.until(10) { !$0.events("crossed").filter { $0.detail == "B" }.isEmpty }
-        probe.transport.setNext(item: "C", source: ToneSource(rate: 44100, channels: 1, seconds: 3))
+        probe.transport.setNext(item: "C", source: ToneSource(rate: 44100, channels: 1, seconds: 3, loud))
         let ended = try await probe.until(10) { $0.status == .ended }
         try await pause(0.3)
         let joinB = probe.host(item: "B", at: 0), joinC = probe.host(item: "C", at: 0)

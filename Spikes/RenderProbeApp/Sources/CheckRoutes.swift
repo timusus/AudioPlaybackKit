@@ -52,7 +52,7 @@ extension CheckScenarios {
     /// this one for 3 s and then reopens this app. The probe does what an app does: pause, then reactivate and play.
     @Sendable static func interruptedByApp() async throws -> [String: Any] {
         try Session.configure(longForm: false)
-        return try await flushRun(ear: nil, replayFromMic: false, [
+        return try await flushRun(ear: nil, replayFromMic: false, signal: hush, [
             Step(name: "InterruptorApp") { probe in
                 let began = await interruption(.began, cap: 45) {
                     FileManager.default.createFile(atPath: interruptorFlag.path, contents: nil)
@@ -92,13 +92,13 @@ extension CheckScenarios {
         return await gate.wait()
     }
 
-    /// Plays 40 s of chirp, runs `steps` 3 s apart, then seeks to 2 s before the end to see `.ended`.
-    static func flushRun(ear: Ear?, replayFromMic: Bool, _ steps: [Step]) async throws -> [String: Any] {
+    /// Plays 40 s of `signal`, runs `steps` 3 s apart, then seeks to 2 s before the end to see `.ended`.
+    static func flushRun(ear: Ear?, replayFromMic: Bool, signal: @escaping Signal = chirp, _ steps: [Step]) async throws -> [String: Any] {
         defer { ear?.stop() }
         let probe = try CheckProbe()
         let trace = ClockTrace(probe.synchronizer)
         defer { trace.stop() }
-        let source = ToneSource(rate: 48000, channels: 1, seconds: 40, chirp)
+        let source = ToneSource(rate: 48000, channels: 1, seconds: 40, signal)
         probe.transport.setCurrent(item: "F", source: source)
         probe.transport.play()
         try await probe.until(5) { $0.status == .playing }
