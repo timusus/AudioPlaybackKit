@@ -3,6 +3,11 @@ import MediaPlayer
 import Observation
 import PlaybackPlayer
 
+/// How far the system's extrapolated elapsed time may stray from the heard position before it is
+/// rewritten. On an iPhone the output's clock started up to 0.2 s after a play on a fresh renderer and
+/// lost about 0.1 s on a rate change; a resume of a running renderer lost 0.04 s, left unwritten.
+private let maxDrift: TimeInterval = 0.05
+
 /// What the lock screen, Control Centre and CarPlay show for an item.
 public struct NowPlayingMetadata: Sendable {
     public var title: String
@@ -21,7 +26,8 @@ public struct NowPlayingMetadata: Sendable {
 
 /// Shows a `Player` in `MPNowPlayingInfoCenter` and routes `MPRemoteCommandCenter` back to it, until
 /// `release()`. Elapsed time and rate are written only on a jump of the player's position, a pause or
-/// play, a rate change or an item change; the system extrapolates between them. A command is enabled
+/// play, a rate change, an item change, or when what is heard strays from where the system has
+/// extrapolated it (the output started late). A command is enabled
 /// only while it applies, as media3's available commands: next while there is a next, previous on any
 /// item but a live one with nothing before it, skips and scrubbing while the item is seekable, play and
 /// pause always. One session per app, since both centres are global.
@@ -48,6 +54,8 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     private let artwork: (@MainActor (Item) async -> MPMediaItemArtwork?)?
     private let infoCenter: any NowPlayingInfoCenter
     private let commandCenter: any RemoteCommandCenter
+    /// Seconds on a monotonic clock, to tell how far the system has extrapolated elapsed time.
+    private let now: () -> TimeInterval
 
     private(set) var pendingRefresh: Task<Void, Never>?
     private(set) var artworkLoad: Task<Void, Never>?
@@ -58,8 +66,8 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     /// Tells one artwork load from another for the same item, so only the latest publishes.
     private var artworkLoads = 0
 
-    /// What was last written. Position is not compared: the system extrapolates it, and a jump moves
-    /// the player's `discontinuityCount`.
+    /// What was last written, and when. Position is compared only with where the system has
+    /// extrapolated it to: a jump moves the player's `discontinuityCount`.
     private struct Published {
         var item: Item
         var rate: Double
@@ -69,11 +77,13 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         var state: MPNowPlayingPlaybackState
         var discontinuity: Int
         var position: TimeInterval
+        var at: TimeInterval
 
         func sameShown(as other: Published) -> Bool {
             item == other.item && rate == other.rate && defaultRate == other.defaultRate
                 && duration == other.duration && isLive == other.isLive && state == other.state
                 && discontinuity == other.discontinuity
+                && abs(position + rate * (other.at - at) - other.position) <= maxDrift
         }
     }
 
@@ -99,8 +109,10 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         metadata: @escaping @MainActor (Item) -> NowPlayingMetadata,
         artwork: (@MainActor (Item) async -> MPMediaItemArtwork?)?,
         infoCenter: any NowPlayingInfoCenter,
-        commandCenter: any RemoteCommandCenter
+        commandCenter: any RemoteCommandCenter,
+        now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
+        self.now = now
         self.player = player
         self.skipMode = skipMode
         self.supportedRates = supportedRates
@@ -190,7 +202,8 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
             isLive: player.isLive,
             state: showsPlay ? .paused : .playing,
             discontinuity: player.discontinuityCount,
-            position: player.position
+            position: player.position,
+            at: now()
         )
     }
 

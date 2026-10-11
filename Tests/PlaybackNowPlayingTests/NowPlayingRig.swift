@@ -64,6 +64,8 @@ final class NowPlayingRig {
     var heldArtwork: Set<String> = []
     private var artworkWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
     private(set) var artworks: [String: MPMediaItemArtwork] = [:]
+    /// The session's clock, moved with the output's by `run`; a test moves it alone for output that starts late.
+    var wall: TimeInterval = 0
 
     var player: Player<String> { base.player }
 
@@ -80,13 +82,15 @@ final class NowPlayingRig {
             metadata: { NowPlayingMetadata(title: $0.uppercased(), artist: "Artist \($0)", album: "Album", duration: 99) },
             artwork: { [weak self] in await self?.loadArtwork($0) },
             infoCenter: info,
-            commandCenter: commands
+            commandCenter: commands,
+            now: { [weak self] in self?.wall ?? 0 }
         )
     }
 
     /// Runs the player for `seconds` of output, then lets the session catch up.
     func run(for seconds: TimeInterval) async {
         base.run(for: seconds)
+        wall += Double(Int(seconds * 4)) / 4
         await settle()
     }
 

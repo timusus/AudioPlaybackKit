@@ -154,6 +154,25 @@ final class NowPlayingInfoTests: XCTestCase {
         XCTAssertEqual(rig.info.playbackState, .playing)
     }
 
+    // On an iPhone a fresh renderer's clock started 0.2 s after the play, so the elapsed time
+    // written at the play ran ahead of what was heard for as long as it played.
+    func testAPlayHeardLateRewritesTheElapsedTimeOnceHeard() async {
+        await playing()
+        rig.player.pause()
+        await rig.settle()
+        rig.player.play()
+        await rig.settle()
+        XCTAssertEqual(rate, 1)
+        XCTAssertEqual(elapsed, 2)
+
+        rig.wall += 0.5
+        await rig.run(for: 1)
+
+        XCTAssertEqual(rig.player.position, 3)
+        XCTAssertEqual(elapsed, 3)
+        XCTAssertEqual(rate, 1)
+    }
+
     func testARateChangeWritesTheRateAndDefaultRate() async {
         await playing()
 
