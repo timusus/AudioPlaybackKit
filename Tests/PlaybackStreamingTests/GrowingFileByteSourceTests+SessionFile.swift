@@ -22,10 +22,14 @@ extension GrowingFileByteSourceTests {
 
         try source.seek(to: 0)
         XCTAssertEqual(try readToEnd(source), body)
+        // The reader's end comes from bytes already on disk, before the hole's request has reached
+        // the far seam, and promotion waits for that comparison.
+        let store = GrowingFileStore(directory: directory)
+        XCTAssertTrue(waitUntil { store.completedFile(for: server.url) != nil }, "the file was never promoted")
         // The hole's request runs 64 KiB into the range after it, to compare the seam.
         XCTAssertEqual(ranges(server), ["bytes=131072-", "bytes=0-196607"])
         XCTAssertEqual(server.servedBytes, 327_680, "a byte past the overlap was fetched twice")
-        let cached = try XCTUnwrap(GrowingFileStore(directory: directory).completedFile(for: server.url))
+        let cached = try XCTUnwrap(store.completedFile(for: server.url))
         XCTAssertEqual(source.snapshot.fileURL, cached)
         XCTAssertEqual(try Data(contentsOf: cached), body)
         source.cancel()
