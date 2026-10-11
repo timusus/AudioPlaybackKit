@@ -10,6 +10,8 @@
 
 #include "stream_decode.h"
 
+#include <stdatomic.h>
+
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libswresample/swresample.h>
@@ -63,13 +65,12 @@ struct StreamDecoder {
     int         reopening;        /* draining the codec to reopen it for the held packet's new parameters */
     int         ended;            /* the decoder and the resampler are both drained */
 
-    /* Written by `stream_decoder_cancel` from another thread and only ever read, so a plain flag
-     * is enough: the worst a stale read costs is one more callback into a reader that is itself
-     * already cancelled. */
-    volatile int cancelled;
+    /* Written by `stream_decoder_cancel` from another thread and by the decode thread, so atomic
+     * (plain loads and stores on an `atomic_int` are sequentially consistent). */
+    atomic_int cancelled;
     /* Same shape as `cancelled`, opposite meaning: a read the caller wants back so it can seek,
      * after which the decoder carries on. Cleared by `stream_decoder_seek`. */
-    volatile int interrupted;
+    atomic_int interrupted;
     /* The reader refused a seek as `STREAM_READ_UNSEEKABLE` since the last `stream_decoder_seek`
      * began; lets that seek report "cannot seek" instead of a generic failure. */
     int          unseekable;
