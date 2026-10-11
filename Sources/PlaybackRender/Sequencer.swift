@@ -1,7 +1,7 @@
 import Foundation
 
 /// Runs the sequencer's decode jobs one at a time, in order: a serial queue, or a hand-stepped fake.
-protocol SequencerExecutor: Sendable {
+@_spi(Testing) public protocol SequencerExecutor: Sendable {
     func run(_ job: @escaping @Sendable () -> Void)
 }
 

@@ -1,5 +1,5 @@
 import XCTest
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
 
 /// Ported from media3 `AudioProcessingPipelineTest` (Float32 samples, tagged chunks), plus tag rewriting.
 final class AudioProcessingPipelineTests: XCTestCase {

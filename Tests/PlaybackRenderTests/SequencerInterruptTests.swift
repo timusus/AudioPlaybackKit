@@ -1,6 +1,6 @@
 import Foundation
 import PlaybackDecode
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
 import XCTest
 
 /// The interrupt race on real threads: `FFmpegItemSource` over a reader whose interrupt flag the

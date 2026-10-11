@@ -1,4 +1,5 @@
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
+import PlaybackRenderTestSupport
 import XCTest
 
 /// The feeder against the fake output's manual clock: no test sleeps, and every pump is explicit.

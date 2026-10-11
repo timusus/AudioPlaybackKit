@@ -1,5 +1,5 @@
 import CoreMedia
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
 import XCTest
 
 /// The adapter's pure parts: timestamps, format descriptions and sample buffers. The renderer

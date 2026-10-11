@@ -1,5 +1,5 @@
 import AVFoundation
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
 import XCTest
 
 /// `rebuild()` without playing: a fresh renderer with the old settings, and no event from the one

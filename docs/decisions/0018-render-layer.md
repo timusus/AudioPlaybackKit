@@ -93,6 +93,7 @@ A failed renderer is terminal. This happens through its `status`, a failed enque
 ## Consequences
 
 - There is no offline render mode, so every rule lives in the Apple-free core. The core is tested against a fake output with a manual clock that can inject an auto-flush, a configuration change or a stall. The ASBAR adapter stays thin and is checked on device.
+- `PlaybackRenderTestSupport` ships the fake output, a hand-fired pump and hand-run decode, so an app can drive a `Transport` in its own tests. `AudioOutput`, `PumpTimer`, `SequencerExecutor` and the full `Transport` initialiser are `@_spi(Testing) public`, not public: the production API is unchanged, and only the support target imports the SPI, behind a public `Transport.init(output:timer:executor:onEvent:)` on its fakes. A separate public initialiser would put the seam protocols in the API for every app.
 - A route change may auto-flush. The core must re-feed from the flush time, which the sample-accurate seek ([ADR-0009](0009-seeks-are-sample-accurate.md)) allows.
 - `audioTimePitchAlgorithm` must be set explicitly, because the iOS default (`lowQualityZeroLatency`) is wrong for speech. The default is `.timeDomain`, for the shorter dropout on a speed change.
 - `flush()` and rate changes run off the main thread.

@@ -1,37 +1,7 @@
 import Foundation
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
+import PlaybackRenderTestSupport
 import XCTest
-
-/// Fires the pump by hand on the transport's queue, after every call already made.
-final class ManualPumpTimer: PumpTimer, @unchecked Sendable {
-    private var queue: DispatchQueue?
-    private var tick: (@Sendable () -> Void)?
-
-    func start(interval: TimeInterval, queue: DispatchQueue, tick: @escaping @Sendable () -> Void) {
-        self.queue = queue
-        self.tick = tick
-    }
-
-    func cancel() {}
-
-    private let lock = NSLock()
-    private var _wakes = 0
-    /// Wakes are only counted: a test fires the pump they ask for itself.
-    var wakes: Int { lock.withLock { _wakes } }
-
-    func wake() {
-        lock.withLock { _wakes += 1 }
-    }
-
-    func fire() {
-        queue!.sync(execute: tick!)
-    }
-
-    /// Waits for every call already made, without pumping.
-    func sync() {
-        queue!.sync {}
-    }
-}
 
 /// Supplies `chunks` two-frame chunks, then throws, like a network source that gave up.
 private final class FailsMidwaySource: ItemSource, @unchecked Sendable {
@@ -752,7 +722,7 @@ final class TransportTests: XCTestCase {
         let playing = expectation(description: "playing")
         playing.assertForOverFulfill = false
         let crossedB = expectation(description: "crossed b")
-        let transport = Transport<String>(output: output) { event in
+        let transport = Transport<String>(output: output, timer: DispatchPumpTimer(), executor: SerialQueueExecutor()) { event in
             XCTAssertFalse(Thread.isMainThread)
             switch event {
             case .status(.playing): playing.fulfill()

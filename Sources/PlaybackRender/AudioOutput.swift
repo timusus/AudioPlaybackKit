@@ -12,7 +12,7 @@ public struct PCMFormat: Hashable, Sendable {
     }
 }
 
-enum AudioOutputEvent: Equatable, Sendable {
+@_spi(Testing) public enum AudioOutputEvent: Equatable, Sendable {
     /// The output dropped everything queued from `at` on (a route or category change), or its
     /// output configuration changed so queued audio is stale; the caller re-feeds from that time.
     case autoFlushed(at: TimeInterval)
@@ -25,7 +25,7 @@ enum AudioOutputEvent: Equatable, Sendable {
     /// reset, so it may follow a failure the caller already recovered from; `rebuild()` answers it.
     case mediaServicesReset
 
-    static func == (lhs: Self, rhs: Self) -> Bool {
+    public static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
         case let (.autoFlushed(a), .autoFlushed(b)): a == b
         case (.stalled, .stalled), (.mediaServicesReset, .mediaServicesReset): true
@@ -35,7 +35,7 @@ enum AudioOutputEvent: Equatable, Sendable {
     }
 }
 
-enum AudioOutputError: Error, Equatable {
+@_spi(Testing) public enum AudioOutputError: Error, Equatable {
     case formatRejected(PCMFormat)
     /// The renderer is in its terminal failed state; `rebuild()` replaces it.
     case rendererFailed
@@ -50,7 +50,7 @@ enum AudioOutputError: Error, Equatable {
 /// callers keep them off the main thread; the output does no threading of its own. The output
 /// reports neither an underrun (its clock runs on) nor a timestamp hole (silence) or overlap
 /// (the later audio is trimmed), so the caller stamps contiguous times and watches the clock.
-protocol AudioOutput: AnyObject, Sendable {
+@_spi(Testing) public protocol AudioOutput: AnyObject, Sendable {
     func enqueue(_ samples: [Float], format: PCMFormat, at time: TimeInterval) throws
     func flush()
     /// Rate 0 pauses. A `time` re-anchors the clock there (a seek); nil keeps it running from

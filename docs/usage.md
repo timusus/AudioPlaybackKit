@@ -277,3 +277,13 @@ let server = try LoopbackMediaServer(body: audioData, mimeType: "audio/mpeg")
 let source = GrowingFileByteSource(url: server.url, authHeaders: [:], store: .temporary())
 server.closesAfterBodyBytes = 40_000   // drop the first connection part-way
 ```
+
+## Test code built on `Transport`
+
+`PlaybackRenderTestSupport` runs a `Transport` with no renderer and no wall clock, for an app's tests of its
+own player layer (queue advance, Now Playing, interruptions). Build it on a `FakeAudioOutput`, a
+`ManualPumpTimer` and a `ManualExecutor` with `Transport(output:timer:executor:onEvent:)`, set items
+with `FakeItemSource`, then step it: `timer.sync()`, `executor.runUntilIdle()`, `timer.fire()`, and
+`output.advance(by:)` to move the clock. The output also injects auto-flushes, stalls and failures, and
+records what was heard. It needs no SPI import or `@testable`; see
+`Tests/PlaybackRenderTests/ExternalConsumerTests.swift`.

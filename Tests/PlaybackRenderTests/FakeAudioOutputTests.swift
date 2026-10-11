@@ -1,4 +1,5 @@
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
+@_spi(Testing) import PlaybackRenderTestSupport
 import XCTest
 
 /// The fake's own rules, so a core test that fails is the core's fault. Four frames a second keeps

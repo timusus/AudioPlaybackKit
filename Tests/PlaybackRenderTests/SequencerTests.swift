@@ -1,4 +1,5 @@
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
+import PlaybackRenderTestSupport
 import XCTest
 
 /// The sequencer's rules over in-memory sources, every decode job run by hand.

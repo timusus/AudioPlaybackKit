@@ -1,17 +1,17 @@
 import Foundation
-@testable import PlaybackRender
+@_spi(Testing) import PlaybackRender
 
 /// An `AudioOutput` on a manual clock, with the renderer's measured timing (ADR-0018): a timestamp
 /// hole plays as silence, an overlap trims the later audio, audio stamped behind the clock never
 /// plays, and the clock runs on through an underrun with no event.
-final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
-    struct Enqueue: Equatable {
-        var samples: [Float]
-        var format: PCMFormat
-        var time: TimeInterval
+public final class FakeAudioOutput: @unchecked Sendable {
+    public struct Enqueue: Equatable, Sendable {
+        public var samples: [Float]
+        public var format: PCMFormat
+        public var time: TimeInterval
     }
 
-    enum Played: Equatable {
+    public enum Played: Equatable, Sendable {
         case audio(start: TimeInterval, format: PCMFormat, samples: [Float])
         case silence(start: TimeInterval, duration: TimeInterval)
     }
@@ -44,27 +44,27 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
     private var _events: [AudioOutputEvent] = []
 
     /// Ready for more while less than this much is queued ahead of the clock.
-    let readyAhead: TimeInterval
+    public let readyAhead: TimeInterval
 
-    init(readyAhead: TimeInterval = 1) {
+    public init(readyAhead: TimeInterval = 1) {
         self.readyAhead = readyAhead
     }
 
-    var enqueues: [Enqueue] { locked { _enqueues } }
+    public var enqueues: [Enqueue] { locked { _enqueues } }
     /// The clock time of each flush, injected auto-flushes included.
-    var flushes: [TimeInterval] { locked { _flushes } }
-    var played: [Played] { locked { _played } }
-    var events: [AudioOutputEvent] { locked { _events } }
-    var rate: Double { locked { _rate } }
+    public var flushes: [TimeInterval] { locked { _flushes } }
+    public var played: [Played] { locked { _played } }
+    @_spi(Testing) public var events: [AudioOutputEvent] { locked { _events } }
+    public var rate: Double { locked { _rate } }
     /// The output's gain, which a flush leaves alone as the renderer's does.
-    var volume: Float { locked { _volume } }
+    public var volume: Float { locked { _volume } }
 
-    var outputLatency: TimeInterval {
+    public var outputLatency: TimeInterval {
         get { locked { _outputLatency } }
         set { locked { _outputLatency = newValue } }
     }
 
-    func enqueue(_ samples: [Float], format: PCMFormat, at time: TimeInterval) throws {
+    public func enqueue(_ samples: [Float], format: PCMFormat, at time: TimeInterval) throws {
         try locked {
             guard !rendererFailed else { throw AudioOutputError.rendererFailed }
             guard !rejected.contains(format) else { throw AudioOutputError.formatRejected(format) }
@@ -80,7 +80,7 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
         }
     }
 
-    func flush() {
+    public func flush() {
         locked {
             _flushes.append(clock)
             queue = []
@@ -89,26 +89,26 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
         }
     }
 
-    func setRate(_ rate: Double, at time: TimeInterval?) {
+    public func setRate(_ rate: Double, at time: TimeInterval?) {
         locked {
             _rate = rate
             if let time { clock = time }
         }
     }
 
-    func setVolume(_ volume: Float) {
+    public func setVolume(_ volume: Float) {
         locked { _volume = volume }
     }
 
-    func currentTime() -> TimeInterval { locked { clock } }
+    public func currentTime() -> TimeInterval { locked { clock } }
 
-    var isReadyForMoreData: Bool {
+    public var isReadyForMoreData: Bool {
         locked { (timelineEnd ?? clock) - clock < readyAhead }
     }
 
     /// A fresh renderer: nothing queued, the clock at 0 and stopped. The volume is kept, as the
     /// adapter re-applies it.
-    func rebuild() throws {
+    public func rebuild() throws {
         try locked {
             _rebuilds += 1
             if let rebuildError { throw rebuildError }
@@ -121,14 +121,14 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
         }
     }
 
-    func setEventHandler(_ handler: @escaping @Sendable (AudioOutputEvent) -> Void) {
+    @_spi(Testing) public func setEventHandler(_ handler: @escaping @Sendable (AudioOutputEvent) -> Void) {
         locked { self.handler = handler }
     }
 
     // MARK: Test controls
 
     /// Moves wall time on by `seconds`; the clock moves `rate` times as far, playing what is queued.
-    func advance(by seconds: TimeInterval) {
+    public func advance(by seconds: TimeInterval) {
         locked {
             let from = clock, to = clock + seconds * _rate
             guard to > from else { return }
@@ -158,7 +158,7 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
 
     /// The route-change auto-flush: drops everything queued and reports the flush time, by default
     /// the clock. A notification can arrive late, with the flush time behind the clock.
-    func injectAutoFlush(at time: TimeInterval? = nil) {
+    public func injectAutoFlush(at time: TimeInterval? = nil) {
         let (time, handler) = locked {
             let time = time ?? clock
             _flushes.append(clock)
@@ -171,12 +171,12 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
     }
 
     /// The iPhone synchronizer's clock steps back tens of milliseconds on a rate change or a resume.
-    func stepClockBack(by seconds: TimeInterval) {
+    public func stepClockBack(by seconds: TimeInterval) {
         locked { clock -= seconds }
     }
 
     /// The output plays silence until the next `flush()`, with its clock still running.
-    func injectStall() {
+    public func injectStall() {
         let handler = locked {
             stalled = true
             _events.append(.stalled)
@@ -187,7 +187,8 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
 
     /// The renderer fails: it goes silent and every enqueue throws until `rebuild()`. `reported`
     /// sends `.failed` as the status observer does; without it the next enqueue is the first sign.
-    func injectFailure(_ error: any Error = AudioOutputError.rendererFailed, reported: Bool = true) {
+    public func injectFailure(_ error: (any Error)? = nil, reported: Bool = true) {
+        let error = error ?? AudioOutputError.rendererFailed
         let handler = locked {
             rendererFailed = true
             guard reported else { return nil as (@Sendable (AudioOutputEvent) -> Void)? }
@@ -198,7 +199,7 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
     }
 
     /// The media-services reset: the renderer is dead as in `injectFailure`, but the event names none.
-    func injectReset() {
+    public func injectReset() {
         let handler = locked {
             rendererFailed = true
             _events.append(.mediaServicesReset)
@@ -208,13 +209,13 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
     }
 
     /// Every later `rebuild()` throws `error`.
-    func failRebuilds(with error: any Error) {
+    public func failRebuilds(with error: any Error) {
         locked { rebuildError = error }
     }
 
-    var rebuilds: Int { locked { _rebuilds } }
+    public var rebuilds: Int { locked { _rebuilds } }
 
-    func reject(_ format: PCMFormat) {
+    public func reject(_ format: PCMFormat) {
         locked { _ = rejected.insert(format) }
     }
 
@@ -243,3 +244,5 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
         return try body()
     }
 }
+
+@_spi(Testing) extension FakeAudioOutput: AudioOutput {}

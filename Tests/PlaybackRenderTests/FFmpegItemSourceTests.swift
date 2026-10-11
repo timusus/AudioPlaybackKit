@@ -1,6 +1,6 @@
 import Foundation
 import PlaybackDecode
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
 import XCTest
 
 /// The duration an `FFmpegItemSource` reports once probed, read by path from the conformance fixtures.

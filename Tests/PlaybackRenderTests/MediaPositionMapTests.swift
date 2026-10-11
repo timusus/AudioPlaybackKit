@@ -1,4 +1,5 @@
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
+@_spi(Testing) import PlaybackRenderTestSupport
 import XCTest
 
 /// The position cases of media3 `DefaultAudioSinkTest`, adapted: dropped frames count when they would

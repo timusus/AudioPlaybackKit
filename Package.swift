@@ -21,6 +21,9 @@ let package = Package(
         // Output over AVSampleBufferAudioRenderer: decoded PCM to the speaker, with an exact
         // position map, gapless joins and app-supplied processors (ADR-0018).
         .library(name: "PlaybackRender", targets: ["PlaybackRender"]),
+        // `FakeAudioOutput`, `ManualPumpTimer`, `ManualExecutor` and `FakeItemSource`, to run a
+        // `Transport` deterministically from a consumer's own tests.
+        .library(name: "PlaybackRenderTestSupport", targets: ["PlaybackRenderTestSupport"]),
         // FFmpeg itself, for a consumer with its own C against libavformat. One FFmpeg per app:
         // a second copy would clash with this framework's symbols, or silently shadow them.
         .library(name: "FFmpeg", targets: ["CFFmpeg"]),
@@ -40,7 +43,10 @@ let package = Package(
         // Every rule lives in this Apple-free core, tested against a manual-clock fake output;
         // only the renderer adapter imports AVFoundation (ADR-0018).
         .target(name: "PlaybackRender", dependencies: ["PlaybackDecode"]),
-        .testTarget(name: "PlaybackRenderTests", dependencies: ["PlaybackRender"]),
+        // The fake output, hand-fired pump and hand-run decode for an app's tests of anything built
+        // on `Transport`, so none of them needs a real renderer or a wall clock (ADR-0018).
+        .target(name: "PlaybackRenderTestSupport", dependencies: ["PlaybackRender"]),
+        .testTarget(name: "PlaybackRenderTests", dependencies: ["PlaybackRender", "PlaybackRenderTestSupport"]),
         // Two 20-45 s tone fixtures (under 250 KB each), served over the loopback server.
         .testTarget(
             name: "PlaybackStreamingTests",

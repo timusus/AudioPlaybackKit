@@ -70,13 +70,18 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         timePitchAlgorithm: AVAudioTimePitchAlgorithm = .timeDomain,
         onEvent: @escaping @Sendable (TransportEvent<Item>) -> Void
     ) {
-        self.init(output: SampleBufferAudioOutput(timePitchAlgorithm: timePitchAlgorithm), onEvent: onEvent)
+        self.init(
+            output: SampleBufferAudioOutput(timePitchAlgorithm: timePitchAlgorithm),
+            timer: DispatchPumpTimer(),
+            executor: SerialQueueExecutor(),
+            onEvent: onEvent
+        )
     }
 
-    init(
+    @_spi(Testing) public init(
         output: any AudioOutput,
-        timer: any PumpTimer = DispatchPumpTimer(),
-        executor: any SequencerExecutor = SerialQueueExecutor(),
+        timer: any PumpTimer,
+        executor: any SequencerExecutor,
         onEvent: @escaping @Sendable (TransportEvent<Item>) -> Void
     ) {
         self.output = output

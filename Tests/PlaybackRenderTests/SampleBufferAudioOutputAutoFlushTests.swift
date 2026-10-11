@@ -1,7 +1,7 @@
 #if os(macOS)
 import AVFoundation
 import CoreAudio
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
 import XCTest
 
 /// The real renderer on Apple's two documented auto-flush triggers, a rate change and an output
@@ -17,7 +17,9 @@ final class SampleBufferAudioOutputAutoFlushTests: XCTestCase {
         try XCTSkipUnless(defaultOutputDevice() != nil, "no audio output device")
         renderer = SampleBufferAudioOutput()
         output = RecordingOutput(renderer)
-        transport = Transport<String>(output: output) { [log] in log.append($0) }
+        transport = Transport<String>(output: output, timer: DispatchPumpTimer(), executor: SerialQueueExecutor()) { [log] in
+            log.append($0)
+        }
     }
 
     override func tearDown() {

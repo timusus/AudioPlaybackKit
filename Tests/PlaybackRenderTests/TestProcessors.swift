@@ -1,5 +1,5 @@
 import Foundation
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
 
 /// Stages the format at `configure` and applies it at `flush`, like media3 `BaseAudioProcessor`.
 /// Subclasses override `outputFormat(for:)` and `process`.

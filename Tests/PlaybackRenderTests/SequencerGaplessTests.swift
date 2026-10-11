@@ -1,5 +1,6 @@
 import PlaybackDecode
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
+import PlaybackRenderTestSupport
 import XCTest
 
 /// media3 `EndToEndGaplessTest`, ported: each fixture decoded alone, then joined through the

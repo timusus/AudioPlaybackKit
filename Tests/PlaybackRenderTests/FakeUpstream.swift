@@ -1,4 +1,4 @@
-@testable import PlaybackRender
+@testable @_spi(Testing) import PlaybackRender
 
 /// Items of ramp PCM, so a test can read back exactly which frames were heard: frame `f` of item `i`
 /// is `sample(i, f)` on every channel. A zero-frame item supplies an empty chunk with its tag.

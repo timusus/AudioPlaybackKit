@@ -1,7 +1,7 @@
 import Foundation
 
 /// What calls the transport's pump: a dispatch timer, or a hand-fired fake in tests.
-protocol PumpTimer: AnyObject, Sendable {
+@_spi(Testing) public protocol PumpTimer: AnyObject, Sendable {
     /// Calls `tick` on `queue` every `interval` until cancelled.
     func start(interval: TimeInterval, queue: DispatchQueue, tick: @escaping @Sendable () -> Void)
     func cancel()
