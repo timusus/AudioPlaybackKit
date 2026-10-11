@@ -617,7 +617,9 @@ final class TransportTests: XCTestCase {
         run(for: 2)
         XCTAssertEqual(heard, [0, 1, 2, 3, 4, 5, 6, 7])
         XCTAssertEqual(output.enqueues.count, 12)
-        XCTAssertEqual(recorder.events.count, events + 1)
+        // Only the ignored seek's answer.
+        XCTAssertEqual(recorder.events.count, events + 2)
+        guard case .sought(item: "a", seconds: 0) = recorder.events.last else { return XCTFail("\(recorder.events)") }
     }
 
     func testDroppingTheTransportStopsTheOutput() {

@@ -285,6 +285,8 @@ public final class Player<Item: Hashable & Sendable> {
                 refreshState()
             case let .failed(id, underlying):
                 failed(id, underlying)
+            case .sought:
+                break
             case .crossed:
                 // A gapless crossing into the armed next is auto-advance (ADR-0019 slice 3); a seek
                 // to the armed next has already made it current.

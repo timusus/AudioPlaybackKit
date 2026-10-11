@@ -195,6 +195,7 @@ let transport = Transport<Track.ID> { event in          // called on the transpo
     case .position(let id, let seconds, let duration): break   // media time of `id`; duration nil when unknown
     case .crossed(let id): break                        // `id` is now heard; advance your queue
     case .status(let status): break                     // .paused, .buffering, .playing, .ended
+    case .sought(let id, let seconds): break            // a setCurrent or seek was taken; events before it are stale
     case .failed(let id, let error): break              // paused, unless `id` is a next item not yet heard
     }
 }

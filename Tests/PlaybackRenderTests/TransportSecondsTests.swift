@@ -92,4 +92,36 @@ final class TransportSecondsTests: XCTestCase {
         XCTAssertEqual(rig.positions.map(\.seconds), [0.5])
         XCTAssertEqual(rig.positions.map(\.duration), [2])
     }
+
+    // A caller tells a position from before its seek from the seek's first audio by the `.sought`
+    // between them, even for the same item and with the old position sent after the call was made.
+    func testEverySetCurrentAndSeekIsAnsweredInCallOrderBeforeItsAudio() {
+        let rig = Rig()
+        rig.transport.setCurrent(item: "a", source: source(rate: 8, frames: 80))
+        rig.transport.setNext(item: "b", source: source(rate: 8, frames: 80))
+        rig.transport.play()
+        rig.pump()
+        rig.output.advance(by: 1)
+        rig.pump()
+        rig.transport.seek(item: "a", toSeconds: 5)
+        rig.pump()
+        rig.transport.seek(item: "b", toSeconds: 2)
+        rig.pump()
+        rig.transport.seek(item: "a", toSeconds: 1)
+        rig.pump()
+
+        let events = rig.recorder.events.compactMap { event -> String? in
+            switch event {
+            case let .sought(item, seconds): "sought \(item) \(seconds)"
+            case let .position(item, seconds, _): "position \(item) \(seconds)"
+            case .crossed, .status, .failed: nil
+            }
+        }
+        XCTAssertEqual(events, [
+            "sought a 0.0", "position a 0.0", "position a 1.0",
+            "sought a 5.0", "position a 5.0",
+            "sought b 2.0", "position b 2.0",
+            "sought a 1.0",
+        ], "a seek to an item passed is ignored but still answered")
+    }
 }

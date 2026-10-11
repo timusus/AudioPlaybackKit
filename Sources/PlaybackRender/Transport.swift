@@ -20,6 +20,10 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     /// item's audio was written there, playing or paused.
     case crossed(item: Item)
     case status(TransportStatus)
+    /// A `setCurrent` or `seek` was taken, in call order, before anything it caused: events before it
+    /// predate the call, and the next `.position` for `item` is the call's first audio. Every call is
+    /// answered, a seek ignored because `item` has passed too, so a caller can count its calls.
+    case sought(item: Item, seconds: TimeInterval)
     /// `item`'s source or processors failed, or the output refused audio (`item` nil). A next item not
     /// yet heard is dropped and the current one plays on. Otherwise playback pauses, and `play()` does
     /// nothing until a `seek`, `setCurrent` or `setProcessors`.
@@ -126,6 +130,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
             let id = newID()
             ids = [id: item]
             failed = false
+            onEvent(.sought(item: item, seconds: startSeconds))
             upstream.setCurrent(item: id, source: source, startSeconds: startSeconds)
             feeder.seek(to: SeekTarget(item: id, offset: .seconds(startSeconds)))
         }
@@ -172,6 +177,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     public func seek(item: Item, toSeconds seconds: TimeInterval) {
         precondition(seconds >= 0 && seconds.isFinite)
         queue.async { [self] in
+            onEvent(.sought(item: item, seconds: seconds))
             guard let id = ids.filter({ $0.value == item }).keys.min() else { return }
             failed = false
             feeder.seek(to: SeekTarget(item: id, offset: .seconds(seconds)))
