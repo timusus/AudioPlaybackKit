@@ -175,8 +175,9 @@ public final class Player<Item: Hashable & Sendable> {
 `moveMediaItems` and `removeMediaItems`: the current item keeps playing through any insert or move,
 and `currentIndex` is renumbered. Removing the current item plays the item that takes its index from
 position 0 (the next, or under `.all` the first); removing the last remaining item leaves `.idle` with
-no current index. Any edit that changes which item follows the current re-issues `setNext` (or
-`clearNext`), so the pre-armed next is always the list's next.
+no current index. Removing the current item when it is the last leaves index 0 in `.ended`, as media3
+does. `setItems` and `replaceItems` send no `itemTransition`. Any edit that changes which item follows
+the current re-issues `setNext` (or `clearNext`), so the pre-armed next is always the list's next.
 
 **State.** `playWhenReady` is the app's intent and only the app or a session event changes it.
 `state` is what the transport reports: `TransportStatus.paused` or `.playing` with a current item is
@@ -203,7 +204,11 @@ deltas as listening time.
 **Seek.** `seek(to:)` within the current item or an armed next calls `Transport.seek`; a seek to a
 later or earlier item that the transport no longer holds is a `setCurrent` of that entry followed by
 `setNext` of the one after it. The target is clamped to `0...duration` when the duration is known. A
-live item ignores seeks (`isLive`). An `ItemSource.seek` that throws (a forward-only transcode) arrives
+live item ignores seeks (`isLive`). Stopped or failed, a seek only moves the index and position and the
+state stays `.idle` until `play()`, as media3 waits for `prepare`. `position` shows the target at once;
+transport events sent before the transport answers the call with `.sought` are dropped (media3's
+`pendingOperationAcks`), and the first position after it sends `seekLanded`. `seek(by:)` adds to a
+target not yet heard, so rapid presses add up. An `ItemSource.seek` that throws (a forward-only transcode) arrives
 as `itemFailed` for that item; the app, which knows the stream can be re-resolved at an offset
 (Shuttle2's `onSeekUnsupported`), replaces the item.
 

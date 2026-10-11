@@ -53,6 +53,11 @@ public final class Player<Item: Hashable & Sendable> {
     @ObservationIgnored private var transportStatus = TransportStatus.paused
     /// The state while nothing is loaded: `.ended` once the current last item was removed (media3).
     @ObservationIgnored private var unloadedState = PlaybackState.idle
+    /// `setCurrent` and `seek` calls the transport has not yet answered with `.sought`; events before
+    /// the last answer describe what those calls replaced (media3's `pendingOperationAcks`).
+    @ObservationIgnored private var unansweredCalls = 0
+    /// A seek within the current item whose audio has not been heard yet.
+    @ObservationIgnored private var seekTarget: TimeInterval?
 
     public convenience init(
         makeSource: @escaping ItemSourceFactory<Item>,
@@ -185,7 +190,7 @@ public final class Player<Item: Hashable & Sendable> {
                 // media3 `prepare()`: after a stop or an error, from the position; at the end, from 0.
                 load(current, at: state == .ended ? 0 : position)
             } else if state == .ended, let loadedID {
-                transport.seek(item: loadedID, toSeconds: 0)
+                seekTransport(item: loadedID, to: 0)
             }
             transport.play()
         }
@@ -220,26 +225,38 @@ public final class Player<Item: Hashable & Sendable> {
         guard let current = currentIndex, !isLive, position.isFinite else { return }
         let target = min(max(position, 0), duration ?? .infinity)
         if let loadedID, error == nil {
-            transport.seek(item: loadedID, toSeconds: target)
+            seekTransport(item: loadedID, to: target)
+            self.position = target
+            seekTarget = target
         } else if unloadedState == .ended, error == nil {
             load(current, at: target)
+            seekTarget = target
         } else {
             // Idle: `play()` prepares from here.
             self.position = target
         }
     }
 
+    /// Stopped or failed, only moves where `play()` prepares from, as media3 stays idle until `prepare`.
     public func seek(to position: TimeInterval, itemAt index: Int) {
         precondition(entries.indices.contains(index), "index out of range")
         guard let current = currentIndex, index != current else { return seek(to: position) }
+        let seconds = position.isFinite ? max(position, 0) : 0
         currentIndex = index
-        jump(to: index, at: position.isFinite ? max(position, 0) : 0)
+        if state == .idle {
+            self.position = seconds
+            duration = nil
+            isLive = false
+        } else {
+            jump(to: index, at: seconds)
+        }
         send(.itemTransition(from: current, to: index, reason: .seek))
     }
 
-    /// Clamps to the current item; never moves to another.
+    /// Clamps to the current item; never moves to another. Adds to a seek not yet heard, so presses
+    /// faster than a pump add up.
     public func seek(by delta: TimeInterval) {
-        seek(to: position + delta)
+        seek(to: (seekTarget ?? position) + delta)
     }
 
     // MARK: Rate, volume, processors
@@ -273,23 +290,33 @@ public final class Player<Item: Hashable & Sendable> {
     /// Applies every transport event posted so far, in order. Tests call it after a pump.
     func drainTransportEvents() {
         for event in inbox.drain() {
+            if case .sought = event {
+                unansweredCalls -= 1
+                continue
+            }
+            // A failed armed next is dropped by the transport whatever was called since.
+            if unansweredCalls > 0 {
+                guard case let .failed(id, _) = event, id != nil, id == armedID else { continue }
+            }
             switch event {
             case let .position(id, seconds, duration):
-                guard id == loadedID else { continue }
+                guard id == loadedID, let current = currentIndex else { continue }
                 position = seconds
                 self.duration = duration
                 // The source has opened by the time audio is reported, so no duration means live.
                 isLive = duration == nil
+                if seekTarget != nil {
+                    seekTarget = nil
+                    send(.seekLanded(index: current, position: seconds))
+                }
             case let .status(status):
                 transportStatus = status
                 refreshState()
             case let .failed(id, underlying):
                 failed(id, underlying)
+            case let .crossed(id):
+                crossed(into: id)
             case .sought:
-                break
-            case .crossed:
-                // A gapless crossing into the armed next is auto-advance (ADR-0019 slice 3); a seek
-                // to the armed next has already made it current.
                 break
             }
         }
@@ -311,12 +338,40 @@ public final class Player<Item: Hashable & Sendable> {
     private func jump(to index: Int, at seconds: TimeInterval) {
         let entry = entries[index]
         guard entry.id == armedID, loadedID != nil, error == nil else { return load(index, at: seconds) }
-        transport.seek(item: entry.id, toSeconds: seconds)
+        seekTransport(item: entry.id, to: seconds)
         loadedID = entry.id
         armedID = nil
+        seekTarget = nil
         position = seconds
         duration = nil
         isLive = false
+        armNext()
+    }
+
+    private func seekTransport(item id: Int, to seconds: TimeInterval) {
+        unansweredCalls += 1
+        transport.seek(item: id, toSeconds: seconds)
+        expectRestartStatus()
+    }
+
+    /// A restart reports its status only if it changed, and the statuses before it are dropped.
+    private func expectRestartStatus() {
+        transportStatus = intent ? .buffering : .paused
+        refreshState()
+    }
+
+    /// The gapless join into the armed next reached the speaker; any other crossing is the first
+    /// audio of an item already current.
+    private func crossed(into id: Int) {
+        guard id == armedID, let from = currentIndex, let index = index(of: id) else { return }
+        currentIndex = index
+        loadedID = id
+        armedID = nil
+        seekTarget = nil
+        position = 0
+        duration = nil
+        isLive = false
+        send(.itemTransition(from: from, to: index, reason: .auto))
         armNext()
     }
 
@@ -327,6 +382,7 @@ public final class Player<Item: Hashable & Sendable> {
         duration = nil
         isLive = false
         armedID = nil
+        seekTarget = nil
         let source: any ItemSource
         do {
             source = try makeSource(entry.item)
@@ -334,13 +390,12 @@ public final class Player<Item: Hashable & Sendable> {
             unload(as: .idle)
             return reportFailure(at: index, PlaybackError(kind: .source, underlying: error))
         }
+        unansweredCalls += 1
         transport.setCurrent(item: entry.id, source: source, startSeconds: position)
         loadedID = entry.id
         error = nil
-        // A restart is paused, or buffering when playing, and reports only a change of status.
-        transportStatus = intent ? .buffering : .paused
         if intent { transport.play() }
-        refreshState()
+        expectRestartStatus()
         armNext()
     }
 
@@ -349,6 +404,7 @@ public final class Player<Item: Hashable & Sendable> {
         transport.stop()
         loadedID = nil
         armedID = nil
+        seekTarget = nil
         unloadedState = state
         refreshState()
     }

@@ -19,13 +19,29 @@ final class PlayerRig {
     let factory = FakeItemFactory()
     private(set) var player: Player<String>!
     private let events: AsyncStream<PlayerEvent<String>>
+    private let gate = EventGate()
 
     init() {
-        let (output, timer, executor, factory) = (output, timer, executor, factory)
+        let (output, timer, executor, factory, gate) = (output, timer, executor, factory, gate)
         player = Player(makeSource: { try factory.make($0) }) { onEvent in
-            Transport(output: output, timer: timer, executor: executor, onEvent: onEvent)
+            gate.forward = onEvent
+            return Transport(output: output, timer: timer, executor: executor) { gate.send($0) }
         }
         events = player.events
+    }
+
+    /// Runs `body` and returns the transport events it caused, kept from the player as if still on
+    /// their way to the main actor; `deliver` hands them over.
+    func inFlight(_ body: () -> Void) -> [TransportEvent<Int>] {
+        gate.holding = true
+        body()
+        timer.sync()
+        return gate.release()
+    }
+
+    func deliver(_ events: [TransportEvent<Int>]) {
+        events.forEach(gate.send)
+        player.drainTransportEvents()
     }
 
     /// Runs every transport call made so far and delivers its events.
@@ -75,6 +91,55 @@ final class PlayerRig {
         events.compactMap {
             guard case let .itemFailed(index, _) = $0 else { return nil }
             return index
+        }
+    }
+
+    static func seeksLanded(_ events: [PlayerEvent<String>]) -> [Landing] {
+        events.compactMap {
+            guard case let .seekLanded(index, position) = $0 else { return nil }
+            return Landing(index: index, position: position)
+        }
+    }
+
+    struct Landing: Equatable {
+        var index: Int
+        var position: TimeInterval
+    }
+}
+
+/// Passes transport events to the player, or holds them while `holding`.
+private final class EventGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var held: [TransportEvent<Int>] = []
+    private var _holding = false
+    private var _forward: (@Sendable (TransportEvent<Int>) -> Void)?
+
+    var holding: Bool {
+        get { lock.withLock { _holding } }
+        set { lock.withLock { _holding = newValue } }
+    }
+
+    var forward: (@Sendable (TransportEvent<Int>) -> Void)? {
+        get { lock.withLock { _forward } }
+        set { lock.withLock { _forward = newValue } }
+    }
+
+    func send(_ event: TransportEvent<Int>) {
+        let forward: (@Sendable (TransportEvent<Int>) -> Void)? = lock.withLock {
+            guard !_holding else {
+                held.append(event)
+                return nil
+            }
+            return _forward
+        }
+        forward?(event)
+    }
+
+    /// Stops holding and returns what was held.
+    func release() -> [TransportEvent<Int>] {
+        lock.withLock {
+            defer { (held, _holding) = ([], false) }
+            return held
         }
     }
 }
