@@ -17,13 +17,14 @@ final class PlayerRig {
     let timer = ManualPumpTimer()
     let executor = ManualExecutor()
     let factory = FakeItemFactory()
+    let session = FakeAudioSession()
     private(set) var player: Player<String>!
     private let events: AsyncStream<PlayerEvent<String>>
     private let gate = EventGate()
 
     init() {
         let (output, timer, executor, factory, gate) = (output, timer, executor, factory, gate)
-        player = Player(makeSource: { try factory.make($0) }) { onEvent in
+        player = Player(makeSource: { try factory.make($0) }, session: session) { onEvent in
             gate.forward = onEvent
             return Transport(output: output, timer: timer, executor: executor) { gate.send($0) }
         }

@@ -41,6 +41,7 @@ public final class Player<Item: Hashable & Sendable> {
 
     @ObservationIgnored private let continuation: AsyncStream<PlayerEvent<Item>>.Continuation
     @ObservationIgnored private let makeSource: ItemSourceFactory<Item>
+    @ObservationIgnored private let session: any AudioSessionControlling
     @ObservationIgnored private let inbox = TransportInbox()
     @ObservationIgnored private var transport: Transport<Int>!
     @ObservationIgnored private var entries: [Entry] = [] {
@@ -69,19 +70,30 @@ public final class Player<Item: Hashable & Sendable> {
     @ObservationIgnored private var atEnd = false
     /// The next that failed before it was heard, reported when playback reaches it (media3).
     @ObservationIgnored private var failedNext: (entryID: Int, error: PlaybackError)?
+    /// The session is ours until an interruption, a reset or our own deactivation; the transport
+    /// plays only while it is.
+    @ObservationIgnored private var sessionActive = false
+    /// The activation awaiting its answer; a stop or interruption since makes the answer stale.
+    @ObservationIgnored private var pendingActivation: Int?
+    @ObservationIgnored private var lastActivation = 0
 
     public convenience init(
         makeSource: @escaping ItemSourceFactory<Item>,
+        audioSession: AudioSessionConfiguration = .longFormAudio,
         timePitchAlgorithm: AVAudioTimePitchAlgorithm = .timeDomain
     ) {
-        self.init(makeSource: makeSource) { Transport(timePitchAlgorithm: timePitchAlgorithm, onEvent: $0) }
+        self.init(makeSource: makeSource, session: SystemAudioSession(configuration: audioSession)) {
+            Transport(timePitchAlgorithm: timePitchAlgorithm, onEvent: $0)
+        }
     }
 
     init(
         makeSource: @escaping ItemSourceFactory<Item>,
+        session: any AudioSessionControlling,
         makeTransport: (@escaping @Sendable (TransportEvent<Int>) -> Void) -> Transport<Int>
     ) {
         self.makeSource = makeSource
+        self.session = session
         (events, continuation) = AsyncStream.makeStream()
         let inbox = inbox
         // Events arrive on the transport's queue; one drain on the main actor takes them in order.
@@ -89,6 +101,8 @@ public final class Player<Item: Hashable & Sendable> {
             guard inbox.post(event) else { return }
             Task { @MainActor in self?.drainTransportEvents() }
         }
+        session.configure()
+        session.setEventHandler { [weak self] in self?.handleSession($0) }
     }
 
     deinit {
@@ -182,6 +196,7 @@ public final class Player<Item: Hashable & Sendable> {
         currentIndex = nil
         error = nil
         unload(as: .idle)
+        deactivate()
         position = 0
         duration = nil
         isLive = false
@@ -190,12 +205,18 @@ public final class Player<Item: Hashable & Sendable> {
 
     // MARK: Transport
 
-    /// The app's intent. Only the app (or, later, a session event) changes it; the transport never does.
+    /// The app's intent. The app and the player's session rules change it; the transport never does.
+    /// True with the session not yet active, the transport waits for the activation; if that throws,
+    /// `error` is `.session` and the next `play()` tries again.
     public var playWhenReady: Bool {
         get { intent }
         set {
             intent = newValue
-            guard newValue else { return transport.pause() }
+            guard newValue else {
+                // An app pause outranks an interruption, so its end resumes nothing.
+                suppression = .none
+                return transport.pause()
+            }
             guard let current = currentIndex else { return }
             if loadedKey == nil || error != nil {
                 // media3 `prepare()`: after a stop or an error, from the position; at the end, from 0.
@@ -204,7 +225,7 @@ public final class Player<Item: Hashable & Sendable> {
                 seekTransport(item: loadedKey, to: 0)
                 armNext()
             }
-            transport.play()
+            if sessionActive { transport.play() } else { activate() }
         }
     }
 
@@ -215,6 +236,7 @@ public final class Player<Item: Hashable & Sendable> {
     /// `.idle` with the items and position kept; `play()` prepares the current item again.
     public func stop() {
         unload(as: .idle)
+        deactivate()
     }
 
     public var repeatMode = RepeatMode.off {
@@ -348,6 +370,70 @@ public final class Player<Item: Hashable & Sendable> {
         }
     }
 
+    // MARK: Audio session
+
+    private func activate() {
+        guard pendingActivation == nil else { return }
+        lastActivation += 1
+        let id = lastActivation
+        pendingActivation = id
+        session.activate { [weak self] failure in
+            guard let self, pendingActivation == id else { return }
+            pendingActivation = nil
+            if let failure {
+                // Refused during an interruption, the interruption still holds; its end tries again.
+                guard suppression == .none, intent else { return }
+                error = PlaybackError(kind: .session, underlying: failure)
+                return refreshState()
+            }
+            sessionActive = true
+            suppression = .none
+            if intent, loadedKey != nil, error == nil { transport.play() }
+        }
+    }
+
+    private func deactivate() {
+        guard sessionActive || pendingActivation != nil else { return }
+        sessionActive = false
+        pendingActivation = nil
+        session.deactivate()
+    }
+
+    private func handleSession(_ event: AudioSessionEvent) {
+        switch event {
+        case .interruptionBegan:
+            // The system has deactivated the session, so the next play activates it again.
+            sessionActive = false
+            pendingActivation = nil
+            guard intent else { return }
+            suppression = .interruption
+            transport.pause()
+        case let .interruptionEnded(shouldResume):
+            // Only an interruption that paused us resumes: an app pause or a route loss cleared it.
+            guard suppression == .interruption else { return }
+            if shouldResume { return activate() }
+            suppression = .none
+            intent = false
+            send(.playWhenReadyChanged(false, reason: .interruptionEnded))
+        case let .routeChanged(reason, previous, current):
+            // media3 "becoming noisy": only losing a personal output pauses, never a profile switch.
+            let lost = previous.contains { $0.isPersonal && !current.contains($0) }
+            guard reason == .oldDeviceUnavailable, lost, intent else { return }
+            pauseByPlayer(.routeLost)
+        case .mediaServicesReset:
+            // Transport rebuilds its output and restarts paused; the player matches it and never resumes.
+            session.configure()
+            sessionActive = false
+            pendingActivation = nil
+            suppression = .none
+            if intent {
+                intent = false
+                transport.pause()
+            }
+            if loadedKey != nil { send(.recoveredPaused) }
+        }
+    }
+
     // MARK: Private
 
     private func apply(_ event: TransportEvent<Int>) {
@@ -448,7 +534,7 @@ public final class Player<Item: Hashable & Sendable> {
         currentIndex = index
         if pauseAtEndOfItem {
             // Set after decode reached this item, so the end of the last went unpaused.
-            pauseAtEnd()
+            pauseByPlayer(.endOfItem)
             seekTransport(item: key, to: 0)
         }
         send(.itemTransition(from: from, to: index, reason: index == from ? .repeat : .auto))
@@ -471,11 +557,11 @@ public final class Player<Item: Hashable & Sendable> {
             return true
         }
         guard pauseAtEndOfItem, let next = following(current) else {
-            if pauseAtEndOfItem { pauseAtEnd() }
+            if pauseAtEndOfItem { pauseByPlayer(.endOfItem) }
             atEnd = true
             return false
         }
-        pauseAtEnd()
+        pauseByPlayer(.endOfItem)
         currentIndex = next
         position = 0
         duration = nil
@@ -485,10 +571,11 @@ public final class Player<Item: Hashable & Sendable> {
         return true
     }
 
-    private func pauseAtEnd() {
+    private func pauseByPlayer(_ reason: PlayWhenReadyChangeReason) {
         intent = false
+        suppression = .none
         transport.pause()
-        send(.playWhenReadyChanged(false, reason: .endOfItem))
+        send(.playWhenReadyChanged(false, reason: reason))
     }
 
     /// `setCurrent` of the entry at `index`, then the next armed after it.
@@ -513,7 +600,8 @@ public final class Player<Item: Hashable & Sendable> {
         transport.setCurrent(item: key, source: source, startSeconds: position)
         loadedKey = key
         error = nil
-        if intent { transport.play() }
+        // During an interruption a seek or skip is applied paused.
+        if intent && sessionActive { transport.play() }
         armNext()
     }
 

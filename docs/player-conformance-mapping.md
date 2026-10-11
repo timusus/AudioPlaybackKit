@@ -17,9 +17,14 @@ checks), **internal** (renderers, track selection, load control, scheduling, off
 list), **masking** (media3 masks state while its playback thread catches up; `Player` writes the list,
 index and position on the call and holds stale transport events, see `PlayerTransportEventTests`),
 **range** (an index past the list or a seek on an empty list: `Player` traps, the app owns the list),
-**ads**, **video**, **shuffle** (the app's, ADR-0019 queue features), **session** (audio focus and
-becoming noisy: `AVAudioSession` rules, tested with the session slice), **effects** (silence skipping is
-an app processor).
+**ads**, **video**, **shuffle** (the app's, ADR-0019 queue features), **session** (ducking and delayed
+focus gain: iOS ducks another app's audio, or pauses ours, in the system, so the player sees only an
+interruption), **effects** (silence skipping is an app processor).
+
+The session rules map media3's audio focus onto `AVAudioSession`: a transient loss is an interruption,
+a permanent loss is an interruption that ends without `shouldResume`, regaining focus is reactivating
+the session, abandoning it is deactivating, and becoming noisy is `oldDeviceUnavailable` losing a
+personal output. `PlayerSessionTests` drives them through `FakeAudioSession`.
 
 ## ExoPlayerTest
 
@@ -140,7 +145,7 @@ an app processor).
 | `audioFocus_transientLossDuckAndGainWhilePlaying_restoresOriginalVolume` | n/a: session |
 | `audioFocus_transientLossDuckWhilePaused_lowersVolume` | n/a: session |
 | `audioFocus_transientLossDuckAndGainWhilePaused_restoresOriginalVolume` | n/a: session |
-| `audioFocus_lossWhileSleepingForOffload_disablesSleeping` | n/a: session |
+| `audioFocus_lossWhileSleepingForOffload_disablesSleeping` | n/a: internal |
 | `delegatingMediaSourceApproach` | n/a: timeline |
 | `seekTo_mediaItemIndexIsReset_deprecated` | n/a: masking |
 | `seekTo_mediaItemIndexIsReset` | n/a: masking |
@@ -161,8 +166,8 @@ an app processor).
 | `removeMediaItem_removeLoadingWindowWithReadingPeriodDoubleAdvancement_correctMaskingPosition` | n/a: internal |
 | `removeMediaItem_removeInnerFullyBufferedWindow_correctMaskingPosition` | n/a: masking |
 | `clearMediaItems_correctMaskingPosition` | n/a: masking |
-| `becomingNoisyIgnoredIfBecomingNoisyHandlingIsDisabled` | n/a: session |
-| `pausesWhenBecomingNoisyIfBecomingNoisyHandlingIsEnabled` | n/a: session |
+| `becomingNoisyIgnoredIfBecomingNoisyHandlingIsDisabled` | n/a: API, the route rule is always on |
+| `pausesWhenBecomingNoisyIfBecomingNoisyHandlingIsEnabled` | `PlayerSessionTests.testHeadphonesUnpluggedPausesWithRouteLost` |
 | `nextLoadPositionExceedingLoadControlMaxBuffer_whileCurrentLoadInProgress_doesNotThrowException` | n/a: internal |
 | `moveMediaItem` | `PlayerEditTests.testMoveTheCurrentAndMoveAcrossItKeepPlaying` |
 | `removeMediaItem` | `PlayerEditTests.testRemoveALaterItemReArmsTheNext` |
@@ -174,7 +179,7 @@ an app processor).
 | `addMediaSource_toEmptyPreparedPlaylist_startsBuffering` | `PlayerEditTests.testInsertIntoAnEmptyListSetsIt` |
 | `addMediaSources_afterSeekOnEmptyPreparedPlaylist_startsBufferingAtRequestedPosition` | n/a: range |
 | `addMediaSources_afterInvalidSeekOnEmptyPreparedPlaylist_remainsInEndedState` | n/a: range |
-| `clearMediaItemsAndSeek_inStateEnded_remainsInEnded` | `PlayerEditTests.testRemoveAllWhilePlayingStopsAndLeavesIdle`; **deviation**, an empty list is `.idle` (ADR-0019 State), not `.ended`; a seek on an empty list traps (range) |
+| `clearMediaItemsAndSeek_inStateEnded_remainsInEnded` | `PlayerEditTests.testClearAndSeekWhileEndedLeavesIdle`; **deviation**, an empty list is `.idle` (ADR-0019 State), not `.ended`, and the seek is ignored |
 | `stop_modifyingPlaylistRemainsInIdleState_needsPrepareForBuffering` | `PlayerEditTests.testEditsAfterStopStayIdleUntilPlay`; seeks and skips in `PlayerTransportEventTests.testSeeksAndSkipsAfterStopStayIdleUntilPlay` |
 | `prepareWithInvalidInitialSeek_expectEndedImmediately` | n/a: range |
 | `prepareWhenAlreadyPreparedIsANoop` | n/a: API, no `prepare` |
@@ -412,6 +417,43 @@ an app processor).
 | `removeMediaItem_withRepeatModeOne_endsPlaybackAndStopsLoading` | `PlayerAdvanceTests.testRemovingTheCurrentUnderRepeatOneEnds` |
 | `removeMediaItem_withShuffleModeEnabledAndAvailableItemsWhenShuffling_continuesPlayback` | n/a: shuffle |
 | `transitionIntoLiveStream_withUpdatedTimeline_doesNotCauseBuffering` | n/a: timeline |
+
+## AudioFocusManagerTest
+
+media3's `libraries/common/src/test/java/androidx/media3/common/audio/AudioFocusManagerTest.java` on
+main at `c1a51872970d` (10 February 2026), in the terms above. A `_v26` variant maps with its pair.
+
+| media3 test | Ours |
+|---|---|
+| `setAudioAttributes_withNullUsage_doesNotManageAudioFocus` | n/a: API, the player always manages the session |
+| `setAudioAttributes_withNullUsage_abandonsAudioFocus` | n/a: API |
+| `setAudioAttributes_withNullUsage_abandonsAudioFocus_v26` | n/a: API |
+| `setAudioAttributes_withUsageAlarm_throwsIllegalArgumentException` | n/a: API |
+| `setAudioAttributes_withUsageMedia_usesAudioFocusGain` | `PlayerSessionTests.testTheFirstPlayActivatesOnceBeforeTheTransportPlays` |
+| `setAudioAttributes_inEndedState_requestsAudioFocus` | n/a: API, the configuration is fixed at init |
+| `updateAudioFocus_idleToBuffering_setsPlayerCommandPlayWhenReady` | `PlayerSessionTests.testTheFirstPlayActivatesOnceBeforeTheTransportPlays` |
+| `updateAudioFocus_pausedToPlaying_setsPlayerCommandPlayWhenReady` | `PlayerSessionTests.testTheFirstPlayActivatesOnceBeforeTheTransportPlays` |
+| `updateAudioFocus_pausedToPlaying_withTransientDuck_setsPlayerCommandPlayWhenReady` | n/a: session |
+| `updateAudioFocus_pausedToPlayingWithTransientLossAndDelayedGain_setsPlayerCommandPlayWhenReady` | n/a: session |
+| `updateAudioFocus_pausedToPlayingWithTransientLossAndDelayedGainWithLaterLoss_sendsDoNotPlayAndAbandonsFocus` | n/a: session |
+| `updateAudioFocus_pausedToPlayingWithTransientLossAndNoGain_setsPlayerCommandDoNotPlay` | `PlayerSessionTests.testAPlayDuringAnInterruptionThatCannotActivateStaysSuppressed`; **deviation**, `playWhenReady` stays true, suppressed, so the interruption's end can resume |
+| `updateAudioFocus_pausedToPlayingWithTransientLossAndRegularGain_setsPlayerCommandPlayWhenReady` | `PlayerSessionTests.testAPlayDuringAnInterruptionReactivatesAndPlays` |
+| `updateAudioFocus_toPausedBeforeRequestingFocus_setsPlayerCommandPlayWhenReady` | `PlayerSessionTests.testPauseAndStopBeforeAnyPlayLeaveTheSessionAlone` |
+| `updateAudioFocus_toPausedWithFocus_setsPlayerCommandPlayWhenReady` | `PlayerSessionTests.testTheFirstPlayActivatesOnceBeforeTheTransportPlays` |
+| `updateAudioFocus_toPausedWithFocusLoss_setsPlayerCommandDoNotPlay` | `PlayerSessionTests.testInterruptionEndedWithoutShouldResumeSetsPlayWhenReadyFalse` |
+| `updateAudioFocus_toPausedWithTransientFocusLoss_setsPlayerCommandWaitForCallback` | `PlayerSessionTests.testAnInterruptionWhilePausedNeitherSuppressesNorResumes` |
+| `updateAudioFocus_toPausedWithTransientFocusLossCanDuck_setsPlayerCommandPlayWhenReady` | n/a: session |
+| `updateAudioFocus_abandonFocusWhenDucked_restoresFullVolume` | n/a: session |
+| `updateAudioFocus_readyToIdle_abandonsAudioFocus` | `PlayerSessionTests.testStopDeactivatesAndTheNextPlayActivatesAgain` |
+| `updateAudioFocus_readyToIdle_abandonsAudioFocus_v26` | `PlayerSessionTests.testStopDeactivatesAndTheNextPlayActivatesAgain` |
+| `updateAudioFocus_readyToIdle_withoutFocus_isNoOp` | `PlayerSessionTests.testPauseAndStopBeforeAnyPlayLeaveTheSessionAlone` |
+| `updateAudioFocus_readyToIdle_withoutFocus_isNoOp_v26` | `PlayerSessionTests.testPauseAndStopBeforeAnyPlayLeaveTheSessionAlone` |
+| `onAudioFocusChange_withDuckEnabled_reducesAndRestoresVolume` | n/a: session |
+| `onAudioFocusChange_withPausedWhenDucked_sendsCommandWaitForCallback` | n/a: session, `.spokenAudio` asks the system to pause instead of duck, which arrives as an interruption |
+| `onAudioFocusChange_withTransientLoss_sendsCommandWaitForCallback` | `PlayerSessionTests.testInterruptionBeganSuppressesAndPausesTheTransport` |
+| `onAudioFocusChange_withFocusLoss_sendsDoNotPlayAndAbandonsFocus` | `PlayerSessionTests.testInterruptionEndedWithoutShouldResumeSetsPlayWhenReadyFalse` |
+| `onAudioFocusChange_withFocusLoss_sendsDoNotPlayAndAbandonsFocus_v26` | `PlayerSessionTests.testInterruptionEndedWithoutShouldResumeSetsPlayWhenReadyFalse` |
+| `release_doesNotCallPlayerControlToRestoreVolume` | n/a: API |
 
 ## Ours without a media3 test
 

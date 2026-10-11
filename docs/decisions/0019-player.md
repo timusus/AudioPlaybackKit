@@ -63,10 +63,10 @@ Now Playing is a separate product as media3's `MediaSession` is: it links `Media
 CarPlay templates or widgets that render the same state another way (Shuttle2's `NowPlayingWidgetPublisher`,
 both apps' `CPNowPlayingTemplate` custom buttons), and its tests need no renderer at all.
 
-The `AVAudioSession` policy lives in `PlaybackPlayer`, behind the `AudioSessionControlling` seam. The
-app overrides it in one of two ways and no third: it passes an `AudioSessionConfiguration` (category,
-mode, route-sharing policy, options) to the default `SystemAudioSession`, or it supplies its own
-conformer. The rules that act on session events (when to pause, when to resume, when to reactivate)
+The `AVAudioSession` policy lives in `PlaybackPlayer`, behind the internal `AudioSessionControlling`
+seam. The app's one override is an `AudioSessionConfiguration` (category, mode, route-sharing policy,
+options) passed to `Player.init`; `SystemAudioSession` applies it. Neither app needs a conformer of its
+own, so the seam and `SystemAudioSession` stay internal and only tests replace them. The rules that act on session events (when to pause, when to resume, when to reactivate)
 are the player's and not configurable; both apps' rules are the same once the gaps in the Podcasts copy
 are filled, and Shuttle2's `AudioSessionController` is the version we take.
 
@@ -318,13 +318,16 @@ Rules, taken from Shuttle2's `AudioSessionController` and media3's `AudioFocusMa
   thread, before `Transport.play()`; a throw refuses the play (`error.kind == .session`, `playWhenReady`
   stays true so the user's next tap retries). The category is set at init. `stop()`, and the list
   emptying, call `setActive(false, options: .notifyOthersOnDeactivation)`.
-- **Interruption began**: `suppression = .interruption`, `Transport.pause()`. `playWhenReady` is untouched.
-  A `pause()` from the app during the interruption clears the memory of wanting to resume (Shuttle2's
-  "no user action in between").
-- **Interruption ended** with `shouldResume` and `playWhenReady` still true: `setActive(true)`, then
-  `Transport.play()`; if reactivation throws the player stays suppressed and retries on the next
-  `play()`. Without `shouldResume`: `playWhenReady = false` with reason `.interruptionEnded`, so the UI
-  shows paused. Either way `suppression` returns to `.none`.
+- **Interruption began**: the system has deactivated the session, so the next play activates again.
+  If `playWhenReady` is true, `suppression = .interruption` and `Transport.pause()`; `playWhenReady` is
+  untouched. Paused already, nothing is suppressed and nothing resumes. A `pause()` from the app during
+  the interruption clears `suppression`, which is the memory of wanting to resume (Shuttle2's "no user
+  action in between").
+- **Interruption ended** while still suppressed: with `shouldResume`, `setActive(true)`, then
+  `Transport.play()` and `suppression = .none`; if reactivation throws the player stays suppressed, with
+  no error, and retries on the next `play()`. Without `shouldResume`: `suppression = .none` and
+  `playWhenReady = false` with reason `.interruptionEnded`, so the UI shows paused. A `play()` during the
+  interruption reactivates at once (media3's regular gain); if that throws it too stays suppressed.
 - **Route change**: `oldDeviceUnavailable` pauses only when a personal output kind (headphones,
   Bluetooth, USB, line out, car, AirPlay) left the route and no output of that kind remains
   (`pausesOnRouteChange`); a Bluetooth profile switch plays on. The pause is `playWhenReady = false`
@@ -332,10 +335,13 @@ Rules, taken from Shuttle2's `AudioSessionController` and media3's `AudioFocusMa
   unplug during a call never resumes onto the speaker. `newDeviceAvailable` does nothing: Podcasts'
   auto-play on headphones (`HeadphoneObserver`, `pref_auto_play_headphones`) is a preference and stays in
   the app, which observes the route itself.
-- **Media-services reset**: the session seam reports it; the player sets the category again, then waits
-  for `Transport`'s own rebuild (ADR-0018: one recovery layer, lands paused). When the transport reports
-  `.paused` after the reset, the player sets `playWhenReady = false` and sends `recoveredPaused`. The
-  renderer-failed path does the same without touching the session. Shuttle2's `rebuildEngine` and
+- **Media-services reset**: the session seam reports it; the player sets the category again, marks the
+  session inactive, clears `suppression`, sets `playWhenReady = false` without a `playWhenReadyChanged`
+  and, with an item loaded, sends `recoveredPaused` at once. `Transport`'s own rebuild restarts paused at
+  the heard position (ADR-0018: one recovery layer), whichever of the two hears the reset first, so the
+  player need not wait for its `.paused`; the next `play()` activates again. A renderer failure the
+  transport recovers by itself is not yet reported to the player (no transport event says so), so it
+  sets neither. Shuttle2's `rebuildEngine` and
   `reloadEngine(positionMs:)` go; Podcasts gains handling it never had.
 - **Pump while suppressed**: an app `seek` or `skipToNext` during an interruption is applied paused;
   the resume rule above decides whether audio starts.
@@ -343,7 +349,8 @@ Rules, taken from Shuttle2's `AudioSessionController` and media3's `AudioFocusMa
 ### Testing
 
 Every rule is driven without a device through four fakes: `FakeAudioOutput` and the manual clock
-(#116), `FakeAudioSession` (records `setCategory` and `setActive` calls, can make them throw, and
+(#116), `FakeAudioSession` (records configure, activate and deactivate calls, can make activation
+throw or wait, and
 posts `interruptionBegan`, `interruptionEnded(shouldResume:)`, `routeChanged(reason:previous:current:)`
 and `mediaServicesReset`), and `FakeItemFactory` (hands a `FakeItemSource` per item with a chosen
 format, length and failure point, and records which items were asked for and when). `Player` gets an
@@ -376,8 +383,9 @@ Cases each slice must have:
   false with reason; an app `pause()` during the interruption prevents the resume; a reactivation that
   throws stays suppressed; `oldDeviceUnavailable` for headphones pauses with reason `.routeLost`; a
   Bluetooth profile switch does not; an unplug during an interruption cancels the resume; a
-  media-services reset reconfigures the category, lands paused and sends `recoveredPaused`; `stop()`
-  deactivates with `notifyOthersOnDeactivation`.
+  media-services reset reconfigures the category, lands paused and sends `recoveredPaused`, twice in a
+  row and during an interruption too; `stop()` deactivates with `notifyOthersOnDeactivation`. Each
+  in-scope `AudioFocusManagerTest` case is mapped in `docs/player-conformance-mapping.md`.
 - **Now Playing**: the info centre gets title, duration, elapsed and rate on item change and state
   change and not on each position tick; a 15 s skip interval registers `skipForward` and not
   `nextTrack`, and the reverse; each remote command calls the player method; `changePlaybackRate`
