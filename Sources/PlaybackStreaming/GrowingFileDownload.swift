@@ -137,6 +137,11 @@ struct GrowingFileDownload {
         // Past a known total nothing can arrive (an estimated transcode length may overpromise);
         // the total itself is end of stream.
         if let total = totalLength, newOffset > total { throw StreamByteReaderError.unseekable }
+        // A body of no length whose range was answered 200 (a live transcode) only arrives in order:
+        // media3's SeekMap.Unseekable. Waiting for it would fail later as a transport error.
+        if let tx = current, tx.answered, tx.totalLength == nil, !tx.rangeHonoured, newOffset > tx.frontier {
+            throw StreamByteReaderError.unseekable
+        }
         offset = newOffset
         unclaimedSeek?.sought = true
         stickyFailure = nil

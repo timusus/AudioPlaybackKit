@@ -101,6 +101,9 @@ final class GrowingFileContractTests: GrowingFileContractCase {
         try forEachResource { resource in
             let (_, source) = try open(resource, body: body)
             _ = try finish(readAsync(source, 1), resource.name).get()
+            // A body of no length that ignores ranges refuses a seek past its frontier until its end is known.
+            let deadline = Date().addingTimeInterval(20)
+            while source.totalLength == nil, Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
             try source.seek(to: Int64(body.count))
             XCTAssertEqual(try finish(readAsync(source, 10), resource.name).get(), Data(), resource.name)
         }
