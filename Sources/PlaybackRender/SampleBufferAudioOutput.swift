@@ -79,6 +79,15 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     func setEventHandler(_ handler: @escaping @Sendable (AudioOutputEvent) -> Void) {
         lock.withLock { self.handler = handler }
     }
+
+    #if os(macOS)
+    /// Tests only: a device switch mid-play is a documented auto-flush trigger, which a test can
+    /// drive on macOS without a human.
+    var audioOutputDeviceUniqueID: String? {
+        get { renderer.audioOutputDeviceUniqueID }
+        set { renderer.audioOutputDeviceUniqueID = newValue }
+    }
+    #endif
 }
 
 /// `time` in nanoseconds, since an anchor is a clock reading or a written end at any item's rate.
