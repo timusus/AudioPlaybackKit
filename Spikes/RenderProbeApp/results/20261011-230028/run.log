@@ -1,0 +1,27 @@
+device 00008140-000539602E90401C, app args: --check --only A11
+2026-10-11 23:00:31.684 xcodebuild[91106:21694232] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+App installed:
+• bundleID: com.simplecityapps.renderprobe
+• installationURL: file:///private/var/containers/Bundle/Application/9F250212-4173-4EAF-AA30-CCF1340A0204/RenderProbe.app/
+• launchServicesIdentifier: unknown
+• databaseUUID: 490CDBE6-833A-43BA-BBD3-156E9580DF4E
+• databaseSequenceNumber: 5872
+• options: 
+2026-10-11 23:00:37.773 xcodebuild[91891:21695756] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+App installed:
+• bundleID: com.simplecityapps.renderprobe.interruptor
+• installationURL: file:///private/var/containers/Bundle/Application/36988B1E-A7C6-4119-81EF-7793201EBD83/InterruptorApp.app/
+• launchServicesIdentifier: unknown
+• databaseUUID: 490CDBE6-833A-43BA-BBD3-156E9580DF4E
+• databaseSequenceNumber: 5880
+• options: 
+launched; polling for check-done every 5 s (30 min cap)
+  A11: launching InterruptorApp --call
+# PlaybackRender device check
+
+iPhone iOS 26.6.1, started 2026-10-11T12:00:41Z, mic granted
+
+| Scenario | Status | Result |
+|---|---|---|
+| A11 | measured | CallKit call: 0 flush(es), latency 15.4 -> 4.5 ms, jump 0 ms, clock back 0.0 ms; observed ["interruptionEnded shouldResume", "statusAfterCall playing", "statusDuringCall playing", "synchronizerRateAfterCall 0.0", "synchronizerRateDuringCall 0.0"]; .ended after 2.27 s |
+results in results/20261011-230028

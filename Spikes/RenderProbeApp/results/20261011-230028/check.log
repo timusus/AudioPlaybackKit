@@ -1,0 +1,23 @@
+   0.007 launch 2026-10-11T12:00:41Z iPhone iOS 26.6.1
+   0.041 CHECK start skipGuided=false
+   1.621 === CHECK A11 interruption by an incoming CallKit call answered in another app ===
+   1.636 session .playback longForm=false preferredRate=unset: hwRate=48000 ioBuffer=21.3ms outputLatency=15.4ms outputs=Speaker:Speaker
+   1.649 transport status buffering clock 0.000
+   1.673 transport crossed F clock 0.000
+   1.690 transport status playing clock 0.000
+   4.696 STEP CallKit call
+   6.143 INTERRUPTION began reasonRaw=0 shouldResume=false
+   6.161 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.0ms outputLatency=4.5ms outputs=Receiver:Receiver
+  11.048 note statusDuringCall playing
+  11.049 note synchronizerRateDuringCall 0.0
+  11.078 ROUTE CHANGE unknown(0): Receiver:Receiver -> hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker
+  11.078 INTERRUPTION ended reasonRaw=0 shouldResume=true
+  11.078 note interruptionEnded shouldResume
+  12.112 session reactivated after 5 attempt(s)
+  13.113 note statusAfterCall playing
+  13.114 note synchronizerRateAfterCall 0.0
+  16.125 transport status buffering clock 4.249
+  16.162 transport status playing clock 4.249
+  18.389 transport status ended clock 6.249
+  18.398 CHECK A11: measured - CallKit call: 0 flush(es), latency 15.4 -> 4.5 ms, jump 0 ms, clock back 0.0 ms; observed ["interruptionEnded shouldResume", "statusAfterCall playing", "statusDuringCall playing", "synchronizerRateAfterCall 0.0", "synchronizerRateDuringCall 0.0"]; .ended after 2.27 s
+  18.411 CHECK done in 18 s

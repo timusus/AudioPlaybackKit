@@ -1,0 +1,46 @@
+{
+  "complete" : true,
+  "device" : "iPhone",
+  "ios" : "26.6.1",
+  "micPermission" : "granted",
+  "scenarios" : [
+    {
+      "endedAfterSeekS" : 2.27,
+      "endedFired" : true,
+      "failed" : [
+
+      ],
+      "guided" : false,
+      "id" : "A11",
+      "observed" : {
+        "interruptionEnded" : "shouldResume",
+        "statusAfterCall" : "playing",
+        "statusDuringCall" : "playing",
+        "synchronizerRateAfterCall" : 0,
+        "synchronizerRateDuringCall" : 0
+      },
+      "question" : "interruption by an incoming CallKit call answered in another app",
+      "seconds" : 16.777000000000001,
+      "status" : "measured",
+      "steps" : [
+        {
+          "clockStepBackMs" : 0,
+          "flushes" : [
+
+          ],
+          "outputLatencyMs" : [
+            15.353999999999999,
+            4.5
+          ],
+          "outputsAfter" : "Speaker:Speaker",
+          "outputsBefore" : "Speaker:Speaker",
+          "positionJumpMs" : 0,
+          "step" : "CallKit call"
+        }
+      ],
+      "verdict" : "CallKit call: 0 flush(es), latency 15.4 -> 4.5 ms, jump 0 ms, clock back 0.0 ms; observed [\"interruptionEnded shouldResume\", \"statusAfterCall playing\", \"statusDuringCall playing\", \"synchronizerRateAfterCall 0.0\", \"synchronizerRateDuringCall 0.0\"]; .ended after 2.27 s"
+    }
+  ],
+  "skipGuided" : false,
+  "started" : "2026-10-11T12:00:41Z"
+}
