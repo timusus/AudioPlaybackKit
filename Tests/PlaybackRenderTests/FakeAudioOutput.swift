@@ -197,6 +197,16 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
         handler?(.failed(error))
     }
 
+    /// The media-services reset: the renderer is dead as in `injectFailure`, but the event names none.
+    func injectReset() {
+        let handler = locked {
+            rendererFailed = true
+            _events.append(.mediaServicesReset)
+            return self.handler
+        }
+        handler?(.mediaServicesReset)
+    }
+
     /// Every later `rebuild()` throws `error`.
     func failRebuilds(with error: any Error) {
         locked { rebuildError = error }

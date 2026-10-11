@@ -19,14 +19,16 @@ enum AudioOutputEvent: Equatable, Sendable {
     /// The output stopped consuming audio until the next `flush()`; its clock no longer tracks
     /// what is heard.
     case stalled
-    /// The renderer failed or the media services were reset: nothing queued will play and only
-    /// `rebuild()` brings the output back.
+    /// The renderer failed: nothing queued will play and only `rebuild()` brings the output back.
     case failed(any Error)
+    /// The media services were reset. Unlike `.failed` it names no renderer and arrives once per
+    /// reset, so it may follow a failure the caller already recovered from; `rebuild()` answers it.
+    case mediaServicesReset
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
         case let (.autoFlushed(a), .autoFlushed(b)): a == b
-        case (.stalled, .stalled): true
+        case (.stalled, .stalled), (.mediaServicesReset, .mediaServicesReset): true
         case let (.failed(a), .failed(b)): a as NSError == b as NSError
         default: false
         }

@@ -2,9 +2,8 @@ import AVFoundation
 @testable import PlaybackRender
 import XCTest
 
-/// The adapter's `rebuild()` and renderer events without playing: a fresh renderer with the
-/// settings it had, and no event from the renderer it replaced. The failure itself is checked on device (Settings >
-/// Developer > Reset Media Services).
+/// `rebuild()` without playing: a fresh renderer with the old settings, and no event from the one
+/// it replaced. A real reset is checked on device (Developer > Reset Media Services).
 final class SampleBufferAudioOutputRebuildTests: XCTestCase {
     func testARebuildReplacesTheRendererAndKeepsItsSettings() throws {
         let output = SampleBufferAudioOutput()

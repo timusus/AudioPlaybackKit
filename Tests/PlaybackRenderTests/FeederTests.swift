@@ -410,6 +410,56 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(output.rate, 0)
     }
 
+    // iOS: the old renderer's KVO failure, a pump that rebuilds, then the reset notification.
+    func testAResetAfterTheFailureItCausedRebuildsAgainWithoutFailing() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1)
+        output.injectFailure()
+        feeder.pump()
+        output.injectReset()
+        feeder.pump()
+
+        XCTAssertEqual(output.rebuilds, 2)
+        XCTAssertTrue(failures.isEmpty)
+        XCTAssertEqual(upstream.resupplies, [pos(0, 4), pos(0, 4)])
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+        XCTAssertEqual(output.rate, 0)
+
+        feeder.play()
+        run(for: 10)
+        XCTAssertEqual(heard, ramp(0, 0..<40))
+    }
+
+    func testAFailureAndAResetBeforeOnePumpRebuildOnce() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1)
+        output.injectFailure()
+        output.injectReset()
+        feeder.pump()
+
+        XCTAssertEqual(output.rebuilds, 1)
+        XCTAssertTrue(failures.isEmpty)
+        XCTAssertEqual(upstream.resupplies, [pos(0, 4)])
+    }
+
+    func testAFailureOfTheRebuiltRendererAfterAResetStillSurfaces() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1)
+        output.injectReset()
+        feeder.pump()
+        output.injectFailure()
+        feeder.pump()
+        feeder.play()
+        run(for: 2)
+
+        XCTAssertEqual(output.rebuilds, 1)
+        XCTAssertEqual(failures.map { $0 as? AudioOutputError }, [.rendererFailed])
+        XCTAssertEqual(output.rate, 0)
+    }
+
     func testAFailureAfterPlayingAgainRecoversAgain() {
         makeFeeder([item(0, 40)])
         feeder.play()

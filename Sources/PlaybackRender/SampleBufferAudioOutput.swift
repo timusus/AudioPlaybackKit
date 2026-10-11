@@ -8,7 +8,7 @@ import CoreMedia
 /// It never configures or activates `AVAudioSession`: on iOS the app owns the category, activation
 /// and interruptions. `.stalled` is never sent: the renderer has no signal for it, since an underrun
 /// runs the clock on silently (ADR-0018). A failed renderer is reported from its `status` and by
-/// the next enqueue; on iOS a media-services reset is reported the same way.
+/// the next enqueue; on iOS a media-services reset is reported as `.mediaServicesReset`.
 final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     private let formats = FormatDescriptionCache()
     // Recursive: events go to the handler under it, and a handler may read the clock.
@@ -32,8 +32,8 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
         resetObserver = NotificationCenter.default.addObserver(
             forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: nil
         ) { [weak self] _ in
-            guard let self else { return }
-            send(.failed(AVError(.mediaServicesWereReset)), from: renderer)
+            // The notification names no renderer, so it skips `send`'s identity guard.
+            self?.lock.withLock { self?.handler?(.mediaServicesReset) }
         }
         #endif
     }

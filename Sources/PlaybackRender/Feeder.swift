@@ -88,6 +88,7 @@ final class Feeder {
             // A stalled clock stops tracking what is heard, so take the time it stalled at now.
             case .stalled: inbox.post(output.currentTime() - output.outputLatency)
             case let .failed(error): inbox.post(failure: error)
+            case .mediaServicesReset: inbox.postReset()
             }
             // The output is silent until a pump restarts it.
             wake()
@@ -146,8 +147,8 @@ final class Feeder {
     /// ready-for-more callback, often enough that `resumeDepth` outlasts the gap between calls.
     func pump() {
         let pending = inbox.drain()
-        if let failure = pending.failure {
-            recover(from: failure, flushedAt: pending.time)
+        if pending.reset || pending.failure != nil {
+            recover(from: pending.reset ? nil : pending.failure, flushedAt: pending.time)
         } else if let time = pending.time {
             restart(from: currentPosition(at: max(map.epochStart, time)))
         }
@@ -202,10 +203,11 @@ final class Feeder {
         setStatus(status ?? (playWhenReady ? .buffering : .paused))
     }
 
-    /// A failed renderer, or a media-services reset: rebuild the output and restart from what was
-    /// heard, paused, so the user chooses to play on.
-    private func recover(from error: any Error, flushedAt time: TimeInterval? = nil) {
-        guard !recovering else { return fail(error) }
+    /// A failed renderer, or a media-services reset (`error` nil): rebuild the output and restart
+    /// from what was heard, paused, so the user chooses to play on. A reset always rebuilds, even
+    /// mid-recovery: it can follow the failure it caused, and each notification comes once.
+    private func recover(from error: (any Error)?, flushedAt time: TimeInterval? = nil) {
+        if let error, recovering { return fail(error) }
         let heard = min(time ?? .infinity, playhead())
         let position = currentPosition(at: max(map.epochStart, heard))
         recovering = true
@@ -289,6 +291,7 @@ private final class RestartInbox: @unchecked Sendable {
     private let lock = NSLock()
     private var time: TimeInterval?
     private var failure: (any Error)?
+    private var reset = false
 
     func post(_ time: TimeInterval) {
         lock.withLock { self.time = min(self.time ?? time, time) }
@@ -298,10 +301,14 @@ private final class RestartInbox: @unchecked Sendable {
         lock.withLock { self.failure = self.failure ?? failure }
     }
 
-    func drain() -> (time: TimeInterval?, failure: (any Error)?) {
+    func postReset() {
+        lock.withLock { reset = true }
+    }
+
+    func drain() -> (time: TimeInterval?, failure: (any Error)?, reset: Bool) {
         lock.withLock {
-            defer { (time, failure) = (nil, nil) }
-            return (time, failure)
+            defer { (time, failure, reset) = (nil, nil, false) }
+            return (time, failure, reset)
         }
     }
 

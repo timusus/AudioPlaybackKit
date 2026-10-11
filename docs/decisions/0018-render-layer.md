@@ -74,7 +74,7 @@ How features fit:
 
 ### Recovery
 
-A failed renderer is terminal. This happens through its `status`, a failed enqueue, or an iOS media-services reset. The feeder then rebuilds the output and restarts from the heard position through the one restart path. The rebuild makes a fresh renderer and synchronizer with the same volume, pitch algorithm and device. Recovery always lands paused, so the user chooses to play on (owner decision). As media3's `pendingRecoverableRendererError` does, it retries once: a second failure before `.playing`, or a rebuild that throws, surfaces as `.failed` with no further rebuild.
+A failed renderer is terminal. This happens through its `status`, a failed enqueue, or an iOS media-services reset. The feeder then rebuilds the output and restarts from the heard position through the one restart path. The rebuild makes a fresh renderer and synchronizer with the same volume, pitch algorithm and device. Recovery always lands paused, so the user chooses to play on (owner decision). As media3's `pendingRecoverableRendererError` does, it retries once: a second failure before `.playing`, or a rebuild that throws, surfaces as `.failed` with no further rebuild. A media-services reset is a separate event that always rebuilds, since it can follow the failure it caused.
 
 ## Alternatives rejected
 
