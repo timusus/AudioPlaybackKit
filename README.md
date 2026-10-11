@@ -25,6 +25,7 @@ Link only the products you import.
 |---|---|
 | `PlaybackDecode` | `FFmpegStreamDecoder`: interleaved Float32 PCM from any `StreamByteReader`; `FileByteReader` reads a local file. |
 | `PlaybackStreaming` | `GrowingFileByteSource`: plays an HTTP(S) URL while it downloads. |
+| `PlaybackRender` | `Transport`: plays decoded PCM through `AVSampleBufferAudioRenderer`, joining items gaplessly. |
 | `PlaybackStreamingTestSupport` | `LoopbackMediaServer`: a local HTTP server for testing code that streams. |
 | `FFmpeg` | The LGPL-only FFmpeg as a dynamic framework, for an app with its own C code against libavformat. |
 
@@ -69,7 +70,7 @@ while let chunk = decoder.nextChunk() {          // interleaved Float32, up to 4
 ## Not a player
 
 There is no queue, UI, effects or audio output. You schedule the PCM on `AVAudioEngine` or your own output.
-Roadmap: a render layer that feeds the PCM to `AVAudioEngine`.
+Playback through `AVSampleBufferAudioRenderer` is in `PlaybackRender`: see [the render section](docs/usage.md#play-through-the-render-layer).
 
 ## Documentation
 
