@@ -51,15 +51,25 @@ extension GrowingFileDownload {
     static let sniffers: [(demuxer: String, matches: (_ head: [UInt8]) -> Bool)] = {
         func ascii(_ head: [UInt8], _ range: Range<Int>) -> String { String(decoding: head[range], as: UTF8.self) }
         return [
-            ("mp3", { head in (head[0] == 0xFF && head[1] & 0xE0 == 0xE0) || ascii(head, 0..<3) == "ID3" }),
+            // mp3_read_probe skips any run of leading zeros before the frame sync; a run longer than
+            // the head is taken too, since a page never starts with a NUL.
+            ("mp3", { head in
+                if ascii(head, 0..<3) == "ID3" { return true }
+                guard let sync = head.firstIndex(where: { $0 != 0 }) else { return true }
+                return head[sync] == 0xFF && (sync + 1 == head.count || head[sync + 1] & 0xE0 == 0xE0)
+            }),
             ("aac", { head in head[0] == 0xFF && head[1] & 0xF6 == 0xF0 }),
             // LOAS AudioSyncStream: an 11-bit 0x2B7 sync.
             ("loas", { head in head[0] == 0x56 && head[1] & 0xE0 == 0xE0 }),
             // The first atom's type at offset 4; mov_probe takes these as well as ftyp.
-            ("mov", { head in ["ftyp", "moov", "mdat", "wide", "free", "skip", "pnot"].contains(ascii(head, 4..<8)) }),
+            ("mov", { head in
+                ["ftyp", "moov", "mdat", "wide", "free", "skip", "pnot", "udta", "ediw", "junk", "pict", "uuid", "prfl"]
+                    .contains(ascii(head, 4..<8))
+            }),
             ("ogg", { head in ascii(head, 0..<4) == "OggS" }),
             ("flac", { head in ascii(head, 0..<4) == "fLaC" }),
-            ("wav", { head in ["RIFF", "RF64", "BW64"].contains(ascii(head, 0..<4)) }),
+            // wav_probe also wants WAVE at 8, which keeps RIFF AVI and WebP out.
+            ("wav", { head in ["RIFF", "RIFX", "RF64", "BW64"].contains(ascii(head, 0..<4)) && ascii(head, 8..<12) == "WAVE" }),
             ("aiff", { head in ascii(head, 0..<4) == "FORM" && ["AIFF", "AIFC"].contains(ascii(head, 8..<12)) }),
             // EBML header: Matroska and WebM.
             ("matroska", { head in Array(head[0..<4]) == [0x1A, 0x45, 0xDF, 0xA3] }),

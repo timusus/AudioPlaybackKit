@@ -9,16 +9,26 @@ extension GrowingFileDownloadTests {
 
     private static let containers: [(name: String, head: [UInt8])] = [
         ("MP3 frame sync", [0xFF, 0xFB, 0x90, 0x00] + [UInt8](repeating: 0, count: 8)),
+        ("MP3 after zero padding", [0, 0, 0, 0, 0xFF, 0xFB, 0x90, 0x00] + [UInt8](repeating: 0, count: 4)),
+        ("MP3 behind a longer zero padding", [UInt8](repeating: 0, count: 12)),
         ("ID3 tag", Array("ID3".utf8) + [UInt8](repeating: 0, count: 9)),
         ("ADTS", [0xFF, 0xF1, 0x50, 0x80] + [UInt8](repeating: 0, count: 8)),
         ("LOAS", [0x56, 0xE0, 0x20, 0x00] + [UInt8](repeating: 0, count: 8)),
         ("MP4", [0, 0, 0, 0x20] + Array("ftypM4A ".utf8)),
         ("QuickTime moov-first", [0, 0, 0, 0x08] + Array("moov".utf8) + [UInt8](repeating: 0, count: 4)),
         ("QuickTime mdat-first", [0, 0, 0, 0x08] + Array("mdat".utf8) + [UInt8](repeating: 0, count: 4)),
+        ("QuickTime udta-first", [0, 0, 0, 0x08] + Array("udta".utf8) + [UInt8](repeating: 0, count: 4)),
+        ("QuickTime ediw-first", [0, 0, 0, 0x08] + Array("ediw".utf8) + [UInt8](repeating: 0, count: 4)),
+        ("QuickTime junk-first", [0, 0, 0, 0x08] + Array("junk".utf8) + [UInt8](repeating: 0, count: 4)),
+        ("QuickTime pict-first", [0, 0, 0, 0x08] + Array("pict".utf8) + [UInt8](repeating: 0, count: 4)),
+        ("QuickTime uuid-first", [0, 0, 0, 0x18] + Array("uuid".utf8) + [UInt8](repeating: 0, count: 4)),
+        ("QuickTime prfl-first", [0, 0, 0, 0x08] + Array("prfl".utf8) + [UInt8](repeating: 0, count: 4)),
         ("Ogg", Array("OggS".utf8) + [UInt8](repeating: 0, count: 8)),
         ("FLAC", Array("fLaC".utf8) + [UInt8](repeating: 0, count: 8)),
         ("WAV", Array("RIFF".utf8) + [0, 0, 0, 0] + Array("WAVE".utf8)),
+        ("Big-endian WAV", Array("RIFX".utf8) + [0, 0, 0, 0] + Array("WAVE".utf8)),
         ("RF64", Array("RF64".utf8) + [0xFF, 0xFF, 0xFF, 0xFF] + Array("WAVE".utf8)),
+        ("BW64", Array("BW64".utf8) + [0xFF, 0xFF, 0xFF, 0xFF] + Array("WAVE".utf8)),
         ("AIFF", Array("FORM".utf8) + [0, 0, 0, 0] + Array("AIFF".utf8)),
         ("AIFC", Array("FORM".utf8) + [0, 0, 0, 0] + Array("AIFC".utf8)),
         ("Matroska", [0x1A, 0x45, 0xDF, 0xA3] + [UInt8](repeating: 0, count: 8)),
@@ -38,15 +48,24 @@ extension GrowingFileDownloadTests {
         }
     }
 
-    @Test("a page served as application/octet-stream is refused")
+    private static let notAudio: [(name: String, head: [UInt8])] = [
+        ("page", Array("<!DOCTYPE ht".utf8)),
+        ("page after zero padding", [0, 0] + Array("<!DOCTYPE ".utf8)),
+        ("RIFF AVI", Array("RIFF".utf8) + [0, 0, 0, 0] + Array("AVI ".utf8)),
+        ("RIFF WebP", Array("RIFF".utf8) + [0, 0, 0, 0] + Array("WEBP".utf8)),
+    ]
+
+    @Test("a body no enabled demuxer takes is refused when served as application/octet-stream")
     func aPageDoesNotSniffAsMedia() {
-        let h = Harness()
-        _ = h.read()
-        #expect(h.respond(200, length: 100_000, mimeType: "application/octet-stream"))
-        h.body(12, head: Array("<!DOCTYPE ht".utf8))
-        guard case .fail = h.read() else {
-            Issue.record("a page was taken")
-            return
+        for body in Self.notAudio {
+            let h = Harness()
+            _ = h.read()
+            #expect(h.respond(200, length: 100_000, mimeType: "application/octet-stream"), "\(body.name)")
+            h.body(12, head: body.head)
+            guard case .fail = h.read() else {
+                Issue.record("\(body.name) was taken")
+                continue
+            }
         }
     }
 
