@@ -1,0 +1,30 @@
+   0.017 launch 2026-10-11T11:50:32Z iPhone iOS 26.6.1
+   0.080 CHECK start skipGuided=false
+   1.697 === CHECK A11 interruption by an incoming CallKit call answered in another app ===
+   1.739 session .playback longForm=false preferredRate=unset: hwRate=48000 ioBuffer=21.3ms outputLatency=15.4ms outputs=Speaker:Speaker
+   1.757 transport status buffering clock 0.000
+   1.767 transport crossed F clock 0.000
+   1.781 transport status playing clock 0.000
+   4.790 STEP CallKit call
+  42.103 transport status ended clock 40.000
+  49.801 CHECK A11: error - no interruption in 45 s; InterruptorApp last log line: 2026-10-11T11:50:41Z FAILED: Error Domain=com.apple.CallKit.error.incomingcall Code=3 "(null)" (com.apple.CallKit.error.incomingcall 3)
+  49.818 === CHECK G8 Long AirPlay tone: Transport, then AVPlayer ===
+  49.834 session .playback longForm=false preferredRate=unset: hwRate=48000 ioBuffer=21.3ms outputLatency=15.4ms outputs=Speaker:Speaker
+  55.584 PICKER OPEN outputs Speaker:Speaker
+  59.473 ROUTE CHANGE newDeviceAvailable: Speaker:Speaker -> hwRate=44100 ioBuffer=23.2ms outputLatency=2000.0ms outputs=AirPlay:Timothy’s MacBook Pro
+  59.477 prompt 'Pick the Mac': fired: AirPlay:Timothy’s MacBook Pro
+  62.710 G8 MARK transport-start 2026-10-11T11:51:35.422Z
+  62.712 transport status buffering clock 0.000
+  62.716 transport crossed T clock 0.000
+  62.726 transport status playing clock 0.000
+  95.023 transport status ended clock 30.000
+  95.026 G8 MARK transport-end 2026-10-11T11:52:07.738Z
+  97.067 G8 MARK avplayer-start 2026-10-11T11:52:09.779Z
+ 127.630 G8 MARK avplayer-end 2026-10-11T11:52:40.342Z
+ 130.368 PICKER OPEN outputs AirPlay:Timothy’s MacBook Pro
+ 131.899 ROUTE CHANGE override: AirPlay:Timothy’s MacBook Pro -> hwRate=48000 ioBuffer=21.3ms outputLatency=15.4ms outputs=Speaker:Speaker
+ 131.903 prompt 'Back to the iPhone': fired: Speaker:Speaker
+ 131.903 G8 back to iPhone: fired: Speaker:Speaker
+ 182.468 prompt 'Which half was choppy?': Neither
+ 182.473 CHECK G8: measured - marks (UTC) transport-start 2026-10-11T11:51:35.422Z, transport-end 2026-10-11T11:52:07.738Z, avplayer-start 2026-10-11T11:52:09.779Z, avplayer-end 2026-10-11T11:52:40.342Z; route AirPlay:Timothy’s MacBook Pro; Transport: 0 auto-flush(es), max position stall 105 ms, ended true; AVPlayer: 0 stall(s), ended; owner: Neither
+ 182.482 CHECK done in 182 s

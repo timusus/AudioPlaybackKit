@@ -1,0 +1,2 @@
+2026-10-11T11:50:38Z run: args ["--call"]
+2026-10-11T11:50:41Z FAILED: Error Domain=com.apple.CallKit.error.incomingcall Code=3 "(null)" (com.apple.CallKit.error.incomingcall 3)

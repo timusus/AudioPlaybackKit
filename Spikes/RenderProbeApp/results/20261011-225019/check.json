@@ -1,0 +1,44 @@
+{
+  "complete" : true,
+  "device" : "iPhone",
+  "ios" : "26.6.1",
+  "micPermission" : "granted",
+  "scenarios" : [
+    {
+      "guided" : false,
+      "id" : "A11",
+      "question" : "interruption by an incoming CallKit call answered in another app",
+      "seconds" : 48.103999999999999,
+      "status" : "error",
+      "verdict" : "no interruption in 45 s; InterruptorApp last log line: 2026-10-11T11:50:41Z FAILED: Error Domain=com.apple.CallKit.error.incomingcall Code=3 \"(null)\" (com.apple.CallKit.error.incomingcall 3)"
+    },
+    {
+      "avplayerEnd" : "ended",
+      "avplayerStalls" : 0,
+      "guided" : true,
+      "id" : "G8",
+      "marksUtc" : {
+        "avplayer-end" : "2026-10-11T11:52:40.342Z",
+        "avplayer-start" : "2026-10-11T11:52:09.779Z",
+        "transport-end" : "2026-10-11T11:52:07.738Z",
+        "transport-start" : "2026-10-11T11:51:35.422Z"
+      },
+      "owner" : "Neither",
+      "question" : "Long AirPlay tone: Transport, then AVPlayer",
+      "route" : "AirPlay:Timothy’s MacBook Pro",
+      "seconds" : 132.65799999999999,
+      "status" : "measured",
+      "transportEnded" : true,
+      "transportFailed" : [
+
+      ],
+      "transportFlushes" : [
+
+      ],
+      "transportMaxPositionStallMs" : 104.92700000000001,
+      "verdict" : "marks (UTC) transport-start 2026-10-11T11:51:35.422Z, transport-end 2026-10-11T11:52:07.738Z, avplayer-start 2026-10-11T11:52:09.779Z, avplayer-end 2026-10-11T11:52:40.342Z; route AirPlay:Timothy’s MacBook Pro; Transport: 0 auto-flush(es), max position stall 105 ms, ended true; AVPlayer: 0 stall(s), ended; owner: Neither"
+    }
+  ],
+  "skipGuided" : false,
+  "started" : "2026-10-11T11:50:32Z"
+}
