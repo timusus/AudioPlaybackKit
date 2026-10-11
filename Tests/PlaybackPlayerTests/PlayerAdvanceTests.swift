@@ -274,8 +274,64 @@ final class PlayerAdvanceTests: XCTestCase {
         rig.run(for: 1)
         let samples = rig.output.enqueues.suffix(4).flatMap(\.samples)
         XCTAssertTrue(samples.allSatisfy { $0 >= 2000 }, "c is heard")
+        XCTAssertEqual(rig.factory.calls, ["a", "b", "c"], "the transport took the seek to c's armed key")
         let events = await rig.finish()
         XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 1, reason: .auto)])
+    }
+
+    // With nothing after the removed b, a's end is the end of the list.
+    func testACrossingIntoARemovedLastItemEnds() async {
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 9)
+        player.remove(at: 1)
+        rig.run(for: 2)
+
+        XCTAssertEqual(player.currentItem, "a")
+        XCTAssertEqual(player.state, .ended)
+        let written = rig.output.enqueues.count
+        rig.run(for: 2)
+        XCTAssertEqual(player.state, .ended)
+        XCTAssertEqual(rig.output.enqueues.count, written, "b is not played on")
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [])
+    }
+
+    // c is not armed, as pause at end was set after b was removed: a's end pauses at c's start.
+    func testACrossingIntoARemovedNextUnderPauseAtEndPausesAtTheListsNext() async {
+        player.setItems(["a", "b", "c"])
+        player.play()
+        rig.run(for: 9)
+        player.remove(at: 1)
+        player.pauseAtEndOfItem = true
+        rig.run(for: 2)
+
+        XCTAssertEqual(player.currentItem, "c")
+        XCTAssertEqual(player.position, 0)
+        XCTAssertFalse(player.playWhenReady)
+        XCTAssertEqual(player.state, .ready)
+        XCTAssertEqual(rig.output.rate, 0)
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 1, reason: .auto)])
+        XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [.init(value: false, reason: .endOfItem)])
+    }
+
+    // c is not armed, as its source failed to make: a's end reports it.
+    func testACrossingIntoARemovedNextReportsTheListsFailedNext() async {
+        rig.factory.failing = ["c"]
+        player.setItems(["a", "b", "c"])
+        player.play()
+        rig.run(for: 9)
+        player.remove(at: 1)
+        rig.run(for: 2)
+
+        XCTAssertEqual(player.currentItem, "c")
+        XCTAssertEqual(player.state, .idle)
+        XCTAssertEqual(player.error?.kind, .source)
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.kinds(events), [.itemTransition, .itemFailed])
+        XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 1, reason: .auto)])
+        XCTAssertEqual(PlayerRig.failedIndices(events), [1])
     }
 
     // media3 ExoPlayerTest.removeMediaItem_withRepeatModeOne_endsPlaybackAndStopsLoading.

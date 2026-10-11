@@ -435,8 +435,12 @@ public final class Player<Item: Hashable & Sendable> {
         duration = nil
         isLive = false
         guard let index = index(of: entryID) else {
-            // Removed since it was armed: on to what the list armed after it, else the list ended.
-            guard let next = armedEntryID.flatMap(index(of:)) else { return unload(as: .ended) }
+            // Removed since it was armed, so the current has ended: on to what the list armed after
+            // it, else as at the end of the current (a failed next, pause at end, or the list's end).
+            guard let next = armedEntryID.flatMap(index(of:)) else {
+                if !reachedEnd() { unload(as: .ended) }
+                return
+            }
             currentIndex = next
             send(.itemTransition(from: from, to: next, reason: .auto))
             return jump(to: next, at: 0)
