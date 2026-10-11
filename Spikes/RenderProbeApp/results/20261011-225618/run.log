@@ -1,0 +1,27 @@
+device 00008140-000539602E90401C, app args: --check --only G8
+2026-10-11 22:56:22.028 xcodebuild[63570:21642922] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+App installed:
+• bundleID: com.simplecityapps.renderprobe
+• installationURL: file:///private/var/containers/Bundle/Application/0EAB7168-7312-4797-9C00-CBF93B93A14A/RenderProbe.app/
+• launchServicesIdentifier: unknown
+• databaseUUID: 490CDBE6-833A-43BA-BBD3-156E9580DF4E
+• databaseSequenceNumber: 5856
+• options: 
+2026-10-11 22:56:28.339 xcodebuild[64512:21644727] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+App installed:
+• bundleID: com.simplecityapps.renderprobe.interruptor
+• installationURL: file:///private/var/containers/Bundle/Application/77986C77-615D-4C04-A0B8-7A8AD7C9DACB/InterruptorApp.app/
+• launchServicesIdentifier: unknown
+• databaseUUID: 490CDBE6-833A-43BA-BBD3-156E9580DF4E
+• databaseSequenceNumber: 5864
+• options: 
+launched; polling for check-done every 5 s (30 min cap)
+  waiting (1 min)
+# PlaybackRender device check
+
+iPhone iOS 26.6.1, started 2026-10-11T11:56:32Z, mic granted
+
+| Scenario | Status | Result |
+|---|---|---|
+| G8 | measured | marks (UTC) transport-start 2026-10-11T11:56:45.345Z, transport-end 2026-10-11T11:57:17.663Z, avplayer-start 2026-10-11T11:57:19.709Z, avplayer-end 2026-10-11T11:57:50.079Z; route AirPlay:Timothy’s MacBook Pro; Transport: 0 auto-flush(es), max position stall 105 ms, ended true; AVPlayer: 0 stall(s), ended; owner: Transport half choppy |
+results in results/20261011-225618
