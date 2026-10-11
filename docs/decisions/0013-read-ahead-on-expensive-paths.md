@@ -42,8 +42,17 @@ is never capped. Nil (the default) and cheap paths download whole.
 - One request per pause, from the frontier; what was on the wire at each cancel comes twice.
 - A preopened track costs about the probe and one read-ahead; when to preopen is the app's call
   (Shuttle2's `PreopenLead`).
-- The read-ahead is in bytes: the host converts from seconds with the stream's bitrate. Shuttle2
-  uses 60 s; Podcasts passes none.
+- The read-ahead is in bytes, or in seconds (see the amendment). Shuttle2 uses 60 s; Podcasts
+  passes none.
+
+## Amendment: read-ahead in seconds
+
+`GrowingFileReadAhead(seconds:fallbackBytes:)` gives the limit in time, as media3's
+`DefaultLoadControl` does. The host reports the probed duration with
+`GrowingFileByteSource.streamProbed(duration:)`; the source takes the bitrate as total length over
+duration and the limit becomes `seconds × bitrate / 8` bytes, the same cap and hysteresis as above.
+Until then, or when the length or duration is unknown, `fallbackBytes` applies. The decoder exposes
+a duration but no bitrate, so length over duration is the one conversion.
 
 Links: [ADR-0003](0003-growing-file-playback.md), [ADR-0004](0004-one-recovery-layer-in-the-byte-source.md),
 [ADR-0007](0007-one-network-byte-source.md), issue #67, shuttle2#958.

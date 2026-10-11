@@ -368,8 +368,8 @@ final class Harness {
     let clock = ManualGrowingFileClock()
     var machine: GrowingFileDownload
 
-    init(readAhead: Int64? = nil, unknownLengthWindow: Int64 = GrowingFileDownload.unknownLengthWindowBytes) {
-        machine = GrowingFileDownload(url: Harness.url, readAhead: readAhead, unknownLengthWindow: unknownLengthWindow)
+    init(readAhead: Int64? = nil, readAheadSetting: GrowingFileReadAhead? = nil, unknownLengthWindow: Int64 = GrowingFileDownload.unknownLengthWindowBytes) {
+        machine = GrowingFileDownload(url: Harness.url, readAhead: readAheadSetting ?? readAhead.map(GrowingFileReadAhead.init(bytes:)), unknownLengthWindow: unknownLengthWindow)
     }
     private(set) var requests: [GrowingFileDownload.Request] = []
     private(set) var events: [GrowingFileEvent] = []

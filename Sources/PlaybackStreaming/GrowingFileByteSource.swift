@@ -212,7 +212,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         self.session = session
         self.clock = clock
         self.pathMonitor = pathMonitor
-        self.machine = GrowingFileDownload(url: url, readAhead: readAhead?.bytes, unknownLengthWindow: unknownLengthWindow)
+        self.machine = GrowingFileDownload(url: url, readAhead: readAhead,unknownLengthWindow: unknownLengthWindow)
         self.onEvent = onEvent
         super.init()
         let observer = pathMonitor.addObserver { [weak self] path, isChange in
@@ -222,6 +222,12 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
             pathObserver = observer
             if let path = pathMonitor.path, path.satisfied { _ = machine.pathCost(isExpensive: Self.costs(path), now: clock.now) }
         }
+    }
+
+    /// Tells a seconds read-ahead the probed stream's duration (`StreamInfo.duration`), so it can
+    /// convert with the bitrate; a no-op for a byte read-ahead, or before the length is known.
+    public func streamProbed(duration: TimeInterval) {
+        locked { machine.streamProbed(duration: duration) }
     }
 
     // MARK: - Published state
