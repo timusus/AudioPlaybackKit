@@ -1,0 +1,23 @@
+# PlaybackRender device check
+
+iPhone iOS 26.6.1, started 2026-10-11T11:36:35Z, mic granted
+
+| Scenario | Status | Result |
+|---|---|---|
+| A1 | pass | heard 3.998 s of 4; .ended 114.1 ms after the heard end; play -> heard 139 ms |
+| A2 | fail | click heard -140.4 ms after the position said (spread 58.3 ms, 7 of 10 clicks); outputLatency 9.7 ms; position = clock - latency within 1.3 ms |
+| A3 | measured | dropout 92 ms to 2x, 140 ms back (ADR: 97 / 140 ms); position runs at 2.00x; largest position jump 8 ms |
+| A4 | measured | fixture 44.1k -> 48k dips ["9"] ms; 48k stereo -> 44.1k mono dip 12 ms (ADR: 8-11 ms); crossed 56 / 55 ms after the heard joins |
+| A5 | pass | landed at 12.000 s of 12; sound back 197 ms after the call (silence 151 ms); position vs heard 2 s on 1.1 ms |
+| A6 | pass | join dip 0 ms; crossed ["1", "2", "3"]; .ended 2x; setNext after .ended heard 107 ms later |
+| A7 | inconclusive | no auto-flush on the port overrides |
+| A8 | measured | rate 2.0: 0 flush(es), latency 9.7 -> 9.7 ms, jump 0 ms, clock back 55.9 ms / rate 1.0: 0 flush(es), latency 9.7 -> 9.7 ms, jump 0 ms, clock back 0.0 ms / rate 0.5: 0 flush(es), latency 9.7 -> 9.7 ms, jump 0 ms, clock back 0.0 ms / rate 1.0: 0 flush(es), latency 9.7 -> 9.7 ms, jump 0 ms, clock back 54.8 ms / rate 3.0: 0 flush(es), latency 9.7 -> 9.7 ms, jump 1 ms, clock back 56.0 ms; .ended after 0.98 s |
+| A9 | measured | override speaker: 1 flush(es) (re-feed -15.939 ms vs heard, 0.753 vs flush time, silence 86.0 ms), latency 4.5 -> 9.7 ms, jump 0 ms, clock back 10.0 ms / override none: 1 flush(es) (re-feed -20.249 ms vs heard, 0.797 vs flush time, silence 442.0 ms), latency 9.7 -> 4.5 ms, jump 0 ms, clock back 0.0 ms / category playback: 1 flush(es) (re-feed 14.591 ms vs heard, 0.758 vs flush time), latency 4.5 -> 15.4 ms, jump 0 ms, clock back 0.0 ms / category playAndRecord: 1 flush(es) (re-feed -2.876 ms vs heard, 0.765 vs flush time, silence <null> ms), latency 15.4 -> 4.5 ms, jump 0 ms, clock back 0.1 ms; .ended after 2.25 s |
+| A10 | measured | InterruptorApp: 0 flush(es), latency 15.4 -> 15.4 ms, jump 0 ms, clock back 59.9 ms; .ended after 2.39 s |
+| A11 | error | no interruption in 45 s; only run-devicecheck.sh launches InterruptorApp --call |
+| G1 | skipped | skipped by --skip-guided |
+| G2 | skipped | skipped by --skip-guided |
+| G3 | skipped | skipped by --skip-guided |
+| G4 | skipped | skipped by --skip-guided |
+| G6 | skipped | skipped by --skip-guided |
+| G7 | skipped | skipped by --skip-guided |
