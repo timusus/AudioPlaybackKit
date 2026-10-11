@@ -1,64 +1,70 @@
 import Foundation
-@testable import PlaybackPlayer
+@_spi(Testing) import PlaybackPlayer
 
 /// The session seam with no `AVAudioSession`: records each call, answers activations at once (or
 /// holds them for `completeActivation`), can make them throw, and posts the events iOS would.
 @MainActor
-final class FakeAudioSession: AudioSessionControlling {
-    enum Call: Equatable {
+public final class FakeAudioSession {
+    public enum Call: Equatable, Sendable {
         case configure, activate, deactivate
     }
 
-    private(set) var calls: [Call] = []
+    public private(set) var calls: [Call] = []
     /// Every later activation fails with this until it is set back to nil.
-    var activationError: (any Error)?
+    public var activationError: (any Error)?
     /// Activations wait for `completeActivation` instead of answering at once.
-    var holdsActivation = false
+    public var holdsActivation = false
     private var held: [@MainActor ((any Error)?) -> Void] = []
     private var handler: (@MainActor (AudioSessionEvent) -> Void)?
 
-    var activations: Int { calls.filter { $0 == .activate }.count }
-    var deactivations: Int { calls.filter { $0 == .deactivate }.count }
-    var configurations: Int { calls.filter { $0 == .configure }.count }
+    public var activations: Int { calls.filter { $0 == .activate }.count }
+    public var deactivations: Int { calls.filter { $0 == .deactivate }.count }
+    public var configurations: Int { calls.filter { $0 == .configure }.count }
 
-    func configure() {
+    public init() {}
+
+    public func configure() {
         calls.append(.configure)
     }
 
-    func activate(completion: @escaping @MainActor ((any Error)?) -> Void) {
+    public func activate(completion: @escaping @MainActor ((any Error)?) -> Void) {
         calls.append(.activate)
         guard holdsActivation else { return completion(activationError) }
         held.append(completion)
     }
 
-    func deactivate() {
+    public func deactivate() {
         calls.append(.deactivate)
     }
 
-    func setEventHandler(_ handler: @escaping @MainActor (AudioSessionEvent) -> Void) {
+    @_spi(Testing) public func setEventHandler(_ handler: @escaping @MainActor (AudioSessionEvent) -> Void) {
         self.handler = handler
     }
 
     /// Answers the held activations with `activationError`.
-    func completeActivation() {
+    public func completeActivation() {
         let completions = held
         held = []
         completions.forEach { $0(activationError) }
     }
 
-    func interruptionBegan() {
+    public func interruptionBegan() {
         handler?(.interruptionBegan)
     }
 
-    func interruptionEnded(shouldResume: Bool) {
+    public func interruptionEnded(shouldResume: Bool) {
         handler?(.interruptionEnded(shouldResume: shouldResume))
     }
 
-    func routeChanged(reason: AudioRouteChangeReason, previous: [AudioPortKind], current: [AudioPortKind]) {
+    // The route types are SPI (ADR-0019), so a route test imports PlaybackPlayer with `@_spi(Testing)`.
+    @_spi(Testing)
+    public func routeChanged(reason: AudioRouteChangeReason, previous: [AudioPortKind], current: [AudioPortKind]) {
         handler?(.routeChanged(reason: reason, previous: previous, current: current))
     }
 
-    func mediaServicesReset() {
+    public func mediaServicesReset() {
         handler?(.mediaServicesReset)
     }
 }
+
+@_spi(Testing) extension FakeAudioSession: AudioSessionControlling {}

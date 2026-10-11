@@ -1,7 +1,8 @@
 import Foundation
 import PlaybackRender
 import XCTest
-@testable import PlaybackPlayer
+@_spi(Testing) import PlaybackPlayerTestSupport
+@_spi(Testing) @testable import PlaybackPlayer
 
 /// Transport events that race the app's calls, seek landings and the gapless crossing, on the fake
 /// output: items are ten seconds at 8 Hz, and each item's samples start at its own base (a 0, b 1000, ...).

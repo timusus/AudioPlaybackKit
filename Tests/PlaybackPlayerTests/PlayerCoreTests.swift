@@ -1,7 +1,7 @@
 import Foundation
 import PlaybackRender
 import XCTest
-@testable import PlaybackPlayer
+@_spi(Testing) @testable import PlaybackPlayer
 
 /// The player's state, position and seeks on the fake output: items are ten seconds at 8 Hz, and
 /// each item's samples start at its own base (a 0, b 1000, ...).

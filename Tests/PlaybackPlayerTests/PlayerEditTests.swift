@@ -1,7 +1,7 @@
 import Foundation
 import PlaybackRender
 import XCTest
-@testable import PlaybackPlayer
+@_spi(Testing) @testable import PlaybackPlayer
 
 /// Edits while playing, with media3 `ExoPlayerImpl` index arithmetic: the current item plays on
 /// through inserts and moves, and the pre-armed next always follows the list.

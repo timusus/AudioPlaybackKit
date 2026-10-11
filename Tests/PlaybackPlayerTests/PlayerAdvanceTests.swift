@@ -1,7 +1,7 @@
 import Foundation
 import PlaybackRender
 import XCTest
-@testable import PlaybackPlayer
+@_spi(Testing) @testable import PlaybackPlayer
 
 /// The advance at the end of an item: repeat modes, the end of the list and pause at end, on the
 /// fake output. Items are ten seconds at 8 Hz, and decode runs about two seconds ahead of the playhead.

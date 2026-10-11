@@ -1,7 +1,8 @@
 import Foundation
 import PlaybackRender
 import XCTest
-@testable import PlaybackPlayer
+@_spi(Testing) import PlaybackPlayerTestSupport
+@_spi(Testing) @testable import PlaybackPlayer
 
 private struct SessionError: Error {}
 

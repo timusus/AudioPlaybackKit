@@ -1,7 +1,7 @@
 import Foundation
 import PlaybackRender
 import XCTest
-@testable import PlaybackPlayer
+@_spi(Testing) @testable import PlaybackPlayer
 
 /// Per-item failures, on the fake output: items are ten seconds at 8 Hz, and decode runs about two
 /// seconds ahead of the playhead, so a next item opens while the current one still plays.

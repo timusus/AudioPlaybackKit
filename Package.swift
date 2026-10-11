@@ -27,6 +27,9 @@ let package = Package(
         // A main-actor `Player` over `Transport`: the item list, play intent and state, position
         // and duration in seconds, seek across items (ADR-0019).
         .library(name: "PlaybackPlayer", targets: ["PlaybackPlayer"]),
+        // `FakeAudioSession` and `PlayerTestRig`, to drive a `Player` deterministically from a
+        // consumer's own tests.
+        .library(name: "PlaybackPlayerTestSupport", targets: ["PlaybackPlayerTestSupport"]),
         // FFmpeg itself, for a consumer with its own C against libavformat. One FFmpeg per app:
         // a second copy would clash with this framework's symbols, or silently shadow them.
         .library(name: "FFmpeg", targets: ["CFFmpeg"]),
@@ -52,7 +55,19 @@ let package = Package(
         .testTarget(name: "PlaybackRenderTests", dependencies: ["PlaybackRender", "PlaybackRenderTestSupport"]),
         // Drives `Transport` through its public API only, so anything it needs is a render-layer change.
         .target(name: "PlaybackPlayer", dependencies: ["PlaybackRender"]),
-        .testTarget(name: "PlaybackPlayerTests", dependencies: ["PlaybackPlayer", "PlaybackRender", "PlaybackRenderTestSupport"]),
+        // The fake session and a rig that builds a `Player` on the fake output and manual clock, for
+        // an app's tests of its own coordinator. Imports the player's SPI so an app's test need not (ADR-0019).
+        .target(name: "PlaybackPlayerTestSupport", dependencies: ["PlaybackPlayer", "PlaybackRender", "PlaybackRenderTestSupport"]),
+        .testTarget(
+            name: "PlaybackPlayerTests",
+            dependencies: ["PlaybackPlayer", "PlaybackPlayerTestSupport", "PlaybackRender", "PlaybackRenderTestSupport"]
+        ),
+        // Public imports only, as an app's own target has them: the example an app copies, and the
+        // check that the product needs no `@testable` (ADR-0019).
+        .testTarget(
+            name: "PlaybackPlayerExternalConsumerTests",
+            dependencies: ["PlaybackPlayer", "PlaybackPlayerTestSupport", "PlaybackRender", "PlaybackRenderTestSupport"]
+        ),
         // Two 20-45 s tone fixtures (under 250 KB each), served over the loopback server.
         .testTarget(
             name: "PlaybackStreamingTests",

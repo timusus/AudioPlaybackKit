@@ -35,20 +35,20 @@ public struct AudioSessionConfiguration: Sendable {
 }
 
 /// What the session reports, on the main actor.
-enum AudioSessionEvent: Equatable {
+@_spi(Testing) public enum AudioSessionEvent: Equatable {
     case interruptionBegan
     case interruptionEnded(shouldResume: Bool)
     case routeChanged(reason: AudioRouteChangeReason, previous: [AudioPortKind], current: [AudioPortKind])
     case mediaServicesReset
 }
 
-enum AudioRouteChangeReason: Equatable {
+@_spi(Testing) public enum AudioRouteChangeReason: Equatable {
     case newDeviceAvailable, oldDeviceUnavailable, other
 }
 
 /// An output port, by the kind that decides whether losing it pauses. Bluetooth A2DP, LE and HFP
 /// are one kind, so a profile switch loses nothing.
-enum AudioPortKind: Equatable {
+@_spi(Testing) public enum AudioPortKind: Equatable {
     case builtIn, headphones, bluetooth, usb, lineOut, carAudio, airPlay, other
 
     /// Audio meant for the listener alone: losing it would move playback onto the speaker, media3's
@@ -63,7 +63,7 @@ enum AudioPortKind: Equatable {
 
 /// The one edge to `AVAudioSession`: `SystemAudioSession` on device, a fake in tests.
 @MainActor
-protocol AudioSessionControlling: AnyObject {
+@_spi(Testing) public protocol AudioSessionControlling: AnyObject {
     /// Applies the configuration; called at init and after a media-services reset.
     func configure()
     /// Activates the session off the main thread and answers on the main actor, with the error if

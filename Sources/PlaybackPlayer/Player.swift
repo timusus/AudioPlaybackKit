@@ -87,7 +87,7 @@ public final class Player<Item: Hashable & Sendable> {
         }
     }
 
-    init(
+    @_spi(Testing) public init(
         makeSource: @escaping ItemSourceFactory<Item>,
         session: any AudioSessionControlling,
         makeTransport: (@escaping @Sendable (TransportEvent<Int>) -> Void) -> Transport<Int>
@@ -340,7 +340,7 @@ public final class Player<Item: Hashable & Sendable> {
     // MARK: Transport events
 
     /// Applies every transport event posted so far, in order. Tests call it after a pump.
-    func drainTransportEvents() {
+    @_spi(Testing) public func drainTransportEvents() {
         for event in inbox.drain() {
             if case let .sought(_, _, applied) = event {
                 unansweredCalls -= 1
