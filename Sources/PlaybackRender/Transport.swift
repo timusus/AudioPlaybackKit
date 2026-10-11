@@ -29,6 +29,10 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     /// yet heard is dropped and the current one plays on. Otherwise playback pauses, and `play()` does
     /// nothing until a `seek`, `setCurrent` or `setProcessors`.
     case failed(item: Item?, error: any Error)
+    /// A failed renderer or a media-services reset was rebuilt, and playback restarted paused at the
+    /// heard position: the transport dropped play on its own, so a caller tracking play intent
+    /// clears it. `play()` carries on. Sent on every recovery, playing or not.
+    case recovered
 }
 
 /// Gap between pumps. The feeder's 0.5 s `resumeDepth` is playout time at any rate, so even a pump
@@ -244,6 +248,8 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         case let .failed(error):
             failed = true
             onEvent(.failed(item: nil, error: error))
+        case .recovered:
+            onEvent(.recovered)
         }
     }
 

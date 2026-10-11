@@ -456,7 +456,7 @@ public final class Player<Item: Hashable & Sendable> {
             failed(key, underlying)
         case let .crossed(key):
             crossed(into: key)
-        case .sought:
+        case .sought, .recovered:
             break
         }
     }

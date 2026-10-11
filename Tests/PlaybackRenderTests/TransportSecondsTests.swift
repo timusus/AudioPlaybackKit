@@ -114,7 +114,7 @@ final class TransportSecondsTests: XCTestCase {
             switch event {
             case let .sought(item, seconds, applied): "sought \(item) \(seconds)\(applied ? "" : " ignored")"
             case let .position(item, seconds, _): "position \(item) \(seconds)"
-            case .crossed, .status, .failed: nil
+            case .crossed, .status, .failed, .recovered: nil
             }
         }
         XCTAssertEqual(events, [

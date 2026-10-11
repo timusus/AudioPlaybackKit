@@ -30,6 +30,7 @@ this page has the order of work and the traps. Paths are relative to each app's 
 | Next track reached the speaker | | `TransportEvent.crossed(item:)` |
 | Playing, buffering, paused, ended | | `TransportEvent.status(_:)` with `TransportStatus` |
 | A track or output failed | | `TransportEvent.failed(item:error:)` |
+| Output rebuilt after a failure or reset, now paused | | `TransportEvent.recovered` |
 | A seek or track change taken; if applied, events before it are stale | | `TransportEvent.sought(item:seconds:applied:)` |
 | Speed, volume | | `setRate(_:)`, `setVolume(_:)` |
 
@@ -148,7 +149,8 @@ Each step ships on its own. Put the new path behind a flag until step 5.
   `isActive`), and `setProcessors` drains the old chain and swaps at the next chunk; neither flushes.
   Call `setProcessors` only when the chain, `isActive` or the output format changes.
 - **Recovery lands paused.** A failed renderer or a media-services reset is rebuilt once and the transport
-  lands paused at the same position. The app calls `play()` again when it still means to play. A second
+  lands paused at the same position, sending `TransportEvent.recovered` so the app shows paused. The app
+  calls `play()` again when it still means to play. A second
   failure surfaces as `TransportEvent.failed`, and `play()` does nothing until a `seek`, `setCurrent` or
   `setProcessors`. Do not add a second recovery layer.
 - **Positions are seconds; frames stay inside.** A start or seek lands on the nearest frame once the item

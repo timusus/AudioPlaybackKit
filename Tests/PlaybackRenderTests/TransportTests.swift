@@ -109,6 +109,10 @@ final class TransportTests: XCTestCase {
         recorder.events.compactMap { if case let .failed(item, _) = $0 { item } else { nil } }
     }
 
+    private var recoveries: Int {
+        recorder.events.filter { if case .recovered = $0 { true } else { false } }.count
+    }
+
     func testTwoItemsPlayGaplesslyAndReportTheJoinWhenItIsHeard() {
         transport.setCurrent(item: "a", source: a)
         transport.setNext(item: "b", source: b)
@@ -683,6 +687,7 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(output.rebuilds, 1)
         XCTAssertEqual(statuses, [.buffering, .playing, .paused])
         XCTAssertEqual(failedItems, [])
+        XCTAssertEqual(recoveries, 1, "a caller learns the transport dropped play on its own")
 
         transport.play()
         pump()
@@ -691,6 +696,37 @@ final class TransportTests: XCTestCase {
         run(for: 1.5)
         XCTAssertEqual(heard, allOfA)
         XCTAssertEqual(statuses, [.buffering, .playing, .paused, .buffering, .playing, .ended])
+    }
+
+    func testAMediaServicesResetIsReportedAsARecoveryWhilePlayingOrPaused() {
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        pump()
+        run(for: 0.5)
+
+        output.injectReset()
+        pump()
+        XCTAssertEqual(recoveries, 1)
+        XCTAssertEqual(statuses.last, .paused)
+
+        output.injectReset()
+        pump()
+        XCTAssertEqual(recoveries, 2, "paused already, it is still reported")
+        XCTAssertEqual(failedItems, [])
+    }
+
+    func testARecoveryThatFailsIsReportedOnlyAsTheFailure() {
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        pump()
+        run(for: 0.5)
+
+        output.injectFailure()
+        pump()
+        output.injectFailure()
+        pump()
+        XCTAssertEqual(recoveries, 1)
+        XCTAssertEqual(failedItems, [nil])
     }
 
     func testASourceFailurePausesAndReportsTheItemUntilANewCurrent() {

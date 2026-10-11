@@ -197,6 +197,7 @@ let transport = Transport<Track.ID> { event in          // called on the transpo
     case .status(let status): break                     // .paused, .buffering, .playing, .ended
     case .sought(let id, let seconds, let applied): break  // a setCurrent or seek was taken; if applied, events before it are stale
     case .failed(let id, let error): break              // paused, unless `id` is a next item not yet heard
+    case .recovered: break                              // output rebuilt, paused at the heard position; show paused
     }
 }
 
@@ -237,7 +238,7 @@ ducks and mutes therefore go through `setVolume`, which acts at once: the app ca
 from its own timer or display link.
 
 **Failure.** A failed renderer or a media-services reset is recovered once: the transport rebuilds
-the output and lands paused at the same position, and the app calls `play()` again. A second failure
+the output, lands paused at the same position and sends `.recovered`, and the app calls `play()` again. A second failure
 surfaces as `.failed`, and `play()` does nothing until a `seek`, `setCurrent` or `setProcessors`.
 A source or processor error that stops an item also arrives as `.failed(item:error:)`. When the item
 is a next one decode reached early, it is dropped and the current item plays on without a pause, so

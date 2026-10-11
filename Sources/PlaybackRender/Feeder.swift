@@ -28,6 +28,8 @@ enum FeederEvent {
     /// The output refused a chunk. The feeder has paused and pulls nothing more until the next flush
     /// or seek.
     case failed(any Error)
+    /// The output was rebuilt and the feeder restarted with `playWhenReady` false.
+    case recovered
 }
 
 /// Moves tagged chunks from upstream into an `AudioOutput`: stamps them contiguously, keeps
@@ -232,6 +234,7 @@ final class Feeder {
         // Whatever the old renderer posted is answered by this rebuild.
         _ = inbox.drain()
         restart(from: position)
+        onEvent(.recovered)
     }
 
     /// Pauses and pulls nothing more until the next restart, which re-arms one recovery.
