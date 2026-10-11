@@ -209,6 +209,10 @@ private final class RecordingOutput: AudioOutput, @unchecked Sendable {
 
     var isReadyForMoreData: Bool { base.isReadyForMoreData }
 
+    func rebuild() throws {
+        try base.rebuild()
+    }
+
     func setEventHandler(_ handler: @escaping @Sendable (AudioOutputEvent) -> Void) {
         base.setEventHandler { [weak self, base] event in
             if case let .autoFlushed(at: time) = event, let self {

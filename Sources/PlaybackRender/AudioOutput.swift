@@ -19,10 +19,24 @@ enum AudioOutputEvent: Equatable, Sendable {
     /// The output stopped consuming audio until the next `flush()`; its clock no longer tracks
     /// what is heard.
     case stalled
+    /// The renderer failed or the media services were reset: nothing queued will play and only
+    /// `rebuild()` brings the output back.
+    case failed(any Error)
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs, rhs) {
+        case let (.autoFlushed(a), .autoFlushed(b)): a == b
+        case (.stalled, .stalled): true
+        case let (.failed(a), .failed(b)): a as NSError == b as NSError
+        default: false
+        }
+    }
 }
 
 enum AudioOutputError: Error, Equatable {
     case formatRejected(PCMFormat)
+    /// The renderer is in its terminal failed state; `rebuild()` replaces it.
+    case rendererFailed
 }
 
 /// The one edge to the platform renderer: the ASBAR + synchronizer adapter, or a fake in tests.
@@ -45,6 +59,9 @@ protocol AudioOutput: AnyObject, Sendable {
     func currentTime() -> TimeInterval
     var outputLatency: TimeInterval { get }
     var isReadyForMoreData: Bool { get }
+    /// Replaces a failed renderer with a fresh one, keeping volume and settings. Everything queued
+    /// is gone and the clock starts again from 0 at rate 0. No event from before it is sent after it.
+    func rebuild() throws
     /// Called on any thread.
     func setEventHandler(_ handler: @escaping @Sendable (AudioOutputEvent) -> Void)
 }

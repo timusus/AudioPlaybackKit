@@ -56,6 +56,9 @@ final class Feeder {
     private var outputRunning = false
     private var upstreamEnded = false
     private var failed = false
+    /// Set by a renderer recovery and cleared on `.playing`: a second failure in between surfaces
+    /// instead of rebuilding again, as media3's `pendingRecoverableRendererError` allows one retry.
+    private var recovering = false
     // Where the last restart asked upstream to start, the position until audio of that epoch is written.
     private var restartPosition: MediaPositionMap.Position?
     private var reportedPosition: MediaPositionMap.Position?
@@ -84,6 +87,7 @@ final class Feeder {
             case let .autoFlushed(at: time): inbox.post(time)
             // A stalled clock stops tracking what is heard, so take the time it stalled at now.
             case .stalled: inbox.post(output.currentTime() - output.outputLatency)
+            case let .failed(error): inbox.post(failure: error)
             }
             // The output is silent until a pump restarts it.
             wake()
@@ -141,7 +145,10 @@ final class Feeder {
     /// All the feeder's work; the caller calls it on its queue from a timer or the output's
     /// ready-for-more callback, often enough that `resumeDepth` outlasts the gap between calls.
     func pump() {
-        if let time = inbox.drain() {
+        let pending = inbox.drain()
+        if let failure = pending.failure {
+            recover(from: failure, flushedAt: pending.time)
+        } else if let time = pending.time {
             restart(from: currentPosition(at: max(map.epochStart, time)))
         }
 
@@ -179,8 +186,8 @@ final class Feeder {
 
     /// The one recovery path: an auto-flush, a stall, a transport flush, a seek and a stop all land here.
     private func restart(from position: MediaPositionMap.Position?, status: FeederStatus? = nil) {
-        // Events already posted predate this flush, which covers them.
-        _ = inbox.drain()
+        // Flush times already posted predate this flush, which covers them; a failure does not.
+        _ = inbox.drainTime()
         output.flush()
         // Held at rate 0 until `resumeDepth` is written, so the first audio is not stamped behind the clock.
         let anchor = output.currentTime()
@@ -193,6 +200,32 @@ final class Feeder {
         // With no position nothing was consumed, so upstream's next chunk is still the right one.
         if let position { upstream.resupply(from: position) }
         setStatus(status ?? (playWhenReady ? .buffering : .paused))
+    }
+
+    /// A failed renderer, or a media-services reset: rebuild the output and restart from what was
+    /// heard, paused, so the user chooses to play on.
+    private func recover(from error: any Error, flushedAt time: TimeInterval? = nil) {
+        guard !recovering else { return fail(error) }
+        let heard = min(time ?? .infinity, playhead())
+        let position = currentPosition(at: max(map.epochStart, heard))
+        recovering = true
+        playWhenReady = false
+        do {
+            try output.rebuild()
+        } catch {
+            return fail(error)
+        }
+        // Whatever the old renderer posted is answered by this rebuild.
+        _ = inbox.drain()
+        restart(from: position)
+    }
+
+    /// Pauses and pulls nothing more until the next restart, which re-arms one recovery.
+    private func fail(_ error: any Error) {
+        failed = true
+        recovering = false
+        pause()
+        onEvent(.failed(error))
     }
 
     /// Pulls even after an end: an end is an underrun with no supply coming, so supply that comes
@@ -217,11 +250,10 @@ final class Feeder {
         if chunk.frameCount > 0 {
             do {
                 try output.enqueue(chunk.samples, format: chunk.format, at: map.writtenEnd)
+            } catch AudioOutputError.rendererFailed {
+                return recover(from: AudioOutputError.rendererFailed)
             } catch {
-                failed = true
-                pause()
-                onEvent(.failed(error))
-                return
+                return fail(error)
             }
         }
         for tag in chunk.tags { map.append(tag, sampleRate: chunk.format.sampleRate) }
@@ -246,26 +278,37 @@ final class Feeder {
     private func setStatus(_ status: FeederStatus) {
         guard status != self.status else { return }
         self.status = status
+        if status == .playing { recovering = false }
         onEvent(.status(status))
     }
 }
 
-/// Output events reduced to the output time to restart from, heard rather than clock time; the
-/// earliest wins.
+/// Output events reduced to the output time to restart from, heard rather than clock time (the
+/// earliest wins), and the first renderer failure since the last drain.
 private final class RestartInbox: @unchecked Sendable {
     private let lock = NSLock()
     private var time: TimeInterval?
+    private var failure: (any Error)?
 
     func post(_ time: TimeInterval) {
-        lock.lock()
-        defer { lock.unlock() }
-        self.time = min(self.time ?? time, time)
+        lock.withLock { self.time = min(self.time ?? time, time) }
     }
 
-    func drain() -> TimeInterval? {
-        lock.lock()
-        defer { lock.unlock() }
-        defer { time = nil }
-        return time
+    func post(failure: any Error) {
+        lock.withLock { self.failure = self.failure ?? failure }
+    }
+
+    func drain() -> (time: TimeInterval?, failure: (any Error)?) {
+        lock.withLock {
+            defer { (time, failure) = (nil, nil) }
+            return (time, failure)
+        }
+    }
+
+    func drainTime() -> TimeInterval? {
+        lock.withLock {
+            defer { time = nil }
+            return time
+        }
     }
 }

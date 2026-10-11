@@ -7,42 +7,55 @@ import CoreMedia
 ///
 /// It never configures or activates `AVAudioSession`: on iOS the app owns the category, activation
 /// and interruptions. `.stalled` is never sent: the renderer has no signal for it, since an underrun
-/// runs the clock on silently (ADR-0018) and a failed renderer surfaces on the next enqueue.
+/// runs the clock on silently (ADR-0018). A failed renderer is reported from its `status` and by
+/// the next enqueue; on iOS a media-services reset is reported the same way.
 final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
-    private let renderer = AVSampleBufferAudioRenderer()
-    private let synchronizer = AVSampleBufferRenderSynchronizer()
     private let formats = FormatDescriptionCache()
-    private let lock = NSLock()
+    // Recursive: events go to the handler under it, and a handler may read the clock.
+    private let lock = NSRecursiveLock()
+    // Under `lock`: `rebuild()` replaces the renderer and its synchronizer, and its observers.
+    private var _renderer: AVSampleBufferAudioRenderer
+    private var _synchronizer: AVSampleBufferRenderSynchronizer
+    private var observers = Observers()
+    private var settings = RendererSettings()
     private var handler: (@Sendable (AudioOutputEvent) -> Void)?
-    private var observer: (any NSObjectProtocol)?
+    #if os(iOS)
+    private var resetObserver: (any NSObjectProtocol)?
+    #endif
 
     init() {
-        // The iOS default (lowQualityZeroLatency) is wrong for speech; timeDomain had the shortest
-        // dropout on a rate change on the iPhone probe (97 ms to 2x, 140 ms back).
-        renderer.audioTimePitchAlgorithm = .timeDomain
-        synchronizer.addRenderer(renderer)
-        observer = NotificationCenter.default.addObserver(
-            forName: .AVSampleBufferAudioRendererWasFlushedAutomatically,
-            object: renderer, queue: nil
-        ) { [weak self] note in
+        (_renderer, _synchronizer) = settings.makeRenderer()
+        observers = observe(_renderer)
+        #if os(iOS)
+        // The audio objects must be recreated after a reset (AVAudioSession docs).
+        resetObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: nil
+        ) { [weak self] _ in
             guard let self else { return }
-            let flushTime = (note.userInfo?[AVSampleBufferAudioRendererFlushTimeKey] as? NSValue)?.timeValue
-            let time = flushTime?.seconds ?? currentTime()
-            lock.withLock { self.handler }?(.autoFlushed(at: time))
+            send(.failed(AVError(.mediaServicesWereReset)), from: renderer)
         }
+        #endif
     }
 
     deinit {
-        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observers.remove()
+        #if os(iOS)
+        if let resetObserver { NotificationCenter.default.removeObserver(resetObserver) }
+        #endif
     }
+
+    /// The renderer playing now.
+    var renderer: AVSampleBufferAudioRenderer { lock.withLock { _renderer } }
+    private var synchronizer: AVSampleBufferRenderSynchronizer { lock.withLock { _synchronizer } }
 
     func enqueue(_ samples: [Float], format: PCMFormat, at time: TimeInterval) throws {
         let buffer = try makeSampleBuffer(
             samples, description: formats.description(for: format),
             presentationTime: presentationTime(time, sampleRate: format.sampleRate)
         )
+        let renderer = renderer
         renderer.enqueue(buffer)
-        if renderer.status == .failed { throw AudioOutputError.formatRejected(format) }
+        if renderer.status == .failed { throw AudioOutputError.rendererFailed }
     }
 
     func flush() {
@@ -58,6 +71,7 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     }
 
     func setVolume(_ volume: Float) {
+        lock.withLock { settings.volume = volume }
         renderer.volume = volume
     }
 
@@ -80,6 +94,20 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
         renderer.isReadyForMoreMediaData
     }
 
+    /// A fresh renderer on a fresh synchronizer: Apple does not say whether a synchronizer survives
+    /// a media-services reset, and a new one costs little.
+    func rebuild() throws {
+        let (renderer, synchronizer) = lock.withLock { settings }.makeRenderer()
+        if renderer.status == .failed { throw renderer.error ?? AudioOutputError.rendererFailed }
+        let observers = observe(renderer)
+        let old = lock.withLock {
+            defer { (_renderer, _synchronizer, self.observers) = (renderer, synchronizer, observers) }
+            return (renderer: _renderer, synchronizer: _synchronizer, observers: self.observers)
+        }
+        old.observers.remove()
+        old.synchronizer.removeRenderer(old.renderer, at: old.synchronizer.currentTime())
+    }
+
     func setEventHandler(_ handler: @escaping @Sendable (AudioOutputEvent) -> Void) {
         lock.withLock { self.handler = handler }
     }
@@ -89,9 +117,70 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     /// drive on macOS without a human.
     var audioOutputDeviceUniqueID: String? {
         get { renderer.audioOutputDeviceUniqueID }
-        set { renderer.audioOutputDeviceUniqueID = newValue }
+        set {
+            lock.withLock { settings.deviceUniqueID = newValue }
+            renderer.audioOutputDeviceUniqueID = newValue
+        }
     }
     #endif
+
+    private func observe(_ renderer: AVSampleBufferAudioRenderer) -> Observers {
+        let autoFlush = NotificationCenter.default.addObserver(
+            forName: .AVSampleBufferAudioRendererWasFlushedAutomatically,
+            object: renderer, queue: nil
+        ) { [weak self, weak renderer] note in
+            guard let self, let renderer else { return }
+            let flushTime = (note.userInfo?[AVSampleBufferAudioRendererFlushTimeKey] as? NSValue)?.timeValue
+            send(.autoFlushed(at: flushTime?.seconds ?? currentTime()), from: renderer)
+        }
+        let status = renderer.observe(\.status) { [weak self] renderer, _ in
+            guard renderer.status == .failed else { return }
+            self?.send(.failed(renderer.error ?? AudioOutputError.rendererFailed), from: renderer)
+        }
+        return Observers(notifications: [autoFlush], status: status)
+    }
+
+    /// Under `lock`, which `rebuild()` swaps under, so nothing from a replaced renderer reaches the
+    /// handler once `rebuild()` returns.
+    private func send(_ event: AudioOutputEvent, from renderer: AVSampleBufferAudioRenderer) {
+        lock.withLock {
+            guard renderer === _renderer else { return }
+            handler?(event)
+        }
+    }
+}
+
+/// What the output keeps across a rebuild.
+private struct RendererSettings {
+    var volume: Float = 1
+    #if os(macOS)
+    var deviceUniqueID: String?
+    #endif
+
+    func makeRenderer() -> (AVSampleBufferAudioRenderer, AVSampleBufferRenderSynchronizer) {
+        let renderer = AVSampleBufferAudioRenderer()
+        // The iOS default (lowQualityZeroLatency) is wrong for speech; timeDomain had the shortest
+        // dropout on a rate change on the iPhone probe (97 ms to 2x, 140 ms back).
+        renderer.audioTimePitchAlgorithm = .timeDomain
+        renderer.volume = volume
+        #if os(macOS)
+        // Nil is the system default already, and setting it raises.
+        if let deviceUniqueID { renderer.audioOutputDeviceUniqueID = deviceUniqueID }
+        #endif
+        let synchronizer = AVSampleBufferRenderSynchronizer()
+        synchronizer.addRenderer(renderer)
+        return (renderer, synchronizer)
+    }
+}
+
+private struct Observers {
+    var notifications: [any NSObjectProtocol] = []
+    var status: NSKeyValueObservation?
+
+    func remove() {
+        notifications.forEach(NotificationCenter.default.removeObserver)
+        status?.invalidate()
+    }
 }
 
 /// `time` in nanoseconds, since an anchor is a clock reading or a written end at any item's rate.

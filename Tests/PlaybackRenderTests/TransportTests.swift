@@ -587,6 +587,31 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing, .ended])
     }
 
+    // #100: the owner's call is to land paused after a renderer failure or a media-services reset,
+    // with no error; the user's play carries on from the heard frame at the same speed and volume.
+    func testARendererFailurePausesWithoutAnErrorAndPlayResumesWhereItWasHeard() {
+        transport.setCurrent(item: "a", source: a)
+        transport.setVolume(0.5)
+        transport.setRate(2)
+        transport.play()
+        pump()
+        run(for: 0.5)
+
+        output.injectFailure()
+        pump()
+        XCTAssertEqual(output.rebuilds, 1)
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+        XCTAssertEqual(failedItems, [])
+
+        transport.play()
+        pump()
+        XCTAssertEqual(output.rate, 2)
+        XCTAssertEqual(output.volume, 0.5)
+        run(for: 1.5)
+        XCTAssertEqual(heard, allOfA)
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .buffering, .playing, .ended])
+    }
+
     func testASourceFailurePausesAndReportsTheItemUntilANewCurrent() {
         transport.setCurrent(item: "a", source: FailsMidwaySource(format: mono, chunks: 2))
         transport.play()

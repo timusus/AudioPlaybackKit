@@ -327,4 +327,149 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(output.rate, 0)
         XCTAssertEqual(statuses, [.buffering, .paused])
     }
+
+    // MARK: Renderer failure (#100)
+
+    func testARendererFailureWhilePlayingRebuildsOnceAndLandsPausedAtTheHeardFrame() {
+        makeFeeder([item(0, 40)])
+        feeder.setRate(2)
+        feeder.play()
+        run(for: 0.5)
+        output.injectFailure()
+        feeder.pump()
+
+        XCTAssertEqual(output.rebuilds, 1)
+        XCTAssertEqual(upstream.resupplies, [pos(0, 4)])
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+        XCTAssertEqual(output.rate, 0)
+        XCTAssertTrue(failures.isEmpty)
+
+        feeder.play()
+        XCTAssertEqual(output.rate, 2, "resumes at the stored speed")
+        run(for: 5)
+        XCTAssertEqual(heard, ramp(0, 0..<40))
+        XCTAssertEqual(positions.map(\.mediaFrame), positions.map(\.mediaFrame).sorted())
+        XCTAssertEqual(positions.last, pos(0, 40))
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .buffering, .playing, .ended])
+    }
+
+    func testAFailedEnqueueTakesTheSameRecoveryPath() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1)
+        output.injectFailure(reported: false)
+        output.advance(by: 0.25)
+        feeder.pump()
+
+        XCTAssertEqual(output.rebuilds, 1)
+        // The failed renderer went silent at 1 s; the clock it ran on is all there is to resume from.
+        XCTAssertEqual(upstream.resupplies, [pos(0, 5)])
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+        XCTAssertTrue(failures.isEmpty)
+
+        feeder.play()
+        run(for: 10)
+        XCTAssertEqual(heard, ramp(0, 0..<4) + ramp(0, 5..<40))
+        XCTAssertEqual(output.rebuilds, 1)
+    }
+
+    func testARendererFailureWhilePausedRebuildsAndStaysPaused() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1)
+        feeder.pause()
+        output.injectFailure()
+        feeder.pump()
+
+        XCTAssertEqual(output.rebuilds, 1)
+        XCTAssertEqual(upstream.resupplies, [pos(0, 4)])
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+
+        feeder.play()
+        run(for: 10)
+        XCTAssertEqual(heard, ramp(0, 0..<40))
+        XCTAssertEqual(positions.map(\.mediaFrame), Array(0...40))
+    }
+
+    // media3's pendingRecoverableRendererError: one recovery, and a second error before playing
+    // again stops with the error rather than rebuilding in a loop.
+    func testASecondFailureBeforePlayingAgainSurfacesWithoutAnotherRebuild() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1)
+        output.injectFailure()
+        feeder.pump()
+        output.injectFailure()
+        feeder.pump()
+        feeder.play()
+        run(for: 2)
+
+        XCTAssertEqual(output.rebuilds, 1)
+        XCTAssertEqual(failures.map { $0 as? AudioOutputError }, [.rendererFailed])
+        XCTAssertEqual(heard, ramp(0, 0..<4))
+        XCTAssertEqual(output.rate, 0)
+    }
+
+    func testAFailureAfterPlayingAgainRecoversAgain() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1)
+        output.injectFailure()
+        feeder.pump()
+        feeder.play()
+        run(for: 1)
+        output.injectFailure()
+        feeder.pump()
+
+        XCTAssertEqual(output.rebuilds, 2)
+        XCTAssertTrue(failures.isEmpty)
+        XCTAssertEqual(upstream.resupplies, [pos(0, 4), pos(0, 8)])
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .buffering, .playing, .paused])
+    }
+
+    func testARebuildThatThrowsSurfacesTheError() {
+        struct NoRenderer: Error, Equatable {}
+        makeFeeder([item(0, 40)])
+        output.failRebuilds(with: NoRenderer())
+        feeder.play()
+        run(for: 1)
+        output.injectFailure()
+        feeder.pump()
+        run(for: 1)
+
+        XCTAssertEqual(output.rebuilds, 1)
+        XCTAssertEqual(failures.map { $0 as? NoRenderer }, [NoRenderer()])
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+        XCTAssertEqual(output.rate, 0)
+    }
+
+    func testAFailureAndAnAutoFlushBeforeOnePumpRestartOnceFromTheEarlierTime() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1.25)
+        output.injectAutoFlush(at: 1)
+        output.injectFailure()
+        feeder.pump()
+
+        XCTAssertEqual(output.rebuilds, 1)
+        XCTAssertEqual(upstream.resupplies, [pos(0, 4)])
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+    }
+
+    func testAFailureRacingASeekLandsPausedAtTheSeekTarget() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1)
+        output.injectFailure()
+        feeder.seek(to: pos(0, 20))
+
+        XCTAssertEqual(output.rebuilds, 1)
+        XCTAssertEqual(upstream.resupplies.last, pos(0, 20))
+        XCTAssertEqual(statuses.last, .paused)
+        XCTAssertEqual(positions.last, pos(0, 20))
+
+        feeder.play()
+        run(for: 1)
+        XCTAssertEqual(heard, ramp(0, 0..<4) + ramp(0, 20..<24))
+    }
 }

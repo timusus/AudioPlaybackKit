@@ -72,6 +72,10 @@ How features fit:
 - Speed is the transport setting the output rate.
 - None of them adds a branch to the feeder, the timeline or the output. A feature that needs one is designed wrong.
 
+### Recovery
+
+A failed renderer is terminal. This happens through its `status`, a failed enqueue, or an iOS media-services reset. The feeder then rebuilds the output and restarts from the heard position through the one restart path. The rebuild makes a fresh renderer and synchronizer with the same volume, pitch algorithm and device. Recovery always lands paused, so the user chooses to play on (owner decision). As media3's `pendingRecoverableRendererError` does, it retries once: a second failure before `.playing`, or a rebuild that throws, surfaces as `.failed` with no further rebuild.
+
 ## Alternatives rejected
 
 - `AVAudioEngine`, which is what the apps run today: its clock is nil while paused and leaves output latency to us. Speed needs a time-pitch unit whose buffering the clock cannot see. It is not named for AirPlay 2 enhanced buffering.

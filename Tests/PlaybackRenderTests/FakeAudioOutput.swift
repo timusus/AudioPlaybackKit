@@ -32,6 +32,10 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
     // End of everything enqueued since the last flush, played or not: an overlap is trimmed to it.
     private var timelineEnd: TimeInterval?
     private var stalled = false
+    // A failed renderer: silent, and every enqueue throws until `rebuild()`.
+    private var rendererFailed = false
+    private var rebuildError: (any Error)?
+    private var _rebuilds = 0
     private var rejected: Set<PCMFormat> = []
     private var handler: (@Sendable (AudioOutputEvent) -> Void)?
     private var _enqueues: [Enqueue] = []
@@ -62,6 +66,7 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
 
     func enqueue(_ samples: [Float], format: PCMFormat, at time: TimeInterval) throws {
         try locked {
+            guard !rendererFailed else { throw AudioOutputError.rendererFailed }
             guard !rejected.contains(format) else { throw AudioOutputError.formatRejected(format) }
             _enqueues.append(Enqueue(samples: samples, format: format, time: time))
             var buffer = Buffer(start: time, format: format, samples: samples)
@@ -101,6 +106,21 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
         locked { (timelineEnd ?? clock) - clock < readyAhead }
     }
 
+    /// A fresh renderer: nothing queued, the clock at 0 and stopped. The volume is kept, as the
+    /// adapter re-applies it.
+    func rebuild() throws {
+        try locked {
+            _rebuilds += 1
+            if let rebuildError { throw rebuildError }
+            clock = 0
+            _rate = 0
+            queue = []
+            timelineEnd = nil
+            stalled = false
+            rendererFailed = false
+        }
+    }
+
     func setEventHandler(_ handler: @escaping @Sendable (AudioOutputEvent) -> Void) {
         locked { self.handler = handler }
     }
@@ -113,7 +133,7 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
             let from = clock, to = clock + seconds * _rate
             guard to > from else { return }
             clock = to
-            guard !stalled else { return record(.silence(start: from, duration: to - from)) }
+            guard !stalled, !rendererFailed else { return record(.silence(start: from, duration: to - from)) }
             var cursor = from
             while let buffer = queue.first, buffer.start < to {
                 let start = max(cursor, buffer.start), end = min(buffer.end, to)
@@ -164,6 +184,25 @@ final class FakeAudioOutput: AudioOutput, @unchecked Sendable {
         }
         handler?(.stalled)
     }
+
+    /// The renderer fails: it goes silent and every enqueue throws until `rebuild()`. `reported`
+    /// sends `.failed` as the status observer does; without it the next enqueue is the first sign.
+    func injectFailure(_ error: any Error = AudioOutputError.rendererFailed, reported: Bool = true) {
+        let handler = locked {
+            rendererFailed = true
+            guard reported else { return nil as (@Sendable (AudioOutputEvent) -> Void)? }
+            _events.append(.failed(error))
+            return self.handler
+        }
+        handler?(.failed(error))
+    }
+
+    /// Every later `rebuild()` throws `error`.
+    func failRebuilds(with error: any Error) {
+        locked { rebuildError = error }
+    }
+
+    var rebuilds: Int { locked { _rebuilds } }
 
     func reject(_ format: PCMFormat) {
         locked { _ = rejected.insert(format) }
