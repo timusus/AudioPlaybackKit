@@ -183,7 +183,8 @@ extension GrowingFileByteSourceTests {
         server.closesAfterBodyBytes = 8_000
         XCTAssertEqual(try read(source, 100), body.subdata(in: 400_000..<400_100))
         XCTAssertTrue(waitUntil { server.requestedRanges.count == 3 }, "the dropped body was never retried")
-        XCTAssertEqual(server.requestedRanges.last, 408_000)
+        // The resume's overlap goes back to the seek's base, where the covered run starts.
+        XCTAssertEqual(server.requestedRanges.last, 400_000)
         XCTAssertEqual(try read(source, 20_000), body.subdata(in: 400_100..<420_100))
         XCTAssertEqual(source.snapshot.transactionGeneration, 2)
         XCTAssertEqual(events.transactions.map(\.seekGenerationForTest), [nil, 7])

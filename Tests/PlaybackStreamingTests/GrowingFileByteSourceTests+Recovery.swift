@@ -39,7 +39,8 @@ extension GrowingFileByteSourceTests {
         let rest = readAsync(source, Int.max)
         XCTAssertTrue(clock.drive(source) { rest.finished(within: 0) }, "the read after the failure never came back")
         XCTAssertEqual(try rest.result.get(), body.suffix(from: at))
-        XCTAssertEqual(server.requestedRanges.last, Int64(at), "the next read did not ask at its position")
+        // Its position joins the bytes on disk, so the request starts with the overlap before it.
+        XCTAssertEqual(server.requestedRanges.last, max(0, Int64(at) - 65_536), "the next read did not ask at its position")
         XCTAssertNil(events.transactions.last?.seekGenerationForTest)
     }
 
@@ -117,7 +118,8 @@ extension GrowingFileByteSourceTests {
         let rest = readAsync(source, Int.max)
         XCTAssertTrue(clock.drive(source) { rest.finished(within: 0) }, "the read never came back")
         XCTAssertEqual(try rest.result.get(), body.suffix(from: 10_000))
-        XCTAssertEqual(server.requestedRanges, [0, 20_000], "the retry did not resume from the frontier")
+        // The resume's 64 KiB overlap before the frontier reaches back to the file's start.
+        XCTAssertEqual(server.requestedRanges, [0, 0], "the retry did not resume from the frontier")
         XCTAssertEqual(server.requestHeads.filter { $0.hasPrefix("GET /redirect/") }.count, 2, "the resume walked the chain again")
         XCTAssertEqual(source.snapshot.transactionGeneration, 1)
     }
@@ -141,12 +143,13 @@ extension GrowingFileByteSourceTests {
         let rest = readAsync(source, Int.max)
         let chainWalks = { server.requestHeads.filter { $0.hasPrefix("GET /redirect/1/") }.count }
         XCTAssertTrue(clock.drive(source, step: 0.05) { chainWalks() == 2 }, "the refused end never fell back to the chain")
-        XCTAssertEqual(server.requestedRanges, [0, 20_000], "the resume went to the end first")
+        // The resume's 64 KiB overlap before the frontier reaches back to the file's start.
+        XCTAssertEqual(server.requestedRanges, [0, 0], "the resume went to the end first")
         // Longer than a retry's wait, shorter than the generous one: the slow hop is waited for.
         clock.advance(by: GrowingFileByteSource.retryRequestTimeoutSeconds + 2)
         XCTAssertTrue(rest.finished(within: 10), "the walk back through the chain was given up on")
         XCTAssertEqual(try rest.result.get(), body.suffix(from: 10_000))
-        XCTAssertEqual(server.requestedRanges, [0, 20_000, 20_000], "the fallback resumes from the frontier")
+        XCTAssertEqual(server.requestedRanges, [0, 0, 0], "the fallback resumes from the frontier")
         XCTAssertEqual(chainWalks(), 2, "the chain is walked again once")
         XCTAssertEqual(source.snapshot.transactionGeneration, 1)
     }
@@ -208,7 +211,8 @@ extension GrowingFileByteSourceTests {
         XCTAssertTrue(waitUntil { server.requestedRanges.count == 2 }, "the new path did not reopen the transaction")
         XCTAssertLessThan(clock.now - 1_000, GrowingFileByteSource.idleTimeoutSeconds / 2)
         XCTAssertEqual(try readToEnd(source), body.suffix(from: 10_000))
-        XCTAssertEqual(server.requestedRanges, [0, 20_000], "the reopen resumes from the frontier")
+        // The resume's 64 KiB overlap before the frontier reaches back to the file's start.
+        XCTAssertEqual(server.requestedRanges, [0, 0], "the reopen resumes from the frontier")
         XCTAssertEqual(source.snapshot.transactionGeneration, 1)
     }
 
@@ -233,7 +237,7 @@ extension GrowingFileByteSourceTests {
         XCTAssertTrue(clock.drive(source, step: 0.1) { rest.finished(within: 0) }, "the read never failed")
         assertTransport(rest.result)
         XCTAssertEqual(
-            server.requestedRanges, [0] + Array(repeating: 20_000, count: GrowingFileDownload.Retry.maxAttempts),
+            server.requestedRanges, [0] + Array(repeating: 0, count: GrowingFileDownload.Retry.maxAttempts),
             "the path change did not spend an attempt: one resume too many, or too few (a second budget)"
         )
         XCTAssertLessThan(clock.now - 1_000, GrowingFileByteSource.idleTimeoutSeconds)

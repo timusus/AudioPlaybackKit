@@ -20,20 +20,23 @@ struct GrowingFileDownloadSessionFileTests {
 
         try h.machine.seek(to: 4000)
         h.read()
-        #expect(h.requests.last == h.request(2, from: 4000, end: 8000))
-        h.respond(206, range: "bytes 4000-7999/10000")
-        h.body(4000)
+        // The hole, then the overlap into the range after it, up to that range's end.
+        #expect(h.requests.last == h.request(2, from: 4000, end: 10_000))
+        h.respond(206, range: "bytes 4000-9999/10000")
+        h.body(6000)
         h.end()
         #expect(!h.machine.file.isCached)
 
         try h.machine.seek(to: 0)
         h.read()
-        #expect(h.requests.last == h.request(3, from: 0, end: 4000))
-        h.respond(206, range: "bytes 0-3999/10000")
-        h.body(3999)
+        #expect(h.requests.last == h.request(3, from: 0, end: 10_000))
+        h.respond(206, range: "bytes 0-9999/10000")
+        h.body(4000)
+        #expect(!h.machine.file.isCached, "promoted before the far seam was compared")
+        h.body(5999)
         #expect(!h.machine.file.isCached)
         h.body(1)
-        #expect(h.machine.file.isCached, "promoted on the chunk that closed the hole, before the body's end")
+        #expect(h.machine.file.isCached, "promoted on the chunk that finished the far seam")
         h.end()
         #expect(h.log.filter { $0 == .promote }.count == 1)
 
@@ -58,7 +61,7 @@ struct GrowingFileDownloadSessionFileTests {
 
         try h.machine.seek(to: 0)
         h.read()
-        #expect(h.requests.last == h.request(2, from: 0, end: 6000))
+        #expect(h.requests.last == h.request(2, from: 0, end: 10_000))
         // A host that ignores the bound: the whole file from byte 0.
         h.respond(200, length: 10_000)
         h.body(6000)
@@ -89,7 +92,8 @@ struct GrowingFileDownloadSessionFileTests {
         // A seek back behind the window fetches again, up to what is still on disk.
         try h.machine.seek(to: 0)
         h.read()
-        #expect(h.requests.last == h.request(2, from: 0, end: 1500))
+        // With the overlap into what is still on disk.
+        #expect(h.requests.last == h.request(2, from: 0, end: 3000))
     }
 
     @Test("a bounded 206 whose total is '*' keeps the known total, so a later response with another total is caught")
@@ -103,31 +107,34 @@ struct GrowingFileDownloadSessionFileTests {
 
         try h.machine.seek(to: 4000)
         h.read()
-        #expect(h.requests.last == h.request(2, from: 4000, end: 8000))
-        #expect(h.respond(206, range: "bytes 4000-7999/*"))
+        #expect(h.requests.last == h.request(2, from: 4000, end: 10_000))
+        #expect(h.respond(206, range: "bytes 4000-9999/*"))
         #expect(h.machine.totalLength == 10_000)
-        h.body(4000)
+        h.body(6000)
         h.end()
 
         try h.machine.seek(to: 0)
         h.read()
-        #expect(h.requests.last == h.request(3, from: 0, end: 4000))
-        #expect(!h.respond(206, range: "bytes 0-3999/20000"), "the file changed behind the URL")
+        #expect(h.requests.last == h.request(3, from: 0, end: 10_000))
+        #expect(!h.respond(206, range: "bytes 0-9999/20000"), "the file changed behind the URL")
         #expect(h.machine.file.ranges.ranges.isEmpty)
     }
 
-    @Test("a 416 that reveals the total of a body of unknown length promotes a file that is already whole")
-    func aLateTotalFromA416Promotes() {
+    /// The resume starts with the overlap before the frontier, so a host whose file ends at the
+    /// frontier answers it with a `206` naming the total, not a `416`. No new byte would join the
+    /// file, so there is nothing to compare: the open is at the end.
+    @Test("a resume whose overlap reveals the total of a body of unknown length promotes a file that is already whole")
+    func aLateTotalFromTheOverlapPromotes() {
         let h = Harness()
         h.read()
         h.respond(200)
         h.body(3000)
         h.end(error: -1005)
         h.clock.advance(by: 0.1)
-        #expect(h.requests.last == h.request(2, from: 3000))
+        #expect(h.requests.last == h.request(2, from: 0))
         #expect(!h.machine.file.isCached)
 
-        #expect(!h.respond(416, range: "bytes */3000"))
+        #expect(!h.respond(206, range: "bytes 0-2999/3000"))
         #expect(h.machine.totalLength == 3000)
         #expect(h.machine.file.isCached, "promoted when the total became known")
         #expect(h.log.filter { $0 == .promote }.count == 1)

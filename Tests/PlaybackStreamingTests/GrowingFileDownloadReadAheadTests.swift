@@ -40,11 +40,14 @@ struct GrowingFileDownloadReadAheadTests {
         #expect(h.requests.count == 1, "the read began more than half the read-ahead behind the frontier")
 
         #expect(h.read(1_000) == .serve(fileOffset: 50_000, count: 1_000, landed: nil))
-        #expect(h.requests.last == h.request(2, from: 100_000, ifRange: "\"v1\""))
+        // 64 KiB before the frontier: the overlap compared with the file.
+        #expect(h.requests.last == h.request(2, from: 34_464, ifRange: "\"v1\""))
         #expect(h.machine.current?.paused == false)
-        #expect(h.respond(206, range: "bytes 100000-999999/1000000"))
+        #expect(h.respond(206, range: "bytes 34464-999999/1000000"))
         #expect(h.transactionEvents == 1, "a resume is no new transaction")
         #expect(h.opens == 1)
+        h.body(65_536)
+        #expect(h.machine.current?.frontier == 100_000, "the overlap moved the frontier")
         h.body(40_000)
         #expect(h.machine.current?.paused == false, "still within the read-ahead")
         h.body(20_000)
@@ -64,7 +67,7 @@ struct GrowingFileDownloadReadAheadTests {
         h.read(1)
         let resumedAt = h.now
         #expect(resumedAt - pausedAt == 120)
-        #expect(h.requests.last == h.request(2, from: 100_000, ifRange: "\"v1\""))
+        #expect(h.requests.last == h.request(2, from: 34_464, ifRange: "\"v1\""))
         #expect(h.log.contains(.schedule(.response(attempt: 2), after: GrowingFileByteSource.retryRequestTimeoutSeconds)))
 
         // Nothing answers the resume: the link went quiet when it went out, not at the last byte.
@@ -84,7 +87,7 @@ struct GrowingFileDownloadReadAheadTests {
         #expect(throws: Never.self) { try h.machine.seek(to: 150_000) }
         #expect(h.read() == .park)
         #expect(h.opens == 1, "the seek did not restart")
-        #expect(h.requests.last == h.request(2, from: 100_000, ifRange: "\"v1\""))
+        #expect(h.requests.last == h.request(2, from: 34_464, ifRange: "\"v1\""))
     }
 
     @Test("the rate from before the pause holds until the resumed request delivers, across wakes")
@@ -110,8 +113,8 @@ struct GrowingFileDownloadReadAheadTests {
         h.pathCost(isExpensive: true)
         #expect(h.requests.count == 1)
         h.pathCost(isExpensive: false)
-        #expect(h.requests.last == h.request(2, from: 100_000, ifRange: "\"v1\""))
-        h.respond(206, range: "bytes 100000-999999/1000000")
+        #expect(h.requests.last == h.request(2, from: 34_464, ifRange: "\"v1\""))
+        h.respond(206, range: "bytes 34464-999999/1000000")
         h.body(400_000)
         #expect(h.machine.current?.paused == false)
     }
@@ -138,11 +141,11 @@ struct GrowingFileDownloadReadAheadTests {
 
     @Test("(f) a resume answered with a changed ETag or total restarts at the decoder's position, as a retry's does")
     func aChangedResourceOnResumeRestarts() {
-        for answer in [(200, nil), (206, "bytes 100000-1999999/2000000")] as [(Int, String?)] {
+        for answer in [(200, nil), (206, "bytes 34464-1999999/2000000")] as [(Int, String?)] {
             let h = started(bytes: 100_000)
             h.read(50_000)
             h.read(10_000)
-            #expect(h.requests.last == h.request(2, from: 100_000, ifRange: "\"v1\""))
+            #expect(h.requests.last == h.request(2, from: 34_464, ifRange: "\"v1\""))
             #expect(h.respond(answer.0, range: answer.1, length: 1_000_000) == false)
             #expect(h.opens == 2)
             #expect(h.log.contains(.retire(discardFile: true)))

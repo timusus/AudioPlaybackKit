@@ -290,10 +290,10 @@ struct GrowingFileDownload {
         transactionsOpened += 1
         current = Transaction(
             id: transactionsOpened, generation: generation, seekGeneration: open.seekGeneration,
-            remembered: finalURL != nil, base: open.base, end: open.end
+            remembered: finalURL != nil, base: open.base, end: open.end, checkEnd: overlapEnd(after: open.end)
         )
         if startup.requestIssuedAt == nil { startup.requestIssuedAt = now }
-        send(from: open.base, ifRange: nil, retrying: open.retrying, now: now)
+        send(from: overlapStart(before: open.base), ifRange: nil, retrying: open.retrying, now: now)
         let opened = generation, host = url.host ?? "?"
         downloadLog.info("download: open gen=\(opened) base=\(open.base) host=\(host, privacy: .public)")
         return takeEffects() + [.wake]
@@ -304,6 +304,8 @@ struct GrowingFileDownload {
     /// rewrite bytes already there, so it ends.
     private mutating func promoteIfWhole() {
         guard file.isWhole(totalLength: totalLength) else { return }
+        // Not before the far seam is compared: a mismatch there discards the file.
+        if let tx = current, !tx.ended, let checkEnd = tx.checkEnd, tx.frontier < checkEnd { return }
         effects.append(.promote)
         guard let tx = current, !tx.ended, tx.frontier < min(tx.end ?? .max, tx.totalLength ?? .max) else { return }
         current?.ended = true
@@ -424,7 +426,7 @@ struct GrowingFileDownload {
     private mutating func retryCurrent(now: TimeInterval) {
         guard let tx = current else { return }
         let resumable = !rangeIgnored && file.exists && !file.isCached && !tx.sniffPending
-            && tx.written > 0 && offset >= tx.base && offset <= tx.frontier && tx.end.map { tx.frontier < $0 } ?? true
+            && tx.written > 0 && offset >= tx.base && offset <= tx.frontier && tx.bodyEnd.map { tx.frontier < $0 } ?? true
         guard resumable else {
             start(at: offset, seekGeneration: nil, retrying: true)
             return
@@ -435,17 +437,18 @@ struct GrowingFileDownload {
     /// Asks for the current transaction's file from its frontier on, with `If-Range`, in the same
     /// transaction: a retry's resume, or the end of a read-ahead pause. A fresh attempt with the
     /// retry's short wait; nothing answering it starts the link window from when it went out.
+    /// The request starts the overlap before the frontier, which its `206` must start at.
     private mutating func resume(now: TimeInterval) {
         guard let tx = current else { return }
-        let from = tx.frontier
+        let from = overlapStart(before: tx.frontier)
         current?.ended = false
         current?.paused = false
         current?.answered = false
         current?.resumeAt = from
         current?.remembered = finalURL != nil
         send(from: from, ifRange: tx.entityTag, retrying: true, now: now)
-        let decoder = offset
-        downloadLog.info("download: resume gen=\(tx.generation) at=\(from) decoder=\(decoder)")
+        let decoder = offset, frontier = tx.frontier
+        downloadLog.info("download: resume gen=\(tx.generation) at=\(frontier) from=\(from) decoder=\(decoder)")
     }
 
     /// The read-ahead cap applies to `tx`: a cap was given, the path costs, and the host answered
@@ -477,9 +480,10 @@ struct GrowingFileDownload {
         attemptsSent += 1
         current?.attempt = attemptsSent
         current?.attemptStartedAt = now
+        current?.bodyAt = from
         let wait = min(target.timeout, retry.linkWindowLeft(now: now) ?? target.timeout)
         effects.append(.schedule(.response(attempt: attemptsSent), after: wait))
-        effects.append(.send(Request(attempt: attemptsSent, url: target.url, from: from, end: current?.end, ifRange: ifRange)))
+        effects.append(.send(Request(attempt: attemptsSent, url: target.url, from: from, end: current?.bodyEnd, ifRange: ifRange)))
     }
 
     /// Where the next request goes and how long it waits for its response: the chain's remembered
@@ -535,7 +539,7 @@ struct GrowingFileDownload {
             guard current?.id == id else { break }
             current?.idleCheckPending = false
             guard !cancelled, let tx = current, tx.answered, !tx.ended, !tx.isComplete,
-                  tx.frontier < min(tx.totalLength ?? .max, tx.end ?? .max) else { break }
+                  tx.frontier < min(tx.totalLength ?? .max, tx.bodyEnd ?? .max) else { break }
             let silent = now - tx.lastByteAt
             guard silent >= GrowingFileByteSource.idleTimeoutSeconds else {
                 scheduleIdleCheck(after: GrowingFileByteSource.idleTimeoutSeconds - silent)
@@ -554,7 +558,7 @@ struct GrowingFileDownload {
     /// whose every byte is in and only its completion is still on the way, is left alone.
     mutating func pathChanged(now: TimeInterval) -> [Effect] {
         guard !cancelled, let tx = current, !tx.ended, !tx.isComplete,
-              tx.frontier < min(tx.totalLength ?? .max, tx.end ?? .max) else { return [] }
+              tx.frontier < min(tx.totalLength ?? .max, tx.bodyEnd ?? .max) else { return [] }
         end("path_changed at=\(tx.frontier)", retryable: true, pathChanged: true, now: now)
         return takeEffects()
     }
@@ -598,7 +602,7 @@ struct GrowingFileDownload {
         let status = response.status
         let contentRange = response.contentRange
         let range = Self.contentRange(contentRange)
-        if let total = Self.totalEndingAt(tx.resumeAt ?? tx.base, status: status, contentRange: contentRange),
+        if let total = Self.totalEndingAt(tx.frontier, status: status, contentRange: contentRange),
            lastKnownTotalLength.map({ $0 == total }) ?? true {
             // The host says the resource ends exactly where this transaction starts: a `416`
             // with `bytes */N`, or a range clamped to the last byte, at position N. As media3
@@ -661,6 +665,8 @@ struct GrowingFileDownload {
         switch status {
         case 200:
             current?.end = nil
+            current?.checkEnd = nil
+            current?.bodyAt = 0
             if tx.base > 0 {
                 // The host ignored the range: this body is the file from byte 0, and the read
                 // waits for its position to arrive. Restarting would only get 200 again. A new
@@ -676,7 +682,7 @@ struct GrowingFileDownload {
                 // Byte 0 is not where the seek landed, so it is no anchor for it.
                 current?.seekGeneration = nil
             }
-        case 206 where range?.start == tx.base:
+        case 206 where range?.start == tx.bodyAt:
             current?.rangeHonoured = true
         case _ where status == 416 || (status == 206 && (range?.total).map { $0 < tx.base } ?? false):
             failOutOfRange("status=\(status) at=\(tx.base) content-range=\(contentRange ?? "-")")
@@ -735,18 +741,13 @@ struct GrowingFileDownload {
         startup.remembered = tx.remembered
     }
 
-    /// Where a chunk of the request `attempt`'s body goes in the file; nil when that body is no
-    /// longer wanted.
-    func chunkOffset(attempt: Int) -> Int64? {
-        guard !cancelled, let tx = current, tx.attempt == attempt, !tx.ended else { return nil }
-        return tx.base + tx.written
-    }
-
-    /// A chunk of `count` bytes was written at ``chunkOffset(attempt:)``, or failed with `writeError`.
+    /// A chunk of `count` bytes was placed as ``chunkParts(attempt:count:)`` said, or its write
+    /// failed with `writeError`. `overlapMatches`: every compared part equals the file.
     /// - Parameter head: the file's first ``GrowingFileByteSource/sniffBytes``, for the media
     ///   sniff; nil when they cannot be read.
     mutating func chunkWritten(
-        _ count: Int, attempt: Int, writeError: Int32? = nil, now: TimeInterval, head: () -> [UInt8]?
+        _ count: Int, attempt: Int, writeError: Int32? = nil, overlapMatches: Bool = true,
+        now: TimeInterval, head: () -> [UInt8]?
     ) -> [Effect] {
         // Still this request's: across the write, an idle check may have ended it and a resume
         // gone out from the frontier this chunk would move, under the same transaction.
@@ -755,10 +756,19 @@ struct GrowingFileDownload {
             end("write failed errno=\(writeError)", retryable: false, now: now)
             return takeEffects()
         }
-        current?.written += Int64(count)
+        guard overlapMatches else {
+            // ADR-0016: the bytes at the join are another version of the resource.
+            downloadLog.warning("download: resource_changed gen=\(tx.generation) overlap at=\(tx.bodyAt)")
+            start(at: offset, seekGeneration: tx.seekGeneration, retrying: true, discardingFile: true)
+            return takeEffects()
+        }
+        // The overlap before the join moves no frontier.
+        let placed = Int64(count) - min(Int64(count), max(0, tx.base + tx.written - tx.bodyAt))
+        current?.bodyAt += Int64(count)
+        current?.written += placed
         current?.lastByteAt = now
         current?.rateAtPause = nil
-        if tx.sniffPending, tx.written + Int64(count) >= Int64(GrowingFileByteSource.sniffBytes) {
+        if tx.sniffPending, tx.written + placed >= Int64(GrowingFileByteSource.sniffBytes) {
             guard let bytes = head(), Self.isMedia(mimeType: nil, head: bytes) == true else {
                 end("not audio: body sniff", retryable: tx.remembered, refused: true, now: now)
                 return takeEffects()
@@ -793,7 +803,7 @@ struct GrowingFileDownload {
             end("not audio: body of \(tx.written) bytes", retryable: tx.remembered, refused: true, now: now)
             return takeEffects()
         }
-        let expectedEnd = min(tx.end ?? .max, tx.totalLength ?? .max)
+        let expectedEnd = min(tx.bodyEnd ?? .max, tx.totalLength ?? .max)
         if expectedEnd < .max, tx.frontier < expectedEnd {
             end("short body ended=\(tx.frontier) expected=\(expectedEnd)", retryable: true, now: now)
             return takeEffects()

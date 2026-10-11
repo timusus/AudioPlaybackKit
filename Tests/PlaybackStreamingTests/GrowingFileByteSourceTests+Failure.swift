@@ -136,7 +136,8 @@ extension GrowingFileByteSourceTests {
             XCTAssertGreaterThanOrEqual(quietFor, GrowingFileDownload.Retry.linkWindowSeconds - GrowingFileDownload.Retry.maxBackoffSeconds, "\(redirected)")
             XCTAssertLessThanOrEqual(quietFor, GrowingFileDownload.Retry.linkWindowSeconds + 1.5, "the window ran long: \(redirected)")
             XCTAssertEqual(server.requestedRanges.first, 0)
-            XCTAssertTrue(server.requestedRanges.dropFirst().allSatisfy { $0 == 20_000 }, "a retry did not resume")
+            // A resume's 64 KiB overlap before the frontier reaches back to the file's start.
+            XCTAssertTrue(server.requestedRanges.dropFirst().allSatisfy { $0 == 0 }, "a retry did not resume")
         }
     }
 
@@ -166,7 +167,8 @@ extension GrowingFileByteSourceTests {
         server.refuseRequests(for: 0)
         XCTAssertTrue(clock.drive(source) { rest.finished(within: 0) }, "the read never came back")
         XCTAssertEqual(try rest.result.get(), body.suffix(from: 10_000), "the outage failed the read")
-        XCTAssertEqual(server.requestedRanges, [0, 20_000], "the retry did not resume from the frontier")
+        // The resume's 64 KiB overlap before the frontier reaches back to the file's start.
+        XCTAssertEqual(server.requestedRanges, [0, 0], "the retry did not resume from the frontier")
         XCTAssertEqual(source.snapshot.transactionGeneration, 1)
     }
 
@@ -190,7 +192,7 @@ extension GrowingFileByteSourceTests {
         clock.advance(by: 1)
         XCTAssertTrue(waitUntil { server.requestedRanges.count == 2 }, "the silence was never ended")
         XCTAssertEqual(try readToEnd(source), body.suffix(from: 10_000))
-        XCTAssertEqual(server.requestedRanges, [0, 20_000], "the retry resumes from the frontier")
+        XCTAssertEqual(server.requestedRanges, [0, 0], "the retry resumes from the frontier's overlap")
     }
 
     /// A chunk whose write is still on its way to disk when the idle check ends its task and the
@@ -223,10 +225,12 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(source.snapshot.frontier, frontier)
 
         // The body has been silent for the idle timeout on the clock (its chunk is stuck in the
-        // write): the task is ended, and a backoff later the resume asks for the frontier.
+        // write): the task is ended, and a backoff later the resume asks for the frontier's
+        // overlap, which reaches back to the file's start.
         clock.advance(by: GrowingFileByteSource.idleTimeoutSeconds + GrowingFileDownload.Retry.firstBackoffSeconds + 0.01)
         XCTAssertTrue(waitUntil { server.requestedRanges.count == 2 }, "no resume")
-        XCTAssertEqual(server.requestedRanges, [0, frontier])
+        XCTAssertLessThan(frontier, 65_536)
+        XCTAssertEqual(server.requestedRanges, [0, 0])
 
         release.signal()
         XCTAssertEqual(try readToEnd(source), body.suffix(from: 10_000), "the old task's chunk moved the frontier")

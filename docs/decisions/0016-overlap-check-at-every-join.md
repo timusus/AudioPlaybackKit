@@ -64,19 +64,20 @@ same joins.
 
 ## Implementation
 
-`GrowingFileDownload`: `Request.from` is the overlap start and `Request.end` the extended bound;
-`Transaction` records the overlap range to verify, and checks that a `206` starts at it (implementer's
-choice, not a decision). The adapter compares
-the first chunks with the file (the machine has no file) and reports `overlapChecked(matches:)`;
-chunks inside the overlap are not recorded. Tests:
+`GrowingFileDownload` (`+Overlap`): `Request.from` is the overlap start and `Request.end` the bound
+plus the far overlap; `Transaction.bodyAt` tracks the body and `checkEnd` the far overlap, and a `206`
+must start at `bodyAt`. `chunkParts` splits each chunk into runs to compare and runs to write; the
+adapter compares (the machine has no file) and reports `chunkWritten(overlapMatches:)`. Compared bytes
+move no frontier, and the file is promoted only once the far overlap is compared. A resume answered
+with a total equal to the frontier is an open at the end: no new byte joins, so nothing is compared.
+Tests:
 
-- Machine (`Harness`, `GrowingFileDownloadRetryTests`, `GrowingFileDownloadSessionFileTests`): a resume
-  asks `from = frontier - 65536`; a hole restart asks both seams; a mismatch yields `retire(discardFile:
-  true)` and a restart at the reader's position; a match records only the new range; a `200` to
-  `If-Range` discards; a response with no validator and a matching overlap keeps the file.
-- Loopback (`GrowingFileByteSourceTests+Recovery`, `+SessionFile`): `LoopbackMediaServer` serving a
-  different body after the Nth request with the same total and no ETag; a dropped body resumes onto
-  changed bytes and the played bytes after the join equal the new version from the join on.
+- Machine (`GrowingFileDownloadOverlapTests`): a resume asks `from = frontier - 65536`; a hole asks
+  both seams; a mismatch yields `retire(discardFile: true)` and a restart at the reader's position; a
+  match records only the new range; a `200` to `If-Range` discards; a weak ETag never decides.
+- Loopback (`GrowingFileByteSourceTests+Overlap`): a host serving other bytes of the same length per
+  request, with no ETag, a weak one or a strong one minted per request, is never spliced; a stable host
+  keeps the file and fetches only the overlap twice.
 
 Links: [ADR-0004](0004-one-recovery-layer-in-the-byte-source.md), [ADR-0014](0014-one-sparse-file-per-session.md),
 [ADR-0011](0011-probe-budget-and-junk-resync.md), issue #81, media3 `ProgressiveMediaPeriod`,

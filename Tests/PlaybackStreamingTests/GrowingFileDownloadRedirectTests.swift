@@ -26,8 +26,8 @@ struct GrowingFileDownloadRedirectTests {
         h.end(error: -1005)
         h.clock.advance(by: 0.1)
 
-        #expect(h.requests.last == h.request(2, from: 3000, url: end))
-        #expect(h.respond(206, range: "bytes 3000-9999/10000", url: end))
+        #expect(h.requests.last == h.request(2, from: 0, url: end))
+        #expect(h.respond(206, range: "bytes 0-9999/10000", url: end))
         #expect(h.transactionEvents == 1)
     }
 
@@ -39,15 +39,15 @@ struct GrowingFileDownloadRedirectTests {
         h.body(2000)
         h.end(error: -1005)
         h.clock.advance(by: 0.1)
-        #expect(h.requests.last == h.request(2, from: 2000, url: Self.signedEnd))
+        #expect(h.requests.last == h.request(2, from: 0, url: Self.signedEnd))
 
-        #expect(h.respond(206, range: "bytes 2000-9999/10000", mimeType: "text/html") == false)
+        #expect(h.respond(206, range: "bytes 0-9999/10000", mimeType: "text/html") == false)
         #expect(h.machine.finalURL == nil, "the signed hop may have expired")
         #expect(h.machine.retry.attempts == 2)
         h.clock.advance(by: 1)
-        #expect(h.requests.last == h.request(3, from: 2000))
-        #expect(h.respond(206, range: "bytes 2000-9999/10000"))
-        h.body(8000)
+        #expect(h.requests.last == h.request(3, from: 0))
+        #expect(h.respond(206, range: "bytes 0-9999/10000"))
+        h.body(10_000)
         h.end()
         #expect(h.machine.file.isCached)
     }
@@ -86,10 +86,10 @@ struct GrowingFileDownloadRedirectTests {
         h.body(2000)
         h.end(error: -1005)
         h.clock.advance(by: 1)
-        h.respond(206, range: "bytes 2000-9999/10000", mimeType: "text/html")
+        h.respond(206, range: "bytes 0-9999/10000", mimeType: "text/html")
         h.clock.advance(by: 1)
         #expect(h.requests.count == 3)
-        #expect(h.respond(206, range: "bytes 2000-9999/10000", mimeType: "text/html") == false)
+        #expect(h.respond(206, range: "bytes 0-9999/10000", mimeType: "text/html") == false)
 
         h.clock.advance(by: 10)
         #expect(h.requests.count == 3, "no fourth request")

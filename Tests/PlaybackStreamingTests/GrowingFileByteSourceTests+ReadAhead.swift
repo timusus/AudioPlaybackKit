@@ -69,8 +69,9 @@ extension GrowingFileByteSourceTests {
         played += try readToEnd(source)
         XCTAssertEqual(played, body)
         XCTAssertGreaterThan(pauses.count, 1)
-        // Each resume asks from the frontier it paused at, so only what was on the wire at each cancel comes twice.
-        XCTAssertEqual(server.requestedRanges, [0] + pauses)
+        // Each resume asks from 64 KiB before the frontier it paused at, so only that overlap and
+        // what was on the wire at each cancel comes twice.
+        XCTAssertEqual(server.requestedRanges, [0] + pauses.map { $0 - 65_536 })
         let cached = try XCTUnwrap(store.completedFile(for: server.url))
         XCTAssertEqual(try Data(contentsOf: cached), body)
     }
@@ -114,7 +115,7 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(source.requestsSentForTest, 1, "Low Data Mode is a cost too, and no change")
         hotspot.update(Self.wifi)
         XCTAssertTrue(waitUntil { source.snapshot.isComplete }, "the pause was not lifted")
-        XCTAssertEqual(server.requestedRanges, [0, 0, pausedAt])
+        XCTAssertEqual(server.requestedRanges, [0, 0, pausedAt - 65_536])
     }
 
     /// An unsatisfied path reports no cost; it must not lift a pause. The resume would go out
@@ -129,7 +130,7 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(source.requestsSentForTest, 1, "offline lifted the pause")
         monitor.update(Self.wifi)
         XCTAssertTrue(waitUntil { source.snapshot.isComplete }, "the pause was not lifted")
-        XCTAssertEqual(server.requestedRanges, [0, pausedAt])
+        XCTAssertEqual(server.requestedRanges, [0, pausedAt - 65_536])
     }
 
     /// (f) A host that ignores ranges is never capped: a resume would start it from 0 again.

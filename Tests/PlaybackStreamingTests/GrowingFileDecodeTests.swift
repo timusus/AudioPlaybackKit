@@ -78,7 +78,12 @@ final class GrowingFileDecodeTests: XCTestCase {
         XCTAssertGreaterThan(source.snapshot.transactionGeneration, 1, "the index fetch is its own transaction")
         // Head, tail and the media between, from three transactions, are one file (ADR-0014).
         let fixture = try XCTUnwrap(Bundle.module.url(forResource: "tone_moov_last", withExtension: "m4a", subdirectory: "Fixtures"))
-        let cached = try XCTUnwrap(GrowingFileStore(directory: directory).completedFile(for: try XCTUnwrap(server).url))
+        // The file is promoted once the last hole's far overlap is compared, which can come after
+        // the decoder has finished.
+        let store = GrowingFileStore(directory: directory), url = try XCTUnwrap(server).url
+        let deadline = Date().addingTimeInterval(20)
+        while store.completedFile(for: url) == nil, Date() < deadline { usleep(10_000) }
+        let cached = try XCTUnwrap(store.completedFile(for: url))
         XCTAssertEqual(try Data(contentsOf: cached), try Data(contentsOf: fixture))
     }
 
@@ -87,13 +92,14 @@ final class GrowingFileDecodeTests: XCTestCase {
         // decoder reads inside the file, so the retry is a resume from where the body stopped. A
         // drop timed by the server instead could land during that look and be a restart.
         let source = try assertDecodesAsOnDisk("tone-45s", "mp3", mimeType: "audio/mpeg", configure: {
-            $0.heldBodyAfterBytesForRangeStartingAt = [0: 50_000]
+            // Past the 64 KiB overlap, so the resume does not start at 0 and get held too.
+            $0.heldBodyAfterBytesForRangeStartingAt = [0: 100_000]
         }, afterOpen: {
             XCTAssertTrue($0.dropHeldBody(forRangeStartingAt: 0), "the body was not held when the decoder opened")
         })
         let server = try XCTUnwrap(self.server)
-        XCTAssertEqual(server.requestedRanges, [0, 50_000], "the retry did not resume from the frontier")
-        XCTAssertTrue(server.requestHeads.last?.lowercased().contains("range: bytes=50000-") ?? false)
+        XCTAssertEqual(server.requestedRanges, [0, 34_464], "the retry did not resume from the frontier's overlap")
+        XCTAssertTrue(server.requestHeads.last?.lowercased().contains("range: bytes=34464-") ?? false)
         XCTAssertEqual(source.snapshot.transactionGeneration, 1, "the retry resumes the same file")
     }
 }

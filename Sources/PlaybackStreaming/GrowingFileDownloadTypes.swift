@@ -11,8 +11,10 @@ extension GrowingFileDownload {
         /// Names this request; a timer or a callback for an earlier one changes nothing.
         let attempt: Int
         let url: URL
+        /// Up to ``GrowingFileDownload/overlapBytes`` before the join with the bytes on disk (ADR-0016).
         let from: Int64
-        /// Exclusive: where the next covered range of the session's file starts (ADR-0014).
+        /// Exclusive: where the next covered range of the session's file starts (ADR-0014), plus
+        /// the overlap into it.
         var end: Int64? = nil
         /// The resume's validator: the first response's strong ETag.
         let ifRange: String?
@@ -104,6 +106,12 @@ extension GrowingFileDownload {
         var base: Int64
         /// Exclusive: where the request stops, at the next covered range; nil asks to the end.
         var end: Int64?
+        /// Exclusive: the end of the overlap past `end` into the next covered range (ADR-0016),
+        /// compared with the file, where the body ends; nil when `end` is the body's end.
+        var checkEnd: Int64?
+        /// The resource offset of the current request's next body byte. Behind the write position
+        /// while the overlap before the join is compared.
+        var bodyAt: Int64 = 0
         /// This transaction's own, from its response; never inherited from an earlier transaction's body.
         var totalLength: Int64?
         /// Bytes in the file.
@@ -129,5 +137,7 @@ extension GrowingFileDownload {
         /// The host answered this transaction's range with a `206` from its base.
         var rangeHonoured = false
         var frontier: Int64 { base + (sniffPending ? 0 : written) }
+        /// Where the body of the current request ends, its far overlap included.
+        var bodyEnd: Int64? { checkEnd ?? end }
     }
 }

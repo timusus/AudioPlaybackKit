@@ -22,8 +22,9 @@ extension GrowingFileByteSourceTests {
 
         try source.seek(to: 0)
         XCTAssertEqual(try readToEnd(source), body)
-        XCTAssertEqual(ranges(server), ["bytes=131072-", "bytes=0-131071"])
-        XCTAssertEqual(server.servedBytes, Int64(body.count), "a byte was fetched twice")
+        // The hole's request runs 64 KiB into the range after it, to compare the seam.
+        XCTAssertEqual(ranges(server), ["bytes=131072-", "bytes=0-196607"])
+        XCTAssertEqual(server.servedBytes, 327_680, "a byte past the overlap was fetched twice")
         let cached = try XCTUnwrap(GrowingFileStore(directory: directory).completedFile(for: server.url))
         XCTAssertEqual(source.snapshot.fileURL, cached)
         XCTAssertEqual(try Data(contentsOf: cached), body)
@@ -45,7 +46,7 @@ extension GrowingFileByteSourceTests {
 
         try source.seek(to: 0)
         XCTAssertEqual(try readToEnd(source), second, "a byte of the old resource was read")
-        XCTAssertEqual(ranges(server), ["bytes=131072-", "bytes=0-131071", "bytes=0-"])
+        XCTAssertEqual(ranges(server), ["bytes=131072-", "bytes=0-196607", "bytes=0-"])
         XCTAssertFalse(FileManager.default.fileExists(atPath: firstFile.path), "the old resource's file was kept")
         let cached = try XCTUnwrap(GrowingFileStore(directory: directory).completedFile(for: server.url))
         XCTAssertEqual(try Data(contentsOf: cached), second)

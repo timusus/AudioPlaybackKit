@@ -21,7 +21,8 @@ extension GrowingFileByteSourceTests {
 
         XCTAssertEqual(try read(source, 4096), first.prefix(4096))
         XCTAssertTrue(waitUntil { server.requestedRanges.count == 3 })
-        XCTAssertEqual(server.requestedRanges, [0, 100_000, 4096], "the resume asked for the new end, then restarted")
+        // The resume starts 64 KiB before the frontier, where the new file's bytes differ.
+        XCTAssertEqual(server.requestedRanges, [0, 34_464, 4096], "the resume did not restart on the new file")
         let rest = readAsync(source, Int.max)
         XCTAssertTrue(rest.finished(within: 20), "the read hung after a 416")
         XCTAssertEqual(try rest.result.get(), second.suffix(from: 4096))
@@ -45,13 +46,13 @@ extension GrowingFileByteSourceTests {
         let pending = readAsync(source, Int.max)
         XCTAssertTrue(clock.drive(source) { pending.finished(within: 0) }, "the read hung after a 416")
         assertTransport(pending.result)
-        XCTAssertEqual(server.requestedRanges.prefix(3), [0, 100_000, 100_000])
+        XCTAssertEqual(server.requestedRanges.prefix(3), [0, 34_464, 100_000])
     }
 
-    /// A body of unknown length stalls after its last byte, and the reopen from the frontier (a
-    /// path change) is answered `416` with `bytes */N`, N being the frontier. As for a fresh
-    /// request, that is the end of the file, not a refused resume: the length is learned and the
-    /// read ends, with no restart. A different N is still a refused resume.
+    /// A body of unknown length stalls after its last byte, and the reopen (a path change) gets
+    /// the whole file that now ends there as a `200`: a refused resume. The restart at the
+    /// decoder's position, the frontier, is answered `416` with `bytes */N`, N being that position,
+    /// which is the end of the file: the length is learned and the read ends.
     func testAResumeAtTheFrontierAnswered416WithTheTotalAtThatPositionIsTheEnd() throws {
         // The first body is cut at 100 000 by the stall; the file that answers the reopen ends
         // there, so its strict origin says `bytes */100000`.
@@ -75,7 +76,8 @@ extension GrowingFileByteSourceTests {
         monitor.update(Self.cellular)
         XCTAssertTrue(clock.drive(source, step: 0.1) { rest.finished(within: 0) }, "the read hung after a 416 at the frontier")
         XCTAssertEqual(try rest.result.get(), body[4096..<100_000])
-        XCTAssertEqual(server.requestedRanges, [0, 100_000], "the end was taken for a refused resume")
+        // The reopen starts 64 KiB before the frontier, inside the shorter file.
+        XCTAssertEqual(server.requestedRanges, [0, 34_464, 100_000], "the 416 at the frontier was not the end")
         XCTAssertEqual(source.totalLength, 100_000)
     }
 
@@ -115,7 +117,7 @@ extension GrowingFileByteSourceTests {
         XCTAssertTrue(
             server.requestHeads[1].lowercased().contains("if-range: \"v1\""), "the resume carried no validator"
         )
-        XCTAssertEqual(server.requestedRanges, [0, 100_000, 4096])
+        XCTAssertEqual(server.requestedRanges, [0, 34_464, 4096])
         XCTAssertEqual(try readToEnd(source), second.suffix(from: 4096), "the new file was spliced onto the old")
         XCTAssertEqual(source.snapshot.base, 4096)
         XCTAssertEqual(source.snapshot.transactionGeneration, 2)
@@ -131,7 +133,7 @@ extension GrowingFileByteSourceTests {
 
         XCTAssertEqual(try read(source, 4096), body.prefix(4096))
         XCTAssertEqual(try readToEnd(source).count, body.count - 4096)
-        XCTAssertEqual(server.requestedRanges, [0, 100_000])
+        XCTAssertEqual(server.requestedRanges, [0, 34_464], "the resume did not start 64 KiB before the frontier")
         XCTAssertTrue(server.requestHeads[1].lowercased().contains("if-range: \"v1\""))
         XCTAssertEqual(source.snapshot.transactionGeneration, 1)
     }

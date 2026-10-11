@@ -39,8 +39,8 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(reads.last, .readResumed, "every wait the read announced ended")
     }
 
-    /// A drop mid-body keeps the file: the retry asks for the frontier and appends to it, so
-    /// nothing the download already had ahead of the decoder comes over the network twice.
+    /// A drop mid-body keeps the file: the retry asks for 64 KiB before the frontier, compares
+    /// them, and appends the rest, so only that overlap comes over the network twice.
     func testAMidBodyDropResumesFromTheFrontierIntoTheSameFile() throws {
         let body = makeBody(256 * 1024)
         let server = try startServer(body: body)
@@ -49,11 +49,11 @@ extension GrowingFileByteSourceTests {
 
         let head = try read(source, 4096)
         XCTAssertTrue(waitUntil { server.requestedRanges.count == 2 })
-        XCTAssertEqual(server.requestedRanges, [0, 100_000], "the retry asks for the frontier, not the decoder's position")
-        XCTAssertTrue(server.requestHeads.last?.lowercased().contains("range: bytes=100000-") ?? false)
+        XCTAssertEqual(server.requestedRanges, [0, 34_464], "the retry asks for the frontier's overlap, not the decoder's position")
+        XCTAssertTrue(server.requestHeads.last?.lowercased().contains("range: bytes=34464-") ?? false)
         let rest = try readToEnd(source)
         XCTAssertEqual(head + rest, body)
-        XCTAssertEqual(server.servedBytes, Int64(body.count), "a byte already on disk was fetched again")
+        XCTAssertEqual(server.servedBytes, Int64(body.count) + 65_536, "a byte past the overlap was fetched again")
         XCTAssertEqual(source.snapshot.base, 0)
         XCTAssertEqual(source.snapshot.transactionGeneration, 1, "a resume is the same file")
         XCTAssertEqual(events.transactions.count, 1, "a resume opens no transaction")
@@ -73,7 +73,7 @@ extension GrowingFileByteSourceTests {
 
         let head = try read(source, 4096)
         XCTAssertTrue(waitUntil { server.requestedRanges.count == 3 })
-        XCTAssertEqual(server.requestedRanges, [0, 100_000, 4096])
+        XCTAssertEqual(server.requestedRanges, [0, 34_464, 4096])
         XCTAssertEqual(head + (try readToEnd(source)), body)
         XCTAssertEqual(source.snapshot.base, 0)
         XCTAssertEqual(source.snapshot.transactionGeneration, 3, "the restart, then its base moved to 0")
@@ -91,7 +91,7 @@ extension GrowingFileByteSourceTests {
 
         XCTAssertEqual(try read(source, 4096), first.prefix(4096))
         XCTAssertTrue(waitUntil { server.requestedRanges.count == 3 })
-        XCTAssertEqual(server.requestedRanges, [0, 100_000, 4096])
+        XCTAssertEqual(server.requestedRanges, [0, 34_464, 4096])
         XCTAssertEqual(try readToEnd(source), second.suffix(from: 4096), "the new splice was spliced onto the old")
         XCTAssertEqual(source.snapshot.base, 4096)
         XCTAssertEqual(source.snapshot.transactionGeneration, 2)
@@ -115,7 +115,8 @@ extension GrowingFileByteSourceTests {
 
         // The drop's close lands a moment after its last byte: step until the restart goes out.
         XCTAssertTrue(clock.drive(source, step: 0.01) { server.requestedRanges.count == 3 }, "no restart after the refused resume")
-        XCTAssertEqual(server.requestedRanges, [0, 20_000, 10_000])
+        // The resume's overlap reaches back to the file's start.
+        XCTAssertEqual(server.requestedRanges, [0, 0, 10_000])
         clock.advance(by: GrowingFileByteSource.retryRequestTimeoutSeconds - 0.5)
         XCTAssertEqual(source.requestsSentForTest, 3, "the restart was given up on before a retry's wait")
         clock.advance(by: 0.5 + GrowingFileDownload.Retry.firstBackoffSeconds * 2 + 0.1)

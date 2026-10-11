@@ -603,16 +603,29 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     }
 
     public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        let claim = locked { () -> (file: SessionFile, attempt: Int, fileOffset: Int64)? in
+        let claim = locked { () -> (file: SessionFile, attempt: Int, parts: [GrowingFileDownload.ChunkPart])? in
             guard let attempt = attemptLocked(dataTask), let file,
-                  let fileOffset = machine.chunkOffset(attempt: attempt) else { return nil }
-            return (file, attempt, fileOffset)
+                  let parts = machine.chunkParts(attempt: attempt, count: data.count) else { return nil }
+            return (file, attempt, parts)
         }
         guard let claim else { return }
-        let writeError = writeAll(data, to: claim.file.descriptor, at: claim.fileOffset)
+        var writeError: Int32?
+        var matches = true
+        var at = data.startIndex
+        for part in claim.parts {
+            let bytes = data[at..<(at + Int(part.range.count))]
+            at += bytes.count
+            if part.compare {
+                matches = matches && Self.file(claim.file.descriptor, holds: bytes, at: part.range.lowerBound)
+            } else if writeError == nil {
+                writeError = writeAll(bytes, to: claim.file.descriptor, at: part.range.lowerBound)
+            }
+        }
         perform(locked { () -> [Deferred] in
             guard file === claim.file else { return [] }
-            let effects = machine.chunkWritten(data.count, attempt: claim.attempt, writeError: writeError, now: clock.now) {
+            let effects = machine.chunkWritten(
+                data.count, attempt: claim.attempt, writeError: writeError, overlapMatches: matches, now: clock.now
+            ) {
                 var head = [UInt8](repeating: 0, count: Self.sniffBytes)
                 return pread(claim.file.descriptor, &head, head.count, 0) == head.count ? head : nil
             }
@@ -634,6 +647,12 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         condition.lock()
         defer { condition.unlock() }
         return try body()
+    }
+
+    /// The file holds `bytes` at `fileOffset`; a failed read is no match.
+    private static func file(_ descriptor: Int32, holds bytes: Data, at fileOffset: Int64) -> Bool {
+        var onDisk = [UInt8](repeating: 0, count: bytes.count)
+        return pread(descriptor, &onDisk, onDisk.count, off_t(fileOffset)) == onDisk.count && bytes.elementsEqual(onDisk)
     }
 
     /// Writes all of `data` through the store's seam; nil, or the `errno` it failed with.

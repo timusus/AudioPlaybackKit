@@ -80,7 +80,8 @@ extension GrowingFileByteSourceTests {
         let all = readAsync(source, Int.max)
         XCTAssertTrue(clock.drive(source) { all.finished(within: 0) }, "the read never came back")
         XCTAssertEqual(try all.result.get(), body)
-        XCTAssertEqual(server.requestedRanges, [0, 20_000], "the retry did not resume from the frontier")
+        // The resume's 64 KiB overlap before the frontier reaches back to the file's start.
+        XCTAssertEqual(server.requestedRanges, [0, 0], "the retry did not resume from the frontier")
         XCTAssertEqual(source.snapshot.transactionGeneration, 1)
     }
 }

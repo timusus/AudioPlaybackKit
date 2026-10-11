@@ -26,12 +26,15 @@ struct GrowingFileDownloadTests {
         // The file is still read during the backoff.
         #expect(h.read() == .serve(fileOffset: 1000, count: 3000, landed: nil))
         h.clock.advance(by: 0.1)
-        #expect(h.requests.last == h.request(2, from: 4000, ifRange: "\"v1\""))
+        // The overlap before the frontier reaches back to the file's start; those bytes are compared.
+        #expect(h.requests.last == h.request(2, from: 0, ifRange: "\"v1\""))
         #expect(h.opens == 1)
         #expect(h.machine.generation == 1)
 
-        #expect(h.respond(206, range: "bytes 4000-9999/10000"))
+        #expect(h.respond(206, range: "bytes 0-9999/10000"))
         #expect(h.transactionEvents == 1, "a resume is no new transaction")
+        h.body(4000)
+        #expect(h.machine.current?.frontier == 4000, "the overlap moved the frontier")
         h.body(6000)
         h.end()
         #expect(h.read() == .serve(fileOffset: 4000, count: 6000, landed: nil))
@@ -99,9 +102,9 @@ struct GrowingFileDownloadTests {
         h.body(4000)
         h.end(error: -1005)
         h.clock.advance(by: 0.1)
-        #expect(h.requests.last == h.request(2, from: 4000))
+        #expect(h.requests.last == h.request(2, from: 0))
 
-        #expect(h.respond(206, range: "bytes 0-9999/10000") == false)
+        #expect(h.respond(206, range: "bytes 500-9999/10000") == false)
         #expect(h.opens == 2)
         #expect(h.log.contains(.retire(discardFile: true)))
         #expect(h.requests.last == h.request(3, from: 0))
@@ -189,7 +192,7 @@ struct GrowingFileDownloadTests {
         #expect(h.machine.retry.linkDownSince == 1004, "the link went quiet at the last byte")
 
         h.clock.advance(by: 0.1)
-        #expect(h.requests.last == h.request(2, from: 1000, ifRange: "\"v1\""))
+        #expect(h.requests.last == h.request(2, from: 0, ifRange: "\"v1\""))
         #expect(h.log.contains(.schedule(.response(attempt: 2), after: 8)))
     }
 
@@ -224,7 +227,7 @@ struct GrowingFileDownloadTests {
         #expect(h.log.contains(.cancelTask))
         #expect(h.machine.retry.attempts == 1)
         h.clock.advance(by: 0.1)
-        #expect(h.requests.last == h.request(2, from: 2000))
+        #expect(h.requests.last == h.request(2, from: 0))
         #expect(h.opens == 1)
     }
 
@@ -249,19 +252,19 @@ struct GrowingFileDownloadTests {
         h.body(1000)
         h.end(error: -1005)
         h.clock.advance(by: 0.1)
-        #expect(h.requests.last == h.request(2, from: 1000, url: end))
+        #expect(h.requests.last == h.request(2, from: 0, url: end))
         #expect(h.log.contains(.schedule(.response(attempt: 2), after: 8)))
 
         h.pathChanged()
         #expect(h.machine.finalURL == end)
         #expect(h.machine.retry.attempts == 1, "nothing answered: the link window, not another attempt")
         h.clock.advance(by: 0.2)
-        #expect(h.requests.last == h.request(3, from: 1000, url: end))
+        #expect(h.requests.last == h.request(3, from: 0, url: end))
 
         h.clock.advance(by: 8)
         #expect(h.machine.finalURL == nil)
         h.clock.advance(by: 0.4)
-        #expect(h.requests.last == h.request(4, from: 1000))
+        #expect(h.requests.last == h.request(4, from: 0))
         #expect(h.log.contains(.schedule(.response(attempt: 4), after: 20)), "walking the chain again waits the full time")
     }
 
@@ -303,11 +306,12 @@ struct GrowingFileDownloadTests {
         // A drop, and the resume goes out 0.1 s later: its answer 0.2 s after that replaces it.
         h.end(error: -1005)
         h.clock.advance(by: 0.1)
-        #expect(h.requests.last == h.request(2, from: 1000, ifRange: "\"v1\""))
+        #expect(h.requests.last == h.request(2, from: 0, ifRange: "\"v1\""))
         h.clock.advance(by: 0.2)
-        h.respond(206, range: "bytes 1000-999999/1000000")
+        h.respond(206, range: "bytes 0-999999/1000000")
         #expect(abs(h.machine.responseLatency! - 0.2) < 1e-9, "a resume's response is measured from its own request")
-        h.body(1000)
+        // The 1000 bytes of overlap, then 1000 new.
+        h.body(2000)
         h.read(1000)
 
         // 0.15 s of the download's rate ahead beats a 0.2 s request; 0.25 s does not.
@@ -439,10 +443,11 @@ final class Harness {
         return answer.allow
     }
 
-    func body(_ count: Int, head: [UInt8] = Array("ID3".utf8) + Array(repeating: 0, count: 9)) {
+    /// `overlapMatches`: what the adapter found comparing the chunk's overlap with the file.
+    func body(_ count: Int, overlapMatches: Bool = true, head: [UInt8] = Array("ID3".utf8) + Array(repeating: 0, count: 9)) {
         let attempt = requests.last!.attempt
-        guard machine.chunkOffset(attempt: attempt) != nil else { return }
-        run(machine.chunkWritten(count, attempt: attempt, now: now) { head })
+        guard machine.chunkParts(attempt: attempt, count: count) != nil else { return }
+        run(machine.chunkWritten(count, attempt: attempt, overlapMatches: overlapMatches, now: now) { head })
     }
 
     /// The latest request's task ends: whole, or with a URL error code.
