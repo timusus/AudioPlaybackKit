@@ -67,6 +67,8 @@ public final class Player<Item: Hashable & Sendable> {
     @ObservationIgnored private var seekTarget: TimeInterval?
     /// The transport heard the end of the list; nothing is armed until a seek or load restarts it.
     @ObservationIgnored private var atEnd = false
+    /// The next that failed before it was heard, reported when playback reaches it (media3).
+    @ObservationIgnored private var failedNext: (entryID: Int, error: PlaybackError)?
 
     public convenience init(
         makeSource: @escaping ItemSourceFactory<Item>,
@@ -448,6 +450,17 @@ public final class Player<Item: Hashable & Sendable> {
     private func reachedEnd() -> Bool {
         // A next armed since the transport ended plays on.
         guard let current = currentIndex, loadedKey != nil, armedKey == nil, error == nil else { return false }
+        if let failedNext, let index = index(of: failedNext.entryID) {
+            self.failedNext = nil
+            currentIndex = index
+            position = 0
+            duration = nil
+            isLive = false
+            unload(as: .idle)
+            send(.itemTransition(from: current, to: index, reason: index == current ? .repeat : .auto))
+            reportFailure(at: index, failedNext.error)
+            return true
+        }
         guard pauseAtEndOfItem, let next = following(current) else {
             if pauseAtEndOfItem { pauseAtEnd() }
             atEnd = true
@@ -483,6 +496,7 @@ public final class Player<Item: Hashable & Sendable> {
         }
         let key = newKey(for: entry.id, replacing: true)
         atEnd = false
+        failedNext = nil
         unansweredCalls += 1
         transport.setCurrent(item: key, source: source, startSeconds: position)
         loadedKey = key
@@ -515,6 +529,9 @@ public final class Player<Item: Hashable & Sendable> {
     private func armNext() {
         guard let current = currentIndex, loadedKey != nil, error == nil, !atEnd else { return }
         let next = pauseAtEndOfItem ? nil : following(current).map { entries[$0] }
+        // A failed next stays unarmed while it is still the next; the end of the current reports it.
+        if let failedNext, next?.id == failedNext.entryID { return }
+        failedNext = nil
         guard next?.id != armedEntryID else { return }
         guard let next else {
             transport.clearNext()
@@ -529,17 +546,16 @@ public final class Player<Item: Hashable & Sendable> {
         } catch {
             if armedKey != nil { transport.clearNext() }
             armedKey = nil
-            send(.itemFailed(index: current + 1, error: PlaybackError(kind: .source, underlying: error)))
+            failedNext = (next.id, PlaybackError(kind: .source, underlying: error))
         }
     }
 
     private func failed(_ key: Int?, _ underlying: any Error) {
         // A source or processor failure names its item; an output failure (nil) stops the current.
-        if let key, key == armedKey {
+        if let key, key == armedKey, let entryID = keyedEntries[key] {
+            // The transport dropped it and plays the current on.
             armedKey = nil
-            if let index = keyedEntries[key].flatMap(index(of:)) {
-                send(.itemFailed(index: index, error: PlaybackError(kind: .source, underlying: underlying)))
-            }
+            failedNext = (entryID, PlaybackError(kind: .source, underlying: underlying))
             return
         }
         guard key == nil || key == loadedKey, let current = currentIndex else { return }

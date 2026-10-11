@@ -52,8 +52,9 @@ public enum PlayWhenReadyChangeReason: Sendable {
 public enum PlayerEvent<Item: Hashable & Sendable>: Sendable {
     /// `currentIndex` moved; `to` is nil when the list emptied.
     case itemTransition(from: Int?, to: Int?, reason: TransitionReason)
-    /// The item at `index` failed. If it is the current item the player is `.idle` with `error` set;
-    /// a later item is dropped from the pre-arm and reported here, the queue entry stays.
+    /// The item at `index` failed, and the player is `.idle` on it with `error` set; there is no
+    /// automatic skip. A next item that failed while the current played is reported once playback
+    /// reaches it, after its `itemTransition`; removed or replaced before then, it is never reported.
     case itemFailed(index: Int, error: PlaybackError)
     /// The seek's audio reached the speaker; `position` is where it landed.
     case seekLanded(index: Int, position: TimeInterval)

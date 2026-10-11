@@ -200,7 +200,8 @@ final class PlayerTransportEventTests: XCTestCase {
         ])
     }
 
-    // The transport drops a failed next whatever the app called since, so the failure still counts.
+    // The transport drops a failed next whatever the app called since, so the failure still counts
+    // and is reported when playback reaches the item.
     func testAFailedArmedNextInFlightWhileASeekIsPendingIsReported() async {
         rig.factory.unopenable = ["b"]
         player.setItems(["a", "b", "c"])
@@ -213,12 +214,13 @@ final class PlayerTransportEventTests: XCTestCase {
         rig.deliver(failure)
         rig.deliver(answer)
         rig.run(for: 3)
-        XCTAssertEqual(player.currentItem, "a")
-        XCTAssertEqual(player.state, .ended)
+        XCTAssertEqual(player.currentItem, "b")
+        XCTAssertEqual(player.state, .idle)
+        XCTAssertEqual(player.error?.kind, .source)
 
         let events = await rig.finish()
         XCTAssertEqual(PlayerRig.failedIndices(events), [1])
-        XCTAssertEqual(PlayerRig.transitions(events), [])
+        XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 1, reason: .auto)])
     }
 
     // A recovery restarts paused whatever the app intends; a seek after it must not show buffering.
