@@ -82,10 +82,14 @@ struct GrowingFileDownload {
     private var effects: [Effect] = []
     /// How far the frontier may run ahead of the decoder while the path is expensive; nil is no cap.
     private let readAheadSetting: GrowingFileReadAhead?
-    /// The probed stream's bitrate, once the host reported its duration and the length is known.
-    private var streamBitsPerSecond: Double?
+    /// The probed stream's duration as the host reported it; the bitrate follows once the length is known.
+    private var probedDuration: TimeInterval?
     /// The cap in bytes: the seconds form resolves to it with the stream's bitrate.
-    var readAhead: Int64? { readAheadSetting?.limit(bitsPerSecond: streamBitsPerSecond) }
+    var readAhead: Int64? {
+        var bitsPerSecond: Double?
+        if let probedDuration, let total = totalLength, total > 0 { bitsPerSecond = Double(total) * 8 / probedDuration }
+        return readAheadSetting?.limit(bitsPerSecond: bitsPerSecond)
+    }
     /// The network path is expensive or constrained: the read-ahead cap applies.
     private(set) var pathIsExpensive = false
 
@@ -555,10 +559,11 @@ struct GrowingFileDownload {
         return takeEffects()
     }
 
-    /// The decoder probed a stream of `duration`: its bitrate is the total length over it.
+    /// The decoder probed a stream of `duration`: its bitrate is the total length over it, whichever
+    /// of the two is known first.
     mutating func streamProbed(duration: TimeInterval) {
-        guard duration > 0, let total = totalLength, total > 0 else { return }
-        streamBitsPerSecond = Double(total) * 8 / duration
+        guard duration > 0, duration.isFinite else { return }
+        probedDuration = duration
     }
 
     /// The path's cost, on every path the monitor reports. A paused transaction resumes at once

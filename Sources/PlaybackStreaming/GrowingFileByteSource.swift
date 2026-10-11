@@ -212,7 +212,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         self.session = session
         self.clock = clock
         self.pathMonitor = pathMonitor
-        self.machine = GrowingFileDownload(url: url, readAhead: readAhead,unknownLengthWindow: unknownLengthWindow)
+        self.machine = GrowingFileDownload(url: url, readAhead: readAhead, unknownLengthWindow: unknownLengthWindow)
         self.onEvent = onEvent
         super.init()
         let observer = pathMonitor.addObserver { [weak self] path, isChange in

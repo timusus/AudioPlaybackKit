@@ -27,9 +27,13 @@ public struct GrowingFileReadAhead: Equatable, Sendable {
         self.seconds = seconds
     }
 
+    static let ceiling: Int64 = 1 << 40
+
     /// The limit in bytes for a stream of `bitsPerSecond`, else the fallback.
     func limit(bitsPerSecond: Double?) -> Int64 {
         guard let seconds, let bitsPerSecond, bitsPerSecond > 0 else { return bytes }
-        return max(1, Int64((seconds * bitsPerSecond / 8).rounded()))
+        // The duration is host input: a tiny one makes an absurd bitrate that must not trap the conversion.
+        let bytes = (seconds * bitsPerSecond / 8).rounded()
+        return bytes >= Double(Self.ceiling) ? Self.ceiling : max(1, Int64(bytes))
     }
 }

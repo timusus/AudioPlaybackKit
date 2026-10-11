@@ -75,6 +75,26 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(try Data(contentsOf: cached), body)
     }
 
+    /// A seconds read-ahead reported through the public `streamProbed(duration:)`, even before the
+    /// length is known, caps the download at the bitrate's bytes rather than the byte fallback.
+    func testASecondsReadAheadReportedThroughTheSourceCapsAtTheBitrate() throws {
+        let body = makeBody(1_000_000)
+        let server = try startServer(body: body)
+        server.bytesPerSecond = 512 * 1024
+        let monitor = GrowingFilePathMonitor()
+        monitor.update(Self.expensiveCellular)
+        // 1 MB over 50 s is 160 kbit/s: 1 s is 20 000 bytes, far under the 512 kB fallback.
+        let source = makeSource(
+            server.url, pathMonitor: monitor, readAhead: GrowingFileReadAhead(seconds: 1, fallbackBytes: 512 * 1024)
+        )
+        source.streamProbed(duration: 50)
+        XCTAssertEqual(try read(source, 1_000), server.body.prefix(1_000))
+        XCTAssertTrue(waitUntil { !source.awaitsNetworkForTest }, "never paused at the read-ahead")
+        let paused = source.snapshot
+        XCTAssertFalse(paused.isComplete)
+        XCTAssertLessThan(paused.frontier, 256 * 1024)
+    }
+
     /// (e) On Wi-Fi the capped source downloads the whole file with nobody reading; a hotspot that
     /// stops costing (no change of interface, so no reopen) lifts a pause at once.
     func testACheapPathIsUncappedAndLiftsAPauseAtOnce() throws {

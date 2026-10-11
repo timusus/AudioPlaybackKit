@@ -117,8 +117,8 @@ while let chunk = decoder.nextChunk() { /* schedule it */ }
   half of it. To give it in time, pass `GrowingFileReadAhead(seconds: 60, fallbackBytes: ...)` and
   call `source.streamProbed(duration:)` with `StreamInfo.duration` after the decoder opens: the
   source converts with the stream's bitrate (total length over duration), and uses `fallbackBytes`
-  until then or when the length or duration is unknown. Wi-Fi, and a host that ignores ranges, still download whole, and a file
-  played to the end is cached as before ([ADR-0013](decisions/0013-read-ahead-on-expensive-paths.md)).
+  until both are known, in whichever order they arrive. Wi-Fi, and a host that ignores ranges,
+  still download whole, and a file played to the end is cached as before ([ADR-0013](decisions/0013-read-ahead-on-expensive-paths.md)).
 - **Seeking to exactly the end** reads zero bytes even before the length is known, as media3's
   `DefaultHttpDataSource` does with the host's `416 bytes */N`. Seeking past the end, once the
   host shows it, fails the read at once with a `transport("out_of_range ...")`, with no retry.
