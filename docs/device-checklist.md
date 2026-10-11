@@ -16,8 +16,9 @@ Start playing, then:
 |---|---|
 | A call arrives (from a second phone); decline it | Audio stops when it rings; `suppression == .interruption`; after it ends, playback resumes by itself and `suppression` is `.none` |
 | A call arrives; answer it, hang up | As above, resuming after the hang-up |
-| Siri ("Hey Siri", ask the time) | Audio stops; resumes when Siri finishes |
-| Another app starts audio (open Music or YouTube and play) | Audio stops; the app shows paused by another app. Stop the other app: without resume (`shouldResume` false) the player lands paused with `playWhenReady` false, and does not restart on its own |
+| Siri ("Hey Siri", ask the time); depends on whether iOS sends `.shouldResume` when Siri ends, so note which you saw | With `.shouldResume`: audio stops, then resumes when Siri finishes. Without it: audio stops and the player lands paused with `playWhenReady` false, and does not restart on its own |
+| Interruption that ends with `.shouldResume`: FaceTime or phone call from a second phone, ended from the other side (or declined) | Audio stops; `suppression == .interruption`; after it ends, playback resumes by itself and `suppression` is `.none` |
+| Interruption that ends without `.shouldResume`: open Music or YouTube and start playback, then pause or stop it there | Audio stops; the app shows paused by another app; the player lands paused with `playWhenReady` false and does not restart on its own |
 | Same, but press pause in the app during the interruption, then end it | Nothing resumes |
 | Pause first, then trigger a call | Nothing shows "paused by another app"; nothing resumes afterwards |
 | Press play in the app while a call is still ringing | The player takes the session back and plays at once |
