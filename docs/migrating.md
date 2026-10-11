@@ -6,7 +6,7 @@ this page has the order of work and the traps. Paths are relative to each app's 
 
 ## Prerequisites
 
-- **Pin a tag that contains `PlaybackRender`**, never a branch. Add the `PlaybackRender` product next to
+- **Pin the 0.9.0 tag or later**, never a branch. Add the `PlaybackRender` product next to
   `PlaybackDecode` and `PlaybackStreaming`.
 - **Embed `FFmpeg.framework` once**, in the app target. Both apps already do; check that the package's
   `FFmpeg` product and any FFmpeg of the app's own are not both linked.

@@ -224,7 +224,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         }
     }
 
-    /// Tells a seconds read-ahead the probed stream's duration (`StreamInfo.duration`), so it can
+    /// Tells a seconds read-ahead the probed stream's duration (`StreamAudioFormat.duration`), so it can
     /// convert with the bitrate; a no-op for a byte read-ahead, or before the length is known.
     public func streamProbed(duration: TimeInterval) {
         locked { machine.streamProbed(duration: duration) }

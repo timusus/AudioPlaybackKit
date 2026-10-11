@@ -9,7 +9,7 @@ behaviour you must know. Threading and blocking apply throughout: `open()`, `nex
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/timusus/AudioPlaybackKit.git", from: "0.7.1"),
+    .package(url: "https://github.com/timusus/AudioPlaybackKit.git", from: "0.9.0"),
 ],
 targets: [
     .target(name: "MyApp", dependencies: [
@@ -29,7 +29,7 @@ extension target must still embed and sign `FFmpeg.framework` in the app itself.
 
 MP3, AAC (ADTS and LATM), MP4/M4A (AAC, ALAC), Ogg (Vorbis, Opus, FLAC), Matroska/WebM (Opus, Vorbis), FLAC, PCM WAV/AIFF.
 
-Sample-accurate seek can land early on files of unknown length (known-issue fixtures #61 and #62).
+Sample-accurate seek can land early on fragmented MP4 of unknown length (known-issue fixtures #61 and #62).
 
 ## Decode a file
 
@@ -115,7 +115,7 @@ while let chunk = decoder.nextChunk() { /* schedule it */ }
   `readAhead: GrowingFileReadAhead(bytes:)` to cap it while the path is expensive or in Low Data
   Mode: the source stops that many bytes ahead of the decoder and resumes from where it stopped at
   half of it. To give it in time, pass `GrowingFileReadAhead(seconds: 60, fallbackBytes: ...)` and
-  call `source.streamProbed(duration:)` with `StreamInfo.duration` after the decoder opens: the
+  call `source.streamProbed(duration:)` with `StreamAudioFormat.duration` after the decoder opens: the
   source converts with the stream's bitrate (total length over duration), and uses `fallbackBytes`
   until both are known, in whichever order they arrive. Wi-Fi, and a host that ignores ranges,
   still download whole, and a file played to the end is cached as before ([ADR-0013](decisions/0013-read-ahead-on-expensive-paths.md)).
