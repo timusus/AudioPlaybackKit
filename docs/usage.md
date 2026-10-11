@@ -291,3 +291,14 @@ with `FakeItemSource`, then step it: `timer.sync()`, `executor.runUntilIdle()`, 
 `output.advance(by:)` to move the clock. The output also injects auto-flushes, stalls and failures, and
 records what was heard. It needs no SPI import or `@testable`; see
 `Tests/PlaybackRenderTests/ExternalConsumerTests.swift`.
+
+## Test code built on `Player`
+
+`PlaybackPlayerTestSupport` drives a `Player<Item>` with no device, no `AVAudioSession` and no wall clock.
+`PlayerTestRig<Item>` builds the player on a `FakeAudioOutput`, a `ManualPumpTimer` and a `ManualExecutor`
+from your source factory, with a `FakeAudioSession` as `rig.session`. Step it with `rig.pump()`,
+`rig.run(for:)` and `rig.settle()`; post `session.interruptionBegan()`,
+`interruptionEnded(shouldResume:)` and `mediaServicesReset()`, and read `session.activations` and
+`session.calls`. Only a route-change test needs `@_spi(Testing) import PlaybackPlayer`, for
+`routeChanged(reason:previous:current:)`'s types. See
+`Tests/PlaybackPlayerExternalConsumerTests/CoordinatorTests.swift` for a coordinator test to copy.

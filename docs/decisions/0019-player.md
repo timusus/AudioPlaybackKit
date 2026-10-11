@@ -365,8 +365,10 @@ internal initialiser taking a `Transport` built on the fake output, the session 
 In this slice `FakeAudioSession` lives in the test target, since a separate module cannot see internal
 symbols. For each app to test its own coordinator the same way, slice 5 (#123) widens
 `AudioSessionControlling`, `AudioSessionEvent`, `AudioRouteChangeReason`, `AudioPortKind` and that
-initialiser to
-`@_spi(Testing) public`, and moves `FakeAudioSession` into `PlaybackPlayerTestSupport`, which imports
+initialiser (and `drainTransportEvents`, which the rig needs to step deterministically) to
+`@_spi(Testing) public`, and moves `FakeAudioSession` and a generic `PlayerTestRig<Item>` into
+`PlaybackPlayerTestSupport`. `FakeItemFactory` stays in the package's tests: its string fixtures mean
+nothing to an app, which hands the rig its own factory over `FakeItemSource`. The product imports
 `PlaybackPlayer` with `@_spi(Testing)`. Not `package` access: the apps' test targets are in other
 packages, so a `package` symbol cannot reach them, nor appear in TestSupport's public API.
 `@_spi(Testing)` is what `Transport.init(output:timer:executor:onEvent:)` already uses. Tests advance
