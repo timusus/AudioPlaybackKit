@@ -35,7 +35,7 @@ enum FeederEvent {
 /// flush (ADR-0018). It knows nothing of items beyond the tags.
 ///
 /// Threading: confined to the caller's one serial queue; output events, on any thread, wait in an inbox
-/// that the next `pump()` drains.
+/// that the next `pump()` drains, and call `wake` so the caller pumps now.
 final class Feeder {
     let targetDepth: TimeInterval
     /// Depth at which a buffering output starts again; well under `targetDepth` so a slow upstream
@@ -63,6 +63,7 @@ final class Feeder {
         upstream: FeederUpstream,
         targetDepth: TimeInterval = 2,
         resumeDepth: TimeInterval = 0.5,
+        wake: @escaping @Sendable () -> Void = {},
         onEvent: @escaping (FeederEvent) -> Void
     ) {
         precondition(resumeDepth > 0 && resumeDepth <= targetDepth)
@@ -81,6 +82,8 @@ final class Feeder {
             // A stalled clock stops tracking what is heard, so take the time it stalled at now.
             case .stalled: inbox.post(output.currentTime() - output.outputLatency)
             }
+            // The output is silent until a pump restarts it.
+            wake()
         }
     }
 

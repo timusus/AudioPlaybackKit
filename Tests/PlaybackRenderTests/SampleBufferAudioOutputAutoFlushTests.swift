@@ -62,7 +62,9 @@ final class SampleBufferAudioOutputAutoFlushTests: XCTestCase {
         print("device switch to \(target): \(output.summary()); outputConfigurationDidChange fired \(configurationChanges.count) times; playing to ended \(wall) s")
         XCTAssertEqual(renderer.audioOutputDeviceUniqueID, target)
         XCTAssertGreaterThan(wall, 2.9)
-        XCTAssertLessThan(wall, 4.5)
+        // The restart is silent about 150 ms, the renderer's own: its first enqueue to the new device
+        // blocks about 55 ms and its clock starts about 70 ms after the rate is set.
+        XCTAssertLessThan(wall, 3.45)
         // The macOS clock includes the device's latency, so the adapter reports 0 on any device.
         XCTAssertEqual(output.latencies, [0])
         // Up to the written end: past it the feeder holds the clock back at the end by design.

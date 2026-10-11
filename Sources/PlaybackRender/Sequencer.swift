@@ -80,9 +80,14 @@ final class Sequencer: @unchecked Sendable {
     private var buffer: [TaggedChunk] = []
     private var failure: (item: Int, error: any Error)?
     private var scheduled = false
+    private let onSupply: @Sendable () -> Void
+    // A pull found nothing, so the next decode step calls `onSupply`.
+    private var waiting = false
 
-    init(executor: any SequencerExecutor) {
+    /// `onSupply` is called on the executor, once a decode step lands after a `pull()` found nothing.
+    init(executor: any SequencerExecutor, onSupply: @escaping @Sendable () -> Void = {}) {
         self.executor = executor
+        self.onSupply = onSupply
     }
 
     /// Replaces the whole window with `item` and decodes it from `startFrame` (its start when nil).
@@ -177,6 +182,7 @@ final class Sequencer: @unchecked Sendable {
             }
             if let failure { return .failed(item: failure.item, error: failure.error) }
             guard let cursor, !(cursor.ended && entry(after: cursor.entry) == nil) else { return .ended }
+            waiting = true
             return .pending
         }
     }
@@ -235,8 +241,9 @@ final class Sequencer: @unchecked Sendable {
             return (landed, try entry.source.nextChunk())
         }
 
-        lock.withLock {
-            guard jobEpoch == epoch, var current = self.cursor else { return }
+        let supplied = lock.withLock { () -> Bool in
+            guard jobEpoch == epoch, var current = self.cursor else { return false }
+            defer { waiting = false }
             scheduled = false
             switch outcome {
             case let .failure(error):
@@ -261,7 +268,9 @@ final class Sequencer: @unchecked Sendable {
             }
             self.cursor = current
             schedule()
+            return waiting
         }
+        if supplied { onSupply() }
     }
 
     /// Locked. The one join: next starts from its first frame straight after the ended item's last,

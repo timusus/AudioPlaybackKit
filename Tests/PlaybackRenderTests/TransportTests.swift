@@ -14,6 +14,15 @@ final class ManualPumpTimer: PumpTimer, @unchecked Sendable {
 
     func cancel() {}
 
+    private let lock = NSLock()
+    private var _wakes = 0
+    /// Wakes are only counted: a test fires the pump they ask for itself.
+    var wakes: Int { lock.withLock { _wakes } }
+
+    func wake() {
+        lock.withLock { _wakes += 1 }
+    }
+
     func fire() {
         queue!.sync(execute: tick!)
     }
@@ -150,6 +159,28 @@ final class TransportTests: XCTestCase {
             Heard(item: "b", frame: 6), Heard(item: "b", frame: 8), Heard(item: "b", frame: 10),
             Heard(item: "b", frame: 12), Heard(item: "b", frame: 14), Heard(item: "b", frame: 16),
         ])
+    }
+
+    // #102: after a route-change auto-flush the output stayed silent until a pump took the event,
+    // then until another wrote the re-decoded audio: up to two pump intervals.
+    func testAnAutoFlushAndTheReDecodeEachWakeThePumpAtOnce() {
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        pump()
+        run(for: 1)
+        let wakes = timer.wakes
+
+        output.injectAutoFlush()
+        XCTAssertEqual(timer.wakes, wakes + 1)
+        timer.fire()
+        XCTAssertEqual(output.rate, 0, "nothing decoded from the flush time yet")
+        executor.runUntilIdle()
+        XCTAssertEqual(timer.wakes, wakes + 2)
+        timer.fire()
+        XCTAssertEqual(output.rate, 1)
+
+        run(for: 3)
+        XCTAssertEqual(heard, allOfA)
     }
 
     func testPauseHoldsThePositionAndPlayResumesWhereItStopped() {

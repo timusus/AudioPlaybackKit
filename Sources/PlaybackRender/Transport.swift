@@ -73,12 +73,14 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     ) {
         self.timer = timer
         self.onEvent = onEvent
-        sequencer = Sequencer(executor: executor)
+        // A restart is silent until decode lands and the output event is taken, so neither waits
+        // for the next tick.
+        sequencer = Sequencer(executor: executor) { timer.wake() }
         // Weak: deinit's teardown runs after the transport is gone, and its events go nowhere.
         upstream = SequencedUpstream(sequencer: sequencer) { [weak self] item, error in
             self?.fail(item: item, error)
         }
-        feeder = Feeder(output: output, upstream: upstream) { [weak self] in self?.handle($0) }
+        feeder = Feeder(output: output, upstream: upstream, wake: { timer.wake() }) { [weak self] in self?.handle($0) }
         timer.start(interval: pumpInterval, queue: queue) { [weak self] in self?.pump() }
     }
 
