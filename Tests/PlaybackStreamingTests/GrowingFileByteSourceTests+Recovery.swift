@@ -153,7 +153,8 @@ extension GrowingFileByteSourceTests {
 
     func testAMismatchedContentRangeAndRefusedStatusesFailTheReadAfterTheRetries() throws {
         let body = makeBody(32 * 1024)
-        // Past the end, the loopback answers the last byte: a 206 that does not start where asked.
+        // Past the end, the loopback answers the last byte: a 206 that does not start where asked,
+        // out of range, so no retry.
         let mismatched = try startServer(body: body)
         let clock = ManualGrowingFileClock()
         let source = makeSource(mismatched.url, clock: clock)
@@ -161,9 +162,9 @@ extension GrowingFileByteSourceTests {
         let pending = readAsync(source, 1)
         XCTAssertTrue(clock.drive(source) { pending.finished(within: 0) })
         assertTransport(pending.result)
-        XCTAssertEqual(mismatched.requestedRanges.count, 1 + GrowingFileDownload.Retry.maxAttempts)
+        XCTAssertEqual(mismatched.requestedRanges.count, 1)
 
-        for status in [404, 416] {
+        for status in [404] {
             let server = try startServer(body: body)
             server.reject(host: "127.0.0.1:\(server.port)", status: status)
             let clock = ManualGrowingFileClock()

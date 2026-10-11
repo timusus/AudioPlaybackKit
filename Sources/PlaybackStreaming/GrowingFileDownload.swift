@@ -173,6 +173,11 @@ struct GrowingFileDownload {
             return step(.again)
         }
         let tx = current
+        // The end, learned after the seek (a host that ignored its range), is before the read:
+        // media3's DefaultHttpDataSource.skipFully fails that as out of range.
+        if let total = tx?.totalLength, offset > total {
+            return reportFailure("out_of_range at=\(offset) total=\(total)")
+        }
         // A failure that deleted the file (a page, a full disk) took its frontier with it, so the
         // decoder's next read is no seek ahead: it gets the failure, unless the total length says
         // nothing is owed there (ADR-0004: the layer fails what it still owes, not a finished stream).
@@ -343,6 +348,16 @@ struct GrowingFileDownload {
 
     /// Cancels the task; its bytes stay in the session's file. `discardingFile` deletes the file too,
     /// unless it is the cache's now.
+    /// A position past the resource's end, which no retry brings (media3's
+    /// `ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE` is fatal). The file's bytes, all before that end, stay.
+    private mutating func failOutOfRange(_ reason: String) {
+        current?.ended = true
+        effects.append(.cancelTask)
+        downloadLog.error("download: failed out_of_range \(reason, privacy: .public)")
+        failure = "out_of_range \(reason)"
+        effects.append(.wake)
+    }
+
     private mutating func retireCurrent(discardingFile: Bool = false) {
         current?.ended = true
         let discard = discardingFile && file.exists && !file.isCached
@@ -648,6 +663,9 @@ struct GrowingFileDownload {
             }
         case 206 where range?.start == tx.base:
             current?.rangeHonoured = true
+        case _ where status == 416 || (status == 206 && (range?.total).map { $0 < tx.base } ?? false):
+            failOutOfRange("status=\(status) at=\(tx.base) content-range=\(contentRange ?? "-")")
+            return false
         default:
             end(
                 "status=\(status) content-range=\(contentRange ?? "-")", retryable: true,

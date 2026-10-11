@@ -39,6 +39,8 @@ import PlaybackDecode
 /// - A transaction whose answer says the resource ends exactly at its base or resume point (`416` with
 ///   `bytes */N`, or a range clamped to the last byte) is a zero-length open, as in media3: the
 ///   length is learned and the read is at its end (``GrowingFileDownload/totalEndingAt(_:status:contentRange:)``).
+///   One that puts the read past the end (any other `416`, a clamped range, or a body that ignores
+///   the range and ends before the read) fails the read at once, with no retry, as media3 does.
 /// - ``snapshot`` is the only read surface for anyone but the decoder; ``GrowingFileEvent``s
 ///   go to `onEvent`, on the session's delegate queue or the decoder's thread. A read that
 ///   parks for bytes reports ``GrowingFileEvent/readWaiting(since:)`` and, when it ends,

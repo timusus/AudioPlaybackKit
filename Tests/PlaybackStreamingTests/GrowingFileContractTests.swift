@@ -109,8 +109,8 @@ final class GrowingFileContractTests: GrowingFileContractCase {
         }
     }
 
-    /// media3 `dataSpecWithPositionOutOfRange_throwsPositionOutOfRangeException`: a position beyond the end is a failed read, after the retries,
-    /// whether the origin clamps the range to its last byte or answers `416`.
+    /// media3 `dataSpecWithPositionOutOfRange_throwsPositionOutOfRangeException`: a position beyond the end is a failed read, at once
+    /// (`DefaultLoadErrorHandlingPolicy` never retries it), whether the origin clamps the range to its last byte or answers `416`.
     func testAPositionPastTheEndFailsTheRead() throws {
         let body = makeBody()
         for strict in [false, true] {
@@ -123,8 +123,25 @@ final class GrowingFileContractTests: GrowingFileContractCase {
                 try source.seek(to: Int64(body.count) + 10)
                 let context = "strict416=\(strict) html=\(html)"
                 assertTransport(finish(readAsync(source, 1), of: source, on: clock, context), context)
-                XCTAssertEqual(server.requestedRanges.count, 1 + GrowingFileDownload.Retry.maxAttempts, context)
+                XCTAssertEqual(server.requestedRanges.count, 1, context)
             }
+        }
+    }
+
+    /// media3 `DefaultHttpDataSource.skipFully`: an origin that ignores the range answers `200`
+    /// with a body that ends before the position, which fails the read at once as out of range.
+    func testAPositionPastTheEndOfARangeIgnoringBodyFailsTheRead() throws {
+        let body = makeBody()
+        for declaresLength in [true, false] {
+            let server = try startServer(body: body)
+            server.respondsWholeBodyIgnoringRange = true
+            server.omitsContentLength = !declaresLength
+            let clock = ManualGrowingFileClock()
+            let source = makeSource(server.url, clock: clock)
+            try source.seek(to: Int64(body.count) + 10)
+            let context = "declaresLength=\(declaresLength)"
+            assertTransport(finish(readAsync(source, 1), of: source, on: clock, context), context)
+            XCTAssertEqual(server.requestedRanges.count, 1, context)
         }
     }
 
@@ -195,7 +212,7 @@ final class GrowingFileContractTests: GrowingFileContractCase {
 
     /// media3 `resourceNotFound`, and the error statuses of its `HttpDataSource` tests: any non-success
     /// status fails the read with a transport error after the retries, with or without an HTML
-    /// error page behind it.
+    /// error page behind it; `416`, out of range, fails at once.
     func testErrorStatusesFailTheReadAfterTheRetries() throws {
         let body = makeBody()
         for html in [false, true] {
@@ -208,7 +225,8 @@ final class GrowingFileContractTests: GrowingFileContractCase {
                 let source = makeSource(server.url, clock: clock)
                 let pending = readAsync(source, 1)
                 assertTransport(finish(pending, of: source, on: clock, context), context)
-                XCTAssertEqual(server.requestHeads.count, 1 + GrowingFileDownload.Retry.maxAttempts, context)
+                let requests = status == 416 ? 1 : 1 + GrowingFileDownload.Retry.maxAttempts
+                XCTAssertEqual(server.requestHeads.count, requests, context)
             }
             let server = try startServer(body: body)
             server.htmlErrorBodies = html
