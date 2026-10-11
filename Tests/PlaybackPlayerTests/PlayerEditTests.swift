@@ -147,6 +147,24 @@ final class PlayerEditTests: XCTestCase {
         XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: nil, reason: .seek)])
     }
 
+    // The deviation from media3 ExoPlayerTest.clearMediaItemsAndSeek_inStateEnded_remainsInEnded.
+    func testClearAndSeekWhileEndedLeavesIdle() async {
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 11)
+        XCTAssertEqual(player.state, .ended)
+
+        player.removeAll()
+        player.seek(to: 0)
+        rig.run(for: 1)
+        XCTAssertEqual(player.state, .idle)
+        XCTAssertNil(player.currentIndex)
+        XCTAssertEqual(player.position, 0)
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: nil, reason: .seek)])
+        XCTAssertEqual(PlayerRig.seeksLanded(events), [])
+    }
+
     // The deviation from media3 ExoPlayerTest.settingMediaItems_withEmptyListAfterReady_transitionsToEnded.
     func testSetItemsEmptyWhilePlayingStopsAndLeavesIdle() async {
         player.setItems(["a", "b"], startIndex: 1)
