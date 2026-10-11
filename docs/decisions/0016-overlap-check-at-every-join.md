@@ -31,7 +31,9 @@ same joins.
   restart into a hole of the session file overlaps the end of the covered range before the hole, and
   when the request is bounded (`Range: bytes=H-E`) it also runs 64 KiB into the covered range after
   the hole, so the far seam is checked too. Where nothing precedes the join (a hole at byte 0, or
-  nothing covered within reach) there is nothing to compare, and the request is as before.
+  nothing covered within reach) there is nothing to compare, and the request is as before. A `200`
+  that ignores a range re-sends the covered run at byte 0: that whole run is compared, and writing
+  starts past it. Covered runs further on are still overwritten unchecked as the body reaches them.
 - **`If-Range` stays** for a strong ETag, and a `200` to it is *changed*: the resume restarts and
   discards the file (the existing refused-resume path), where media3 would skip to the position and
   join. The overlap is the only check for a host with no validator.

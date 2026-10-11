@@ -119,6 +119,57 @@ struct GrowingFileDownloadOverlapTests {
         #expect(h.machine.file.ranges.ranges.isEmpty)
     }
 
+    @Test("a Content-Length counts from where the overlap starts, not from the join")
+    func aContentLengthCountsFromTheOverlap() throws {
+        let h = Harness()
+        h.read()
+        h.respond(206, range: "bytes 0-999999/*")
+        h.body(200_000)
+        try h.machine.seek(to: 500_000)
+        h.read()
+        try h.machine.seek(to: 200_000)
+        h.read()
+        #expect(h.requests.last == h.request(3, from: 134_464))
+        #expect(h.respond(206, range: "bytes 134464-999999/*", length: 865_536))
+        #expect(h.machine.totalLength == 1_000_000)
+        h.body(65_536 + 800_000)
+        #expect(h.machine.file.isCached)
+    }
+
+    @Test("a 200 to a request that joins the run at byte 0 compares that run and writes only past it")
+    func aRangeIgnoredJoinComparesTheRunAtZero() throws {
+        let h = Harness()
+        h.read()
+        h.respond(206, range: "bytes 0-999999/1000000")
+        h.body(200_000)
+        try h.machine.seek(to: 500_000)
+        h.read()
+        try h.machine.seek(to: 200_000)
+        h.read()
+        #expect(h.respond(200, length: 1_000_000))
+        #expect(h.machine.chunkParts(attempt: 3, count: 210_000) == [
+            .init(range: 0..<200_000, compare: true),
+            .init(range: 200_000..<210_000, compare: false),
+        ])
+        h.body(200_000)
+        #expect(h.machine.current?.frontier == 200_000)
+        h.body(800_000)
+        #expect(h.machine.file.isCached)
+
+        let changed = Harness()
+        changed.read()
+        changed.respond(206, range: "bytes 0-999999/1000000")
+        changed.body(200_000)
+        try changed.machine.seek(to: 500_000)
+        changed.read()
+        try changed.machine.seek(to: 200_000)
+        changed.read()
+        changed.respond(200, length: 1_000_000)
+        changed.body(65_536, overlapMatches: false)
+        #expect(changed.log.contains(.retire(discardFile: true)))
+        #expect(changed.machine.file.ranges.ranges.isEmpty)
+    }
+
     @Test("a resume inside a hole keeps both seams: from the overlap before the frontier to the one past the hole")
     func aResumeInAHoleKeepsBothSeams() throws {
         let h = Harness()

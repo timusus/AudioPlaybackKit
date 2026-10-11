@@ -677,7 +677,8 @@ struct GrowingFileDownload {
                 }
                 rangeIgnored = true
                 generation += 1
-                current?.base = 0
+                // The run at byte 0 comes again: compared like any overlap, and written past (ADR-0016).
+                current?.base = file.ranges.run(containing: 0)?.upperBound ?? 0
                 current?.generation = generation
                 // Byte 0 is not where the seek landed, so it is no anchor for it.
                 current?.seekGeneration = nil
@@ -703,9 +704,10 @@ struct GrowingFileDownload {
         case nil: current?.sniffPending = accepted.base == 0
         case true?: break
         }
-        // A bounded request's length ends at its bound, not the resource's end.
+        // A bounded request's length ends at its bound, not the resource's end. The body starts at
+        // the overlap, before the base.
         let total = range?.total
-            ?? (response.expectedContentLength > 0 && accepted.end == nil ? response.expectedContentLength + accepted.base : nil)
+            ?? (response.expectedContentLength > 0 && accepted.end == nil ? response.expectedContentLength + accepted.bodyAt : nil)
         let strongTag = response.entityTag.flatMap { $0.hasPrefix("W/") ? nil : $0 }
         let changedTotal = total != nil && lastKnownTotalLength != nil && total != lastKnownTotalLength
         let changedTag = strongTag != nil && file.entityTag != nil && strongTag != file.entityTag
