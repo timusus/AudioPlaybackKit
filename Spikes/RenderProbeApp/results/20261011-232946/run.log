@@ -1,0 +1,30 @@
+device 00008140-000539602E90401C, app args: --check --only G8
+2026-10-11 23:29:49.744 xcodebuild[5099:22259456] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+App installed:
+• bundleID: com.simplecityapps.renderprobe
+• installationURL: file:///private/var/containers/Bundle/Application/046E41E8-5106-4EB3-A6E7-4856938B72A8/RenderProbe.app/
+• launchServicesIdentifier: unknown
+• databaseUUID: 490CDBE6-833A-43BA-BBD3-156E9580DF4E
+• databaseSequenceNumber: 5888
+• options: 
+2026-10-11 23:29:59.350 xcodebuild[7061:22263060] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+warning: All interface orientations must be supported unless the app requires full screen. (in target 'InterruptorApp' from project 'RenderProbe')
+note: Removed stale file '/Users/tim/projects/simplecity-apps/shuttle-playback/.claude/worktrees/devicecheck-107/Spikes/RenderProbeApp/build/Build/Products/Debug-iphoneos/FFmpeg.framework'
+
+App installed:
+• bundleID: com.simplecityapps.renderprobe.interruptor
+• installationURL: file:///private/var/containers/Bundle/Application/BC6B8B50-48A9-400C-B009-C23B92CE150B/InterruptorApp.app/
+• launchServicesIdentifier: unknown
+• databaseUUID: 490CDBE6-833A-43BA-BBD3-156E9580DF4E
+• databaseSequenceNumber: 5896
+• options: 
+launched; polling for check-done every 5 s (30 min cap)
+  waiting (1 min)
+# PlaybackRender device check
+
+iPhone iOS 26.6.1, started 2026-10-11T12:30:04Z, mic granted
+
+| Scenario | Status | Result |
+|---|---|---|
+| G8 | measured | marks (UTC) transport-start 2026-10-11T12:30:15.653Z, transport-end 2026-10-11T12:30:47.968Z, avplayer-start 2026-10-11T12:30:50.071Z, avplayer-end 2026-10-11T12:31:20.446Z; route AirPlay:Timothy’s MacBook Pro; Transport: 0 auto-flush(es), max position stall 106 ms, ended true; AVPlayer: 0 stall(s), ended; owner: Neither |
+results in results/20261011-232946

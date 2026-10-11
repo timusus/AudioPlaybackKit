@@ -1,0 +1,22 @@
+   0.010 launch 2026-10-11T12:30:03Z iPhone iOS 26.6.1
+   0.057 CHECK start skipGuided=false
+   1.652 === CHECK G8 Long AirPlay tone: Transport, then AVPlayer ===
+   1.688 session .playback longForm=false preferredRate=unset: hwRate=48000 ioBuffer=21.3ms outputLatency=15.4ms outputs=Speaker:Speaker
+   3.205 PICKER OPEN outputs Speaker:Speaker
+   8.337 ROUTE CHANGE newDeviceAvailable: Speaker:Speaker -> hwRate=44100 ioBuffer=23.2ms outputLatency=2000.0ms outputs=AirPlay:Timothy’s MacBook Pro
+   8.345 prompt 'Pick the Mac': fired: AirPlay:Timothy’s MacBook Pro
+  11.688 G8 MARK transport-start 2026-10-11T12:30:15.653Z
+  11.689 transport status buffering clock 0.000
+  11.699 transport crossed T clock 0.000
+  11.706 transport status playing clock 0.000
+  44.000 transport status ended clock 30.000
+  44.003 G8 MARK transport-end 2026-10-11T12:30:47.968Z
+  46.106 G8 MARK avplayer-start 2026-10-11T12:30:50.071Z
+  76.481 G8 MARK avplayer-end 2026-10-11T12:31:20.446Z
+  78.634 PICKER OPEN outputs AirPlay:Timothy’s MacBook Pro
+  80.456 ROUTE CHANGE override: AirPlay:Timothy’s MacBook Pro -> hwRate=48000 ioBuffer=21.3ms outputLatency=15.4ms outputs=Speaker:Speaker
+  80.477 prompt 'Back to the iPhone': fired: Speaker:Speaker
+  80.478 G8 back to iPhone: fired: Speaker:Speaker
+  86.723 prompt 'Which half was choppy?': Neither
+  86.728 CHECK G8: measured - marks (UTC) transport-start 2026-10-11T12:30:15.653Z, transport-end 2026-10-11T12:30:47.968Z, avplayer-start 2026-10-11T12:30:50.071Z, avplayer-end 2026-10-11T12:31:20.446Z; route AirPlay:Timothy’s MacBook Pro; Transport: 0 auto-flush(es), max position stall 106 ms, ended true; AVPlayer: 0 stall(s), ended; owner: Neither
+  86.746 CHECK done in 87 s

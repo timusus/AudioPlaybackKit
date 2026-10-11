@@ -1,0 +1,36 @@
+{
+  "complete" : true,
+  "device" : "iPhone",
+  "ios" : "26.6.1",
+  "micPermission" : "granted",
+  "scenarios" : [
+    {
+      "avplayerEnd" : "ended",
+      "avplayerStalls" : 0,
+      "guided" : true,
+      "id" : "G8",
+      "marksUtc" : {
+        "avplayer-end" : "2026-10-11T12:31:20.446Z",
+        "avplayer-start" : "2026-10-11T12:30:50.071Z",
+        "transport-end" : "2026-10-11T12:30:47.968Z",
+        "transport-start" : "2026-10-11T12:30:15.653Z"
+      },
+      "owner" : "Neither",
+      "question" : "Long AirPlay tone: Transport, then AVPlayer",
+      "route" : "AirPlay:Timothy’s MacBook Pro",
+      "seconds" : 85.075000000000003,
+      "status" : "measured",
+      "transportEnded" : true,
+      "transportFailed" : [
+
+      ],
+      "transportFlushes" : [
+
+      ],
+      "transportMaxPositionStallMs" : 106.187,
+      "verdict" : "marks (UTC) transport-start 2026-10-11T12:30:15.653Z, transport-end 2026-10-11T12:30:47.968Z, avplayer-start 2026-10-11T12:30:50.071Z, avplayer-end 2026-10-11T12:31:20.446Z; route AirPlay:Timothy’s MacBook Pro; Transport: 0 auto-flush(es), max position stall 106 ms, ended true; AVPlayer: 0 stall(s), ended; owner: Neither"
+    }
+  ],
+  "skipGuided" : false,
+  "started" : "2026-10-11T12:30:04Z"
+}
