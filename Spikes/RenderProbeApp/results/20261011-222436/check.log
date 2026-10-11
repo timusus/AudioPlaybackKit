@@ -1,0 +1,232 @@
+   0.010 launch 2026-10-11T11:24:55Z iPhone iOS 26.6.1
+   0.055 CHECK start skipGuided=false
+   1.604 === CHECK A1 play to heard; .ended against the heard end ===
+   1.654 session .playAndRecord .measurement preferredRate=unset: hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker inputLatency=0.6ms
+   1.654 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+   1.846 mic recording at 48000 Hz, inputLatency 0.6 ms
+   2.500 transport status buffering clock 0.000
+   2.513 transport crossed A clock 0.000
+   2.529 transport status playing clock 0.000
+   6.743 transport status ended clock 4.000
+   7.392 CHECK A1: pass - heard 4.000 s of 4; .ended 113.4 ms after the heard end; play -> heard 131 ms
+   7.401 === CHECK A2 position against the synchronizer and the heard click ===
+   7.558 session .playAndRecord .measurement preferredRate=unset: hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker inputLatency=0.6ms
+   7.558 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+   7.727 mic recording at 48000 Hz, inputLatency 0.6 ms
+   7.760 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+   8.382 transport status buffering clock 0.000
+   8.390 transport crossed P clock 0.000
+   8.412 transport status playing clock 0.000
+  21.583 CHECK A2: pass - click heard 0.7 ms after the position said (spread 0.4 ms, 11 of 11 clicks); outputLatency 9.7 ms; position = clock - latency within 1.6 ms
+  21.591 === CHECK A3 dropout at rate 1 -> 2 -> 1 ===
+  21.848 session .playAndRecord .measurement preferredRate=unset: hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker inputLatency=0.6ms
+  21.849 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+  22.030 mic recording at 48000 Hz, inputLatency 0.6 ms
+  22.672 transport status buffering clock 0.000
+  22.679 transport crossed R clock 0.000
+  22.702 transport status playing clock 0.000
+  33.219 CHECK A3: measured - dropout 93 ms to 2x, 140 ms back (ADR: 97 / 140 ms); position runs at 2.00x; largest position jump 1 ms
+  33.228 === CHECK A4 gapless joins: fixture 44.1k stereo -> 48k stereo -> 44.1k mono ===
+  33.397 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+  33.397 session .playAndRecord .measurement preferredRate=unset: hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker inputLatency=0.6ms
+  33.571 mic recording at 48000 Hz, inputLatency 0.6 ms
+  33.603 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+  34.202 transport status buffering clock 0.000
+  34.228 transport status playing clock 0.000
+  34.242 transport crossed F clock 0.000
+  37.405 transport crossed B clock 3.084
+  40.406 transport crossed C clock 6.085
+  43.439 transport status ended clock 9.000
+  43.878 CHECK A4: measured - fixture 44.1k -> 48k dips ["9"] ms; 48k stereo -> 44.1k mono dip 10 ms (ADR: 8-11 ms); crossed 73 / 74 ms after the heard joins
+  43.887 === CHECK A5 seek: silence and landing ===
+  44.034 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+  44.036 session .playAndRecord .measurement preferredRate=unset: hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker inputLatency=0.6ms
+  44.208 mic recording at 48000 Hz, inputLatency 0.6 ms
+  44.239 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+  44.859 transport status buffering clock 0.000
+  44.867 transport crossed S clock 0.000
+  44.890 transport status playing clock 0.000
+  48.036 transport status buffering clock 3.052
+  48.078 transport status playing clock 3.052
+  51.183 CHECK A5: fail - landed at 2.970 s of 12; sound back 232 ms after the call (silence 174 ms); position vs heard 2 s on 0.7 ms
+  51.197 === CHECK A6 setNext near the end, and after .ended ===
+  51.466 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+  51.468 session .playAndRecord .measurement preferredRate=unset: hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker inputLatency=0.6ms
+  51.468 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+  51.655 mic recording at 48000 Hz, inputLatency 0.6 ms
+  52.291 transport status buffering clock 0.000
+  52.299 transport crossed 1 clock 0.000
+  52.322 transport status playing clock 0.000
+  56.493 transport crossed 2 clock 4.079
+  59.526 transport status ended clock 7.000
+  60.590 transport status buffering clock 7.000
+  60.594 transport crossed 3 clock 7.000
+  60.604 transport status playing clock 7.000
+  62.140 transport status ended clock 8.500
+  62.536 CHECK A6: pass - join dip 0 ms; crossed ["1", "2", "3"]; .ended 2x; setNext after .ended heard 30 ms later
+  62.546 === CHECK A7 auto-flush re-feed (port override): replayed or skipped audio ===
+  62.716 session .playAndRecord .measurement preferredRate=unset: hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker inputLatency=0.6ms
+  62.722 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+  62.900 mic recording at 48000 Hz, inputLatency 0.6 ms
+  62.934 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+  63.553 transport status buffering clock 0.000
+  63.561 transport crossed C clock 0.000
+  63.580 transport status playing clock 0.000
+  72.779 CHECK A7: inconclusive - no auto-flush on the port overrides
+  72.790 === CHECK A8 auto-flush on rate 1 -> 2 -> 1 -> 0.5 ===
+  72.987 session .playAndRecord .measurement preferredRate=unset: hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker inputLatency=0.6ms
+  73.175 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+  73.227 mic recording at 48000 Hz, inputLatency 0.6 ms
+  73.239 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+  73.857 transport status buffering clock 0.000
+  73.865 transport crossed F clock 0.000
+  73.884 transport status playing clock 0.000
+  76.894 STEP rate 2.0
+  79.898 STEP rate 1.0
+  82.904 STEP rate 0.5
+  85.971 transport status buffering clock 13.292
+  85.996 transport status playing clock 13.292
+  90.194 transport status ended clock 15.292
+  90.236 CHECK A8: measured - rate 2.0: 0 flush(es), latency 9.7 -> 9.7 ms, jump 1 ms, clock back 55.7 ms / rate 1.0: 0 flush(es), latency 9.7 -> 9.7 ms, jump 88 ms, clock back 0.0 ms / rate 0.5: 0 flush(es), latency 9.7 -> 9.7 ms, jump 0 ms, clock back 0.0 ms; .ended after 4.29 s
+  90.244 === CHECK A9 forced route: receiver -> speaker override -> receiver, category playback <-> playAndRecord ===
+  90.399 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.0ms outputLatency=4.5ms outputs=Receiver:Receiver
+  90.401 session .playAndRecord .measurement no defaultToSpeaker: hwRate=48000 ioBuffer=23.3ms outputLatency=4.5ms outputs=Receiver:Receiver
+  90.425 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.0ms outputLatency=4.5ms outputs=Receiver:Receiver
+  90.582 mic recording at 48000 Hz, inputLatency 0.6 ms
+  91.240 transport status buffering clock 0.000
+  91.247 transport crossed F clock 0.000
+  91.266 transport status playing clock 0.000
+  94.275 STEP override speaker
+  94.623 ROUTE CHANGE override: Receiver:Receiver -> hwRate=48000 ioBuffer=23.3ms outputLatency=9.7ms outputs=Speaker:Speaker
+  94.625 AUTO-FLUSH flushTime 3.251 clock 3.281 latency 9.7 ms Speaker:Speaker
+  94.663 transport status buffering clock 3.318
+  94.714 transport status playing clock 3.318
+  94.738 mic engine configuration change; restarting tap at 48000 Hz
+  97.546 STEP override none
+  97.883 ROUTE CHANGE categoryChange: Speaker:Speaker -> hwRate=48000 ioBuffer=23.0ms outputLatency=4.5ms outputs=Receiver:Receiver
+  97.890 AUTO-FLUSH flushTime 6.397 clock 6.400 latency 4.5 ms Receiver:Receiver
+  98.009 transport status buffering clock 6.518
+  98.044 mic engine configuration change; restarting tap at 48000 Hz
+  98.104 transport status playing clock 6.518
+ 100.831 STEP category playback
+ 101.043 ROUTE CHANGE categoryChange: Receiver:Receiver -> hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker
+ 101.046 AUTO-FLUSH flushTime 9.362 clock 9.370 latency 15.4 ms Speaker:Speaker
+ 101.226 transport status buffering clock 9.540
+ 101.250 transport status playing clock 9.540
+ 104.040 STEP category playAndRecord
+ 104.665 ROUTE CHANGE routeConfigurationChange: Receiver:Receiver -> hwRate=48000 ioBuffer=23.0ms outputLatency=4.5ms outputs=Receiver:Receiver
+ 104.667 AUTO-FLUSH flushTime 12.846 clock 12.861 latency 4.5 ms Receiver:Receiver
+ 104.687 mic recording at 48000 Hz, inputLatency 0.6 ms
+ 104.730 transport status buffering clock 12.923
+ 104.752 transport status playing clock 12.923
+ 104.830 mic engine configuration change; restarting tap at 48000 Hz
+ 107.769 transport status buffering clock 15.844
+ 107.802 transport status playing clock 15.844
+ 109.976 transport status ended clock 17.844
+ 111.790 CHECK A9: measured - override speaker: 1 flush(es) (re-feed 14.731 ms vs heard, 35.559 vs flush time, silence <null> ms), latency 4.5 -> 9.7 ms, jump 0 ms, clock back 0.0 ms / override none: 1 flush(es) (re-feed 52.836 ms vs heard, 51.057 vs flush time, mic replay 295.999 ms, silence 0.0 ms), latency 9.7 -> 4.5 ms, jump 0 ms, clock back 0.0 ms / category playback: 1 flush(es) (re-feed 108.789 ms vs heard, 101.551 vs flush time), latency 4.5 -> 15.4 ms, jump 0 ms, clock back 3.3 ms / category playAndRecord: 1 flush(es) (re-feed 22.59 ms vs heard, 32.843 vs flush time, mic replay -28.125 ms, silence 27.0 ms), latency 15.4 -> 4.5 ms, jump 0 ms, clock back 0.0 ms; .ended after 2.29 s
+ 111.799 === CHECK A10 interruption by a non-mixable session in another app ===
+ 111.906 session .playback longForm=false preferredRate=unset: hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker
+ 111.913 transport status buffering clock 0.000
+ 111.918 transport crossed F clock 0.000
+ 111.923 ROUTE CHANGE categoryChange: Receiver:Receiver -> hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker
+ 111.948 transport status playing clock 0.000
+ 114.960 STEP InterruptorApp
+ 118.094 INTERRUPTION began reasonRaw=0 shouldResume=false
+ 118.124 transport status paused clock 5.973
+ 121.272 INTERRUPTION ended reasonRaw=0 shouldResume=true
+ 121.273 interruption ended: shouldResume
+ 121.537 session reactivated after 2 attempt(s)
+ 121.538 transport status buffering clock 5.973
+ 121.550 transport status playing clock 5.973
+ 124.617 transport status buffering clock 8.953
+ 124.655 transport status playing clock 8.953
+ 126.869 transport status ended clock 10.953
+ 126.876 CHECK A10: measured - InterruptorApp: 0 flush(es), latency 15.4 -> 15.4 ms, jump 0 ms, clock back 54.9 ms; .ended after 2.33 s
+ 126.886 === CHECK G1 Connect Bluetooth ===
+ 126.902 session .playback longForm=false preferredRate=unset: hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker
+ 126.911 transport status buffering clock 0.000
+ 126.923 transport crossed G clock 0.000
+ 126.951 transport status playing clock 0.000
+ 139.414 ROUTE CHANGE newDeviceAvailable: Speaker:Speaker -> hwRate=44100 ioBuffer=23.2ms outputLatency=83.3ms outputs=BluetoothA2DPOutput:JBL Charge 3
+ 139.420 prompt 'Connect Bluetooth': fired: BluetoothA2DPOutput:JBL Charge 3
+ 139.517 AUTO-FLUSH flushTime 12.379 clock 12.476 latency 83.3 ms BluetoothA2DPOutput:JBL Charge 3
+ 139.578 transport status buffering clock 12.532
+ 139.624 transport status playing clock 12.532
+ 149.584 transport status buffering clock 22.321
+ 149.630 transport status playing clock 22.321
+ 151.950 transport status ended clock 24.321
+ 156.466 prompt 'Did you hear a glitch?': No glitch
+ 156.468 CHECK G1: pass - fired: BluetoothA2DPOutput:JBL Charge 3; 1 auto-flush(es) ["re-feed 33.412 ms vs heard"]; latency 15.354 -> 83.265 ms; position rate 1.00, stall 465 ms; .ended after 2.44 s; owner: No glitch
+ 156.485 === CHECK G2 Disconnect Bluetooth ===
+ 156.516 session .playback longForm=false preferredRate=unset: hwRate=44100 ioBuffer=23.2ms outputLatency=83.3ms outputs=BluetoothA2DPOutput:JBL Charge 3
+ 156.524 transport status buffering clock 0.000
+ 156.545 transport crossed G clock 0.000
+ 156.568 transport status playing clock 0.000
+ 165.874 ROUTE CHANGE oldDeviceUnavailable: BluetoothA2DPOutput:JBL Charge 3 -> hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker
+ 165.882 prompt 'Disconnect Bluetooth': fired: Speaker:Speaker
+ 165.921 AUTO-FLUSH flushTime 9.163 clock 9.179 latency 15.4 ms Speaker:Speaker
+ 165.923 transport status buffering clock 9.179
+ 165.966 transport status playing clock 9.179
+ 175.993 transport status buffering clock 19.033
+ 176.039 transport status playing clock 19.033
+ 178.270 transport status ended clock 21.033
+ 180.579 prompt 'Did you hear a glitch?': No glitch
+ 180.580 CHECK G2: pass - fired: Speaker:Speaker; 1 auto-flush(es) ["re-feed -0.262 ms vs heard"]; latency 83.265 -> 15.354 ms; position rate 1.00, stall 302 ms; .ended after 2.34 s; owner: No glitch
+ 180.598 === CHECK G3 Pick AirPlay ===
+ 180.617 session .playback longForm=false preferredRate=unset: hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker
+ 180.626 transport status buffering clock 0.000
+ 180.641 transport crossed G clock 0.000
+ 180.670 transport status playing clock 0.000
+ 196.933 ROUTE CHANGE newDeviceAvailable: Speaker:Speaker -> hwRate=44100 ioBuffer=23.0ms outputLatency=2000.0ms outputs=AirPlay:Timothy’s MacBook Pro
+ 196.944 prompt 'Pick AirPlay': fired: AirPlay:Timothy’s MacBook Pro
+ 196.972 AUTO-FLUSH flushTime 16.175 clock 16.208 latency 2000.0 ms AirPlay:Timothy’s MacBook Pro
+ 196.982 transport status buffering clock 16.208
+ 197.010 transport status playing clock 16.208
+ 207.046 transport status buffering clock 25.882
+ 207.087 transport status playing clock 25.882
+ 211.440 transport status ended clock 27.882
+ 213.511 prompt 'Did you hear a glitch?': No glitch
+ 213.512 CHECK G3: pass - fired: AirPlay:Timothy’s MacBook Pro; 1 auto-flush(es) ["re-feed 1967.322 ms vs heard"]; latency 15.354 -> 2000.0 ms; position rate 1.00, stall 2447 ms; .ended after 4.41 s; owner: No glitch
+ 213.532 === CHECK G4 Back to the iPhone ===
+ 213.556 session .playback longForm=false preferredRate=unset: hwRate=44100 ioBuffer=23.0ms outputLatency=2000.0ms outputs=AirPlay:Timothy’s MacBook Pro
+ 213.569 transport status buffering clock 0.000
+ 213.577 transport crossed G clock 0.000
+ 213.605 transport status playing clock 0.000
+ 222.619 ROUTE CHANGE override: AirPlay:Timothy’s MacBook Pro -> hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker
+ 222.626 prompt 'Back to the iPhone': fired: Speaker:Speaker
+ 222.677 transport status buffering clock 8.789
+ 222.684 AUTO-FLUSH flushTime 8.856 clock 8.789 latency 15.4 ms Speaker:Speaker
+ 222.713 transport status playing clock 8.789
+ 232.736 transport status buffering clock 18.644
+ 232.780 transport status playing clock 18.644
+ 235.011 transport status ended clock 20.644
+ 240.521 prompt 'Did you hear a glitch?': Gap or click
+ 240.522 CHECK G4: pass - fired: Speaker:Speaker; 1 auto-flush(es) ["re-feed 83.742 ms vs heard"]; latency 2000.0 -> 15.354 ms; position rate 1.00, stall 281 ms; .ended after 2.34 s; owner: Gap or click
+ 240.541 === CHECK G6 Ask Siri ===
+ 240.558 session .playback longForm=false preferredRate=unset: hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker
+ 240.568 transport status buffering clock 0.000
+ 240.581 transport crossed G clock 0.000
+ 240.610 transport status playing clock 0.000
+ 265.382 prompt 'Ask Siri': Done
+ 275.538 transport status buffering clock 34.832
+ 275.585 transport status playing clock 34.832
+ 277.814 transport status ended clock 36.832
+ 279.712 prompt 'Did you hear a glitch?': No glitch
+ 279.713 CHECK G6: pass - fired: no interruption; 0 auto-flush(es) []; latency 15.354 -> 15.354 ms; position rate 1.00, stall 104 ms; .ended after 2.34 s; owner: No glitch
+ 279.729 === CHECK G7 Reset media services (#100) ===
+ 279.756 session .playback longForm=false preferredRate=unset: hwRate=48000 ioBuffer=23.0ms outputLatency=15.4ms outputs=Speaker:Speaker
+ 279.770 transport status buffering clock 0.000
+ 279.777 transport crossed G clock 0.000
+ 279.807 transport status playing clock 0.000
+ 331.414 transport status paused clock 0.000
+ 333.465 MEDIA SERVICES RESET
+ 333.475 prompt 'Reset media services': fired: media services reset
+ 333.488 session .playback longForm=false preferredRate=unset: hwRate=48000 ioBuffer=21.3ms outputLatency=15.4ms outputs=Speaker:Speaker
+ 333.495 transport status buffering clock 0.000
+ 333.531 transport status playing clock 0.000
+ 343.635 transport status buffering clock 9.927
+ 343.677 transport status playing clock 9.927
+ 345.916 transport status ended clock 11.927
+ 347.627 prompt 'Did you hear a glitch?': No glitch
+ 347.629 CHECK G7: pass - fired: media services reset; 0 auto-flush(es) []; latency 15.354 -> 15.354 ms; position rate 1.00, stall 103 ms; .ended after 2.34 s; owner: No glitch
+ 347.650 CHECK done in 348 s
