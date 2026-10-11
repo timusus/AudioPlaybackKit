@@ -33,6 +33,7 @@ enum CheckScenarios {
         .init(id: "A8", question: "auto-flush on rate 1 -> 2 -> 1 -> 0.5 -> 1 -> 3", guided: false, run: rateFlush),
         .init(id: "A9", question: "forced route: receiver -> speaker override -> receiver, category playback <-> playAndRecord", guided: false, run: forcedRoute),
         .init(id: "A10", question: "interruption by a non-mixable session in another app", guided: false, run: interruptedByApp),
+        .init(id: "A11", question: "interruption by an incoming CallKit call answered in another app", guided: false, run: interruptedByCall),
     ]
 
     // Wired headphones are left out: A9 moves the route the same way without a person.
@@ -43,6 +44,7 @@ enum CheckScenarios {
         route("G3", "Pick AirPlay", "Tap the button and choose an AirPlay 2 speaker, or the Mac with AirPlay Receiver on (System Settings > General > AirDrop & Handoff).",
               ports: [.airPlay], arriving: true, picker: true),
         route("G4", "Back to the iPhone", "Tap the button and choose iPhone.", ports: [.airPlay], arriving: false, picker: true),
+        // G5 (take a real call) is replaced by the automatic A11.
         interruption("G6", "Ask Siri", "Hold the side button and ask Siri the time."),
         .init(id: "G7", question: "Reset media services (#100)", guided: true, run: mediaReset),
     ]

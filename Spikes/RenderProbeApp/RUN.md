@@ -28,5 +28,7 @@ pass/fail table. Phone unlocked, on a table in a quiet room, silent switch off; 
 to 0.75 and restores it. `ONLY=Q1a,Q2 run-auto.sh` runs a subset. The mic tests use `.playAndRecord` /
 `.measurement` / `.defaultToSpeaker`; test C repeats the rate cycle and hole under `.playback`.
 
+`run-devicecheck.sh` check A11 replaces the guided "take a call": InterruptorApp (`--call`, started by the script) reports and answers a CallKit call, so no second phone is needed.
+
 Not automatable, to observe later via app logging: a real phone call, Siri, picking an AirPlay route,
 Bluetooth connect/disconnect, wired headphones.

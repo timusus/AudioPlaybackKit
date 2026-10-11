@@ -46,10 +46,12 @@ documents() {
 }
 
 # The app deletes the previous run's flags on launch, well before the first poll. A10 asks for
-# InterruptorApp through a flag because only devicectl can start another app.
+# InterruptorApp through a flag because only devicectl can start another app; A11 does the same with
+# callkit-wanted and --call.
 start=$(date +%s)
 finished=no
 interrupted=no
+called=no
 while [ $(( $(date +%s) - start )) -lt 1800 ]; do
   sleep 5
   listing="$(documents)"
@@ -58,6 +60,11 @@ while [ $(( $(date +%s) - start )) -lt 1800 ]; do
     interrupted=yes
     echo "  A10: launching InterruptorApp"
     xcrun devicectl device process launch --device "$DEVICE" "$BUNDLE.interruptor" >/dev/null || echo "  InterruptorApp launch failed"
+  fi
+  if [ "$called" = no ] && grep -qE '(^|[[:space:]/])callkit-wanted([[:space:]]|$)' <<<"$listing"; then
+    called=yes
+    echo "  A11: launching InterruptorApp --call"
+    xcrun devicectl device process launch --device "$DEVICE" "$BUNDLE.interruptor" --call >/dev/null || echo "  InterruptorApp --call launch failed"
   fi
   elapsed=$(( $(date +%s) - start ))
   if [ $(( elapsed % 60 )) -lt 5 ]; then echo "  waiting ($(( elapsed / 60 )) min)"; fi
