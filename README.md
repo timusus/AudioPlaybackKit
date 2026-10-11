@@ -62,10 +62,10 @@ while let chunk = decoder.nextChunk() {          // interleaved Float32, up to 4
 `open()`, `nextChunk()` and `seek(toSeconds:)` block, so call them from a thread of your own. To have the
 package play it as well, see [the render section](docs/usage.md#play-through-the-render-layer).
 
-## Not a player
+## Not yet a player
 
-The package decodes, streams and, optionally, renders. There is no queue, Now Playing, audio session
-policy, effects or UI: those stay in the app, which drives `Transport` and supplies its effects as processors.
+The package decodes, streams and, optionally, renders; today the app drives `Transport` and keeps the queue,
+audio session, Now Playing and effects. A player layer above `Transport` is planned ([ADR-0019](docs/decisions/0019-player.md)).
 
 ## Documentation
 
