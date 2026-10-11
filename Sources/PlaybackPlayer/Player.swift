@@ -165,14 +165,13 @@ public final class Player<Item: Hashable & Sendable> {
         } else if index == current {
             let successor = index < entries.count ? index : 0
             currentIndex = successor
-            if repeatMode == .one || (index == entries.count && repeatMode == .off) {
-                unload(as: .ended)
-            } else if loadedKey != nil || error != nil {
-                jump(to: successor, at: 0)
-            }
             position = 0
             duration = nil
-            send(.itemTransition(from: current, to: currentIndex, reason: .seek))
+            let ends = repeatMode == .one || (index == entries.count && repeatMode == .off)
+            if ends { unload(as: .ended) }
+            // Before the load, whose failure to make a source is reported after the transition.
+            send(.itemTransition(from: current, to: successor, reason: .seek))
+            if !ends, loadedKey != nil || error != nil { jump(to: successor, at: 0) }
         }
         armNext()
     }
@@ -273,16 +272,15 @@ public final class Player<Item: Hashable & Sendable> {
         precondition(entries.indices.contains(index), "index out of range")
         guard let current = currentIndex, index != current else { return seek(to: position) }
         let seconds = position.isFinite ? max(position, 0) : 0
-        currentIndex = index
         // Not `state`, which waits for the transport to answer a load.
-        if error != nil || (loadedKey == nil && unloadedState == .idle) {
-            self.position = seconds
-            duration = nil
-            isLive = false
-        } else {
-            jump(to: index, at: seconds)
-        }
+        let idle = error != nil || (loadedKey == nil && unloadedState == .idle)
+        currentIndex = index
+        self.position = seconds
+        duration = nil
+        isLive = false
+        // Before the load, whose failure to make a source is reported after the transition.
         send(.itemTransition(from: current, to: index, reason: .seek))
+        if !idle { jump(to: index, at: seconds) }
     }
 
     /// Clamps to the current item; never moves to another. Adds to a seek not yet heard, so presses
@@ -440,8 +438,8 @@ public final class Player<Item: Hashable & Sendable> {
             // Removed since it was armed: on to what the list armed after it, else the list ended.
             guard let next = armedEntryID.flatMap(index(of:)) else { return unload(as: .ended) }
             currentIndex = next
-            jump(to: next, at: 0)
-            return send(.itemTransition(from: from, to: next, reason: .auto))
+            send(.itemTransition(from: from, to: next, reason: .auto))
+            return jump(to: next, at: 0)
         }
         currentIndex = index
         if pauseAtEndOfItem {
@@ -475,8 +473,11 @@ public final class Player<Item: Hashable & Sendable> {
         }
         pauseAtEnd()
         currentIndex = next
-        load(next, at: 0)
+        position = 0
+        duration = nil
+        isLive = false
         send(.itemTransition(from: current, to: next, reason: next == current ? .repeat : .auto))
+        load(next, at: 0)
         return true
     }
 

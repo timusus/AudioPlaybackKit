@@ -208,6 +208,24 @@ final class PlayerAdvanceTests: XCTestCase {
         XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [.init(value: false, reason: .endOfItem)])
     }
 
+    // Nothing is armed under pause at end, so b's source is first made at a's end; its failure
+    // follows the transition into b, as a failed next's does.
+    func testPauseAtEndOfItemIntoANextThatFailsToMakeReportsTheTransitionFirst() async {
+        rig.factory.failing = ["b"]
+        player.pauseAtEndOfItem = true
+        player.setItems(["a", "b", "c"])
+        player.play()
+        rig.run(for: 11)
+
+        XCTAssertEqual(player.currentItem, "b")
+        XCTAssertEqual(player.state, .idle)
+        XCTAssertEqual(player.error?.kind, .source)
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.kinds(events), [.playWhenReadyChanged, .itemTransition, .itemFailed])
+        XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 1, reason: .auto)])
+        XCTAssertEqual(PlayerRig.failedIndices(events), [1])
+    }
+
     // media3 ExoPlayerTest.pauseAtEndOfMediaItems_pausesPlaybackWhenEnded.
     func testPauseAtEndOfTheLastItemEnds() async {
         player.setItems(["a"])

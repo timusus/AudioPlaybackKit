@@ -80,6 +80,23 @@ final class PlayerRig {
         return all
     }
 
+    enum Kind: Equatable {
+        case itemTransition, itemFailed, seekLanded, recoveredPaused, playWhenReadyChanged
+    }
+
+    /// Each event's case, in the order sent.
+    static func kinds(_ events: [PlayerEvent<String>]) -> [Kind] {
+        events.map {
+            switch $0 {
+            case .itemTransition: .itemTransition
+            case .itemFailed: .itemFailed
+            case .seekLanded: .seekLanded
+            case .recoveredPaused: .recoveredPaused
+            case .playWhenReadyChanged: .playWhenReadyChanged
+            }
+        }
+    }
+
     static func transitions(_ events: [PlayerEvent<String>]) -> [Transition] {
         events.compactMap {
             guard case let .itemTransition(from, to, reason) = $0 else { return nil }

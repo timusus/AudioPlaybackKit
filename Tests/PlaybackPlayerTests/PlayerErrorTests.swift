@@ -130,6 +130,28 @@ final class PlayerErrorTests: XCTestCase {
         XCTAssertEqual(PlayerRig.failedIndices(events), [1])
     }
 
+    // media3 reports a failure after the transition into its item, whatever moved there.
+    func testASeekOrRemoveOntoAnItemThatFailsToMakeReportsTheTransitionFirst() async {
+        rig.factory.failing = ["c"]
+        player.setItems(["a", "b", "c", "d"])
+        player.play()
+        rig.run(for: 1)
+
+        player.seek(to: 0, itemAt: 2)
+        XCTAssertEqual(player.error?.kind, .source)
+        player.seek(to: 0, itemAt: 0)
+        player.remove(at: 1)
+        player.remove(at: 0)
+        XCTAssertEqual(player.currentItem, "c")
+        XCTAssertEqual(player.state, .idle)
+
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.kinds(events), [
+            .itemTransition, .itemFailed, .itemTransition, .itemTransition, .itemFailed,
+        ])
+        XCTAssertEqual(PlayerRig.failedIndices(events), [2, 0])
+    }
+
     func testAFailedNextTheAppRemovesIsNeverReported() async {
         rig.factory.unopenable = ["b"]
         player.setItems(["a", "b", "c"])
