@@ -86,6 +86,22 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(statuses, [.buffering, .playing])
     }
 
+    // #128: over AirPlay (2 s latency) a lead counted from the heard playhead was nil at the clock,
+    // so after the prefill every buffer arrived late and the renderer dropped it.
+    func testWithATwoSecondRouteLatencyTheLeadOverTheClockStaysAtTheTarget() {
+        makeFeeder([item(0, 80)], chunkFrames: 1, latency: 2)
+        feeder.play()
+
+        for _ in 0..<16 {
+            output.advance(by: 0.25)
+            feeder.pump()
+            let last = output.enqueues.last!
+            XCTAssertEqual(last.time + 0.25 - output.currentTime(), 2)
+        }
+        XCTAssertEqual(heard, ramp(0, 0..<16))
+        XCTAssertEqual(statuses, [.buffering, .playing])
+    }
+
     func testAnUnderrunPausesAtTheWrittenEndAndResumesWithoutLosingFrames() {
         makeFeeder([item(0, 16)])
         upstream.available = 2
