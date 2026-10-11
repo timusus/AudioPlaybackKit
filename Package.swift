@@ -24,6 +24,9 @@ let package = Package(
         // `FakeAudioOutput`, `ManualPumpTimer`, `ManualExecutor` and `FakeItemSource`, to run a
         // `Transport` deterministically from a consumer's own tests.
         .library(name: "PlaybackRenderTestSupport", targets: ["PlaybackRenderTestSupport"]),
+        // A main-actor `Player` over `Transport`: the item list, play intent and state, position
+        // and duration in seconds, seek across items (ADR-0019).
+        .library(name: "PlaybackPlayer", targets: ["PlaybackPlayer"]),
         // FFmpeg itself, for a consumer with its own C against libavformat. One FFmpeg per app:
         // a second copy would clash with this framework's symbols, or silently shadow them.
         .library(name: "FFmpeg", targets: ["CFFmpeg"]),
@@ -47,6 +50,9 @@ let package = Package(
         // on `Transport`, so none of them needs a real renderer or a wall clock (ADR-0018).
         .target(name: "PlaybackRenderTestSupport", dependencies: ["PlaybackRender"]),
         .testTarget(name: "PlaybackRenderTests", dependencies: ["PlaybackRender", "PlaybackRenderTestSupport"]),
+        // Drives `Transport` through its public API only, so anything it needs is a render-layer change.
+        .target(name: "PlaybackPlayer", dependencies: ["PlaybackRender"]),
+        .testTarget(name: "PlaybackPlayerTests", dependencies: ["PlaybackPlayer", "PlaybackRender", "PlaybackRenderTestSupport"]),
         // Two 20-45 s tone fixtures (under 250 KB each), served over the loopback server.
         .testTarget(
             name: "PlaybackStreamingTests",

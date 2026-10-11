@@ -1,0 +1,58 @@
+import Foundation
+import PlaybackRender
+
+/// Makes the PCM source for an item when the player is about to decode it. Called on the main
+/// actor and must not block: `FFmpegItemSource` opens lazily, so construct it and return.
+public typealias ItemSourceFactory<Item> = @MainActor (Item) throws -> any ItemSource
+
+/// media3 `Player.State`: `.idle` has nothing prepared or stopped on an error; `.buffering` is
+/// `playWhenReady` with decode behind the clock, or an item opening; `.ready` can play at once;
+/// `.ended` is the end of the last item.
+public enum PlaybackState: Sendable {
+    case idle, buffering, ready, ended
+}
+
+/// Why audio is not heard although `playWhenReady` is true and the state is `.ready`.
+public enum PlaybackSuppression: Sendable {
+    case none
+    /// An `AVAudioSession` interruption began; cleared when it ends (media3 `TRANSIENT_AUDIO_FOCUS_LOSS`).
+    case interruption
+}
+
+public struct PlaybackError: Error, Sendable {
+    public enum Kind: Sendable {
+        case source, output, session
+    }
+
+    public var kind: Kind
+    public var underlying: any Error
+}
+
+public enum TransitionReason: Sendable {
+    /// The previous item ended.
+    case auto
+    /// `skipToNext`, `skipToPrevious`, `seek(to:itemAt:)` or an edit that removed the current item.
+    case seek
+    /// Repeat one restarted the item.
+    case `repeat`
+}
+
+public enum PlayWhenReadyChangeReason: Sendable {
+    case routeLost, interruptionEnded, endOfItem
+}
+
+/// Discrete things the state cannot carry: each is sent once, in order, after the state that caused
+/// it has been written.
+public enum PlayerEvent<Item: Hashable & Sendable>: Sendable {
+    /// `currentIndex` moved; `to` is nil when the list emptied.
+    case itemTransition(from: Int?, to: Int?, reason: TransitionReason)
+    /// The item at `index` failed. If it is the current item the player is `.idle` with `error` set;
+    /// a later item is dropped from the pre-arm and reported here, the queue entry stays.
+    case itemFailed(index: Int, error: PlaybackError)
+    /// The seek's audio reached the speaker; `position` is where it landed.
+    case seekLanded(index: Int, position: TimeInterval)
+    /// A renderer failure or media-services reset was recovered; playback is paused at the same position.
+    case recoveredPaused
+    /// `playWhenReady` changed by the player, not the app.
+    case playWhenReadyChanged(Bool, reason: PlayWhenReadyChangeReason)
+}
