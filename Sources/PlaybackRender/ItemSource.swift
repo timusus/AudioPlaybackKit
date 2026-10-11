@@ -21,27 +21,37 @@ public protocol ItemSource: AnyObject, Sendable {
 /// `FFmpegStreamDecoder` as an item source. The decoder already trims encoder delay and padding
 /// (the gapless goldens), so its frames are the item's frames and the join adds no trim.
 public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
-    private let reader: EpochReader
+    private let reader: StreamByteReader
     private let lock = NSLock()
-    // Read by `interrupt(through:)` from any thread; only the executor replaces it.
+    // Read by `interrupt(through:)` from any thread; only the executor replaces the decoder. The
+    // epoch and interrupt are kept here too, for the fresh decoder each open makes.
     private var decoder: FFmpegStreamDecoder?
+    private var epoch: UInt64 = 0
+    private var interruptedThrough: UInt64?
     private var sampleRate: Double = 0
 
     /// The source owns `reader` from here on: only the transport's decode executor reads it.
     public init(reader: StreamByteReader) {
-        self.reader = EpochReader(reader)
+        self.reader = reader
     }
 
     public func begin(epoch: UInt64) {
-        reader.begin(epoch: epoch)
+        lock.withLock {
+            self.epoch = epoch
+            decoder?.begin(generation: epoch)
+        }
     }
 
     public func open() throws -> PCMFormat {
         // A decoder whose open was interrupted is unusable, so each open starts a fresh one. The
-        // clear forgets an interrupt aimed at a dropped call and keeps one aimed at this epoch.
-        reader.clearInterrupt()
+        // clear forgets an interrupt aimed at a dropped call; the replay keeps one aimed at this epoch.
         let decoder = FFmpegStreamDecoder(reader: reader)
-        lock.withLock { self.decoder = decoder }
+        lock.withLock {
+            reader.clearInterrupt()
+            decoder.begin(generation: epoch)
+            if let interruptedThrough { decoder.interrupt(through: interruptedThrough) }
+            self.decoder = decoder
+        }
         do {
             let format = try decoder.open()
             sampleRate = format.sampleRate
@@ -71,12 +81,9 @@ public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
     }
 
     public func interrupt(through epoch: UInt64) {
-        reader.interrupt(through: epoch) {
-            if let decoder = lock.withLock({ decoder }) {
-                decoder.interrupt()
-            } else {
-                reader.interrupt()
-            }
+        lock.withLock {
+            interruptedThrough = max(interruptedThrough ?? epoch, epoch)
+            decoder?.interrupt(through: epoch)
         }
     }
 
@@ -84,55 +91,4 @@ public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
         guard let decoder = lock.withLock({ decoder }) else { throw StreamDecoderError.invalidState("not open") }
         return decoder
     }
-}
-
-/// The reader the decoder sees. The decoder clears the interrupt flags at the start of every seek,
-/// which would erase an interrupt landing just before; this re-raises one aimed at the epoch in flight.
-private final class EpochReader: StreamByteReader, @unchecked Sendable {
-    private let inner: StreamByteReader
-    private let lock = NSLock()
-    private var epoch: UInt64?
-    private var interruptedThrough: UInt64?
-
-    init(_ inner: StreamByteReader) {
-        self.inner = inner
-    }
-
-    func begin(epoch: UInt64) {
-        lock.withLock { self.epoch = epoch }
-    }
-
-    /// Records the interrupt, then runs `raise` if it is aimed at the calls in flight. Under the lock,
-    /// so `raise` cannot land after a later `begin` and stop the next epoch's call.
-    func interrupt(through epoch: UInt64, raise: () -> Void) {
-        lock.withLock {
-            interruptedThrough = max(interruptedThrough ?? epoch, epoch)
-            if let current = self.epoch, current <= epoch { raise() }
-        }
-    }
-
-    func clearInterrupt() {
-        inner.clearInterrupt()
-        // After the clear, so an interrupt racing it is either re-raised here or lands after it.
-        let aimedHere = lock.withLock {
-            guard let epoch, let interruptedThrough else { return false }
-            return interruptedThrough >= epoch
-        }
-        if aimedHere { inner.interrupt() }
-    }
-
-    var totalLength: Int64? { inner.totalLength }
-    var position: Int64 { inner.position }
-
-    func read(into buffer: UnsafeMutableRawPointer, maxLength: Int) throws -> Int {
-        try inner.read(into: buffer, maxLength: maxLength)
-    }
-
-    func seek(to offset: Int64) throws {
-        try inner.seek(to: offset)
-    }
-
-    func cancel() { inner.cancel() }
-
-    func interrupt() { inner.interrupt() }
 }

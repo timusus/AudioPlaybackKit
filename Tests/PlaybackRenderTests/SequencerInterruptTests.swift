@@ -59,8 +59,8 @@ final class SequencerInterruptTests: XCTestCase {
 }
 
 /// A file reader with its own latched interrupt flag. A hook can run once just before the next
-/// clear, and the read or seek after that clear stalls, as on a dead connection, until it is interrupted
-/// or `stall` passes.
+/// clear, and the first read or seek after that clear, before any other clear, stalls, as on a dead
+/// connection, until it is interrupted or `stall` passes.
 private final class StallingReader: StreamByteReader, @unchecked Sendable {
     private let file: FileByteReader
     private let condition = NSCondition()
@@ -118,7 +118,9 @@ private final class StallingReader: StreamByteReader, @unchecked Sendable {
         hook?()
         condition.withLock {
             interrupted = false
-            if hook != nil { stallsNextCall = true }
+            // The stall belongs to the call after the hooked clear: an interrupted seek that never
+            // reached the reader must not hand it to the next seek.
+            stallsNextCall = hook != nil
         }
     }
 }
