@@ -141,6 +141,11 @@ final class Feeder {
         restart(from: nil, status: .ended)
     }
 
+    /// The item heard now, or the one the last restart asked for until its audio is written.
+    var currentItem: Int? {
+        currentPosition(at: playhead())?.item
+    }
+
     // MARK: Tick
 
     /// All the feeder's work; the caller calls it on its queue from a timer or the output's

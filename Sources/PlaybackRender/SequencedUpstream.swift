@@ -51,6 +51,15 @@ final class SequencedUpstream: FeederUpstream {
         sampleRates = sampleRates.filter { $0.key >= item }
     }
 
+    /// Forgets a next item that failed before it was heard. False when audio of it may be queued, so
+    /// the caller re-feeds from what is heard.
+    func drop(item: Int) -> Bool {
+        sampleRates[item] = nil
+        guard sequencer.drop(item: item) else { return false }
+        failed = false
+        return true
+    }
+
     func pull() -> UpstreamSupply {
         while !failed {
             if let chunk = pipeline.getOutput() { return .chunk(chunk) }

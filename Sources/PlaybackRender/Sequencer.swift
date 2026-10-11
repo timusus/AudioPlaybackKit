@@ -200,6 +200,21 @@ final class Sequencer: @unchecked Sendable {
         }
     }
 
+    /// Removes a next item whose source failed before it was heard. True when decode had tagged
+    /// nothing of it, so it carries on from the item before; false when its chunks may be out, so
+    /// the caller seeks.
+    func drop(item: Int) -> Bool {
+        lock.withLock {
+            guard let index = window.firstIndex(where: { $0.item == item }) else { return false }
+            let entry = window.remove(at: index)
+            guard let cursor, cursor.entry === entry, !cursor.tagged, index > 0 else { return false }
+            self.cursor = Cursor(entry: window[index - 1], seekTo: nil, tagged: true, ended: true)
+            failure = nil
+            schedule()
+            return true
+        }
+    }
+
     /// Known by the time the item's first chunk is pulled; nil when its source does not know it.
     func duration(of item: Int) -> Int64? {
         lock.withLock { window.first { $0.item == item }?.duration }

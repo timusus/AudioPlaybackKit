@@ -195,7 +195,7 @@ let transport = Transport<Track.ID> { event in          // called on the transpo
     case .position(let id, let seconds, let duration): break   // media time of `id`; duration nil when unknown
     case .crossed(let id): break                        // `id` is now heard; advance your queue
     case .status(let status): break                     // .paused, .buffering, .playing, .ended
-    case .failed(let id, let error): break              // paused on an error
+    case .failed(let id, let error): break              // paused, unless `id` is a next item not yet heard
     }
 }
 
@@ -238,7 +238,9 @@ from its own timer or display link.
 **Failure.** A failed renderer or a media-services reset is recovered once: the transport rebuilds
 the output and lands paused at the same position, and the app calls `play()` again. A second failure
 surfaces as `.failed`, and `play()` does nothing until a `seek`, `setCurrent` or `setProcessors`.
-A source or processor error that stops an item also arrives as `.failed(item:error:)`.
+A source or processor error that stops an item also arrives as `.failed(item:error:)`. When the item
+is a next one decode reached early, it is dropped and the current item plays on without a pause, so
+the app chooses what follows; the heard item's failure pauses.
 
 ### Moving an app over
 

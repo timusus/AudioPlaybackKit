@@ -20,8 +20,9 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     /// item's audio was written there, playing or paused.
     case crossed(item: Item)
     case status(TransportStatus)
-    /// Playback paused on an error. `item` is the item whose source or processors failed, nil when
-    /// the output refused audio. `play()` does nothing until a `seek`, `setCurrent` or `setProcessors`.
+    /// `item`'s source or processors failed, or the output refused audio (`item` nil). A next item not
+    /// yet heard is dropped and the current one plays on. Otherwise playback pauses, and `play()` does
+    /// nothing until a `seek`, `setCurrent` or `setProcessors`.
     case failed(item: Item?, error: any Error)
 }
 
@@ -238,9 +239,17 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         }
     }
 
+    /// A next item decode reached early is reported and dropped while the current plays on
+    /// (ADR-0019); the app decides what follows. Only the heard item's failure pauses.
     private func fail(item id: Int, _ error: any Error) {
-        failed = true
         onEvent(.failed(item: ids[id], error: error))
+        if let current = feeder.currentItem, id > current {
+            ids[id] = nil
+            // Deferred: this runs inside the feeder's fill, which a flush would re-enter.
+            if !upstream.drop(item: id) { queue.async { [self] in feeder.flush() } }
+            return
+        }
+        failed = true
         feeder.pause()
     }
 }
