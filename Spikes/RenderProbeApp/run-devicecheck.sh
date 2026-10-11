@@ -67,6 +67,16 @@ while [ $(( $(date +%s) - start )) -lt 1800 ]; do
     echo "  A11: launching InterruptorApp --call"
     xcrun devicectl device process launch --device "$DEVICE" "$BUNDLE.interruptor" --call >/dev/null || echo "  InterruptorApp --call launch failed"
   fi
+  # A11 quotes the last line of callkit.log; the probe cannot read InterruptorApp's container, so relay it.
+  if [ "$called" = yes ]; then
+    rm -f "$TMP/caller.log"
+    if xcrun devicectl device copy from --device "$DEVICE" --domain-type appDataContainer --domain-identifier "$BUNDLE.interruptor" \
+      --source Documents/caller.log --destination "$TMP/caller.log" -q >/dev/null 2>&1; then
+      cp "$TMP/caller.log" "$OUT/caller.log"
+      xcrun devicectl device copy to --device "$DEVICE" --domain-type appDataContainer --domain-identifier "$BUNDLE" \
+        --source "$TMP/caller.log" --destination Documents/callkit.log -q >/dev/null 2>&1 || true
+    fi
+  fi
   elapsed=$(( $(date +%s) - start ))
   if [ $(( elapsed % 60 )) -lt 5 ]; then echo "  waiting ($(( elapsed / 60 )) min)"; fi
 done

@@ -20,6 +20,10 @@ extension CheckScenarios {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("callkit-wanted")
     }
 
+    static var callLog: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("callkit.log")
+    }
+
     @Sendable static func rateFlush() async throws -> [String: Any] {
         try Session.configureMeasurement()
         let ear = try await Ear.start()
@@ -82,7 +86,10 @@ extension CheckScenarios {
                 let began = await interruption(.began, cap: 45) {
                     FileManager.default.createFile(atPath: callFlag.path, contents: nil)
                 }
-                guard began != "timeout" else { throw CheckError("no interruption in 45 s; only run-devicecheck.sh launches InterruptorApp --call") }
+                guard began != "timeout" else {
+                    let log = (try? String(contentsOf: callLog, encoding: .utf8))?.split(separator: "\n").last.map(String.init)
+                    throw CheckError("no interruption in 45 s; InterruptorApp last log line: \(log ?? "none (never ran --call, or log not relayed; only run-devicecheck.sh does)")")
+                }
                 try await pause(1)
                 probe.note("statusDuringCall", "\(probe.status)")
                 probe.note("synchronizerRateDuringCall", round3(Double(probe.synchronizer.rate)))

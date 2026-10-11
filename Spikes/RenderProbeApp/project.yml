@@ -53,3 +53,5 @@ targets:
       properties:
         CFBundleDisplayName: Interruptor
         UILaunchScreen: {}
+        # Unverified whether reportNewIncomingCall needs these without PushKit; harmless to declare.
+        UIBackgroundModes: [voip, audio]
