@@ -233,12 +233,19 @@ public final class Player<Item: Hashable & Sendable> {
 
     public func skipToNext() {
         guard let next = neighbour(1) else { return }
-        seek(to: 0, itemAt: next)
+        skip(to: next)
     }
 
     public func skipToPrevious() {
         guard let previous = neighbour(-1) else { return }
-        seek(to: 0, itemAt: previous)
+        skip(to: previous)
+    }
+
+    // A wrap onto the only item is still a transition, as media3's `isRepeatingCurrentItem` seek is.
+    private func skip(to index: Int) {
+        guard index == currentIndex else { return seek(to: 0, itemAt: index) }
+        seek(to: 0)
+        send(.itemTransition(from: index, to: index, reason: .seek))
     }
 
     // MARK: Position

@@ -93,6 +93,27 @@ final class PlayerAdvanceTests: XCTestCase {
         XCTAssertEqual(player.currentIndex, 1)
     }
 
+    // media3 ExoPlayerTest.seekToNextPrevious_singleItemRepeat_notifiesMediaItemTransition.
+    func testASkipThatWrapsOntoTheSameItemRestartsItAsATransition() async {
+        player.setItems(["a"])
+        player.repeatMode = .all
+        player.play()
+        rig.run(for: 3)
+        let written = rig.output.enqueues.count
+
+        player.skipToNext()
+        XCTAssertEqual(player.position, 0)
+        rig.pump()
+        XCTAssertEqual(rig.firstSampleWritten(skipping: written), 0)
+        player.skipToPrevious()
+
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [
+            .init(from: 0, to: 0, reason: .seek),
+            .init(from: 0, to: 0, reason: .seek),
+        ])
+    }
+
     func testPlayOnEndedRestartsTheCurrentItemFromZero() {
         player.setItems(["a", "b"])
         player.play()
