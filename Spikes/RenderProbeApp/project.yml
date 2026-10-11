@@ -36,3 +36,20 @@ targets:
         LSSupportsOpeningDocumentsInPlace: true
         UIBackgroundModes: [audio]
         NSMicrophoneUsageDescription: Records the speaker to detect glitches and measure clock alignment.
+        # InterruptorApp reopens the probe through this after check A10.
+        CFBundleURLTypes:
+          - CFBundleURLName: com.simplecityapps.renderprobe
+            CFBundleURLSchemes: [renderprobe]
+  InterruptorApp:
+    type: application
+    platform: iOS
+    sources:
+      - Interruptor
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.simplecityapps.renderprobe.interruptor
+    info:
+      path: Interruptor/Info.plist
+      properties:
+        CFBundleDisplayName: Interruptor
+        UILaunchScreen: {}

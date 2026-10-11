@@ -22,7 +22,7 @@ enum CheckRun {
         let jsonURL = documents.appendingPathComponent("check.json")
         let markdownURL = documents.appendingPathComponent("check.md")
         let doneURL = documents.appendingPathComponent("check-done")
-        for url in [jsonURL, markdownURL, doneURL] { try? FileManager.default.removeItem(at: url) }
+        for url in [jsonURL, markdownURL, doneURL, CheckScenarios.interruptorFlag] { try? FileManager.default.removeItem(at: url) }
         await MainActor.run { UIApplication.shared.isIdleTimerDisabled = true }
         let started = Date()
         Log.shared.write("CHECK start skipGuided=\(skipGuided)")

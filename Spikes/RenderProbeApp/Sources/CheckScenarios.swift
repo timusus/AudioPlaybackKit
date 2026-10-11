@@ -22,20 +22,22 @@ enum CheckScenarios {
         .init(id: "A5", question: "seek: silence and landing", guided: false, run: seek),
         .init(id: "A6", question: "setNext near the end, and after .ended", guided: false, run: setNext),
         .init(id: "A7", question: "auto-flush re-feed (port override): replayed or skipped audio", guided: false, run: autoFlush),
+        .init(id: "A8", question: "auto-flush on rate 1 -> 2 -> 1 -> 0.5", guided: false, run: rateFlush),
+        .init(id: "A9", question: "forced route: receiver -> speaker override -> receiver, category playback <-> playAndRecord", guided: false, run: forcedRoute),
+        .init(id: "A10", question: "interruption by a non-mixable session in another app", guided: false, run: interruptedByApp),
     ]
 
+    // Wired headphones are left out: A9 moves the route the same way without a person.
     static let guided: [CheckRun.Scenario] = [
-        route("G1", "Plug in wired headphones", "Plug wired headphones (or a USB-C adapter with headphones) into the iPhone.",
-              ports: [.headphones, .usbAudio, .lineOut], arriving: true, picker: false),
-        route("G2", "Unplug the headphones", "Unplug the headphones.", ports: [.headphones, .usbAudio, .lineOut], arriving: false, picker: false),
-        route("G3", "Connect Bluetooth", "Turn on Bluetooth headphones or a speaker and let it connect, or pick it with the button.",
+        route("G1", "Connect Bluetooth", "Turn on Bluetooth headphones or a speaker and let it connect, or pick it with the button.",
               ports: [.bluetoothA2DP, .bluetoothLE, .bluetoothHFP], arriving: true, picker: true),
-        route("G4", "Disconnect Bluetooth", "Turn the Bluetooth device off.", ports: [.bluetoothA2DP, .bluetoothLE, .bluetoothHFP], arriving: false, picker: false),
-        route("G5", "Pick AirPlay", "Tap the button and choose an AirPlay 2 speaker.", ports: [.airPlay], arriving: true, picker: true),
-        route("G6", "Back to the iPhone", "Tap the button and choose iPhone.", ports: [.airPlay], arriving: false, picker: true),
-        interruption("G7", "Take a call", "Call this iPhone from another phone and answer. Hang up after about 5 s."),
-        interruption("G8", "Ask Siri", "Hold the side button and ask Siri the time."),
-        .init(id: "G9", question: "Reset media services (#100)", guided: true, run: mediaReset),
+        route("G2", "Disconnect Bluetooth", "Turn the Bluetooth device off.", ports: [.bluetoothA2DP, .bluetoothLE, .bluetoothHFP], arriving: false, picker: false),
+        route("G3", "Pick AirPlay", "Tap the button and choose an AirPlay 2 speaker, or the Mac with AirPlay Receiver on (System Settings > General > AirDrop & Handoff).",
+              ports: [.airPlay], arriving: true, picker: true),
+        route("G4", "Back to the iPhone", "Tap the button and choose iPhone.", ports: [.airPlay], arriving: false, picker: true),
+        interruption("G5", "Take a call", "Call this iPhone from another phone and answer. Hang up after about 5 s."),
+        interruption("G6", "Ask Siri", "Hold the side button and ask Siri the time."),
+        .init(id: "G7", question: "Reset media services (#100)", guided: true, run: mediaReset),
     ]
 
     // MARK: Automatic
@@ -85,15 +87,21 @@ enum CheckScenarios {
             heard.append((onset - ear.inputLatency - expected) * 1000)
         }
         let latency = Session.shared.outputLatency * 1000
+        // The onset finder sometimes locks onto an echo or the wrong edge 20-150 ms early; drop those by
+        // median absolute deviation before judging.
+        let centre = median(heard)
+        let deviation = median(heard.map { abs($0 - centre) })
+        let inliers = heard.filter { abs($0 - centre) <= 3 * max(deviation, 1) }
         let metrics: [String: Any] = [
             "heardMinusPositionMs": heard.map(round3), "heardMinusPositionMedianMs": round3(median(heard)),
+            "heardMinusPositionInlierMedianMs": round3(median(inliers)), "inliers": inliers.count,
             "positionVsClockMinusLatencyMs": ["median": round3(median(clockDeltas)), "min": round3(clockDeltas.min() ?? .nan), "max": round3(clockDeltas.max() ?? .nan)],
             "outputLatencyMs": round3(latency), "inputLatencyMs": round3(ear.inputLatency * 1000),
         ]
-        guard heard.count >= 5 else { return result("inconclusive", "only \(heard.count) clicks heard", metrics) }
-        let spread = (heard.max()! - heard.min()!)
-        return result(abs(median(heard)) < 5 ? "pass" : "fail",
-                      "click heard \(fmt(median(heard), 1)) ms after the position said (spread \(fmt(spread, 1)) ms, \(heard.count) clicks); outputLatency \(fmt(latency, 1)) ms; position = clock - latency within \(fmt(clockDeltas.map(abs).max() ?? .nan, 1)) ms",
+        guard inliers.count >= 5 else { return result("inconclusive", "only \(inliers.count) of \(heard.count) clicks agree", metrics) }
+        let spread = (inliers.max()! - inliers.min()!)
+        return result(abs(median(inliers)) < 5 ? "pass" : "fail",
+                      "click heard \(fmt(median(inliers), 1)) ms after the position said (spread \(fmt(spread, 1)) ms, \(inliers.count) of \(heard.count) clicks); outputLatency \(fmt(latency, 1)) ms; position = clock - latency within \(fmt(clockDeltas.map(abs).max() ?? .nan, 1)) ms",
                       metrics)
     }
 
@@ -286,7 +294,7 @@ enum CheckScenarios {
     }
 
     @Sendable static func mediaReset() async throws -> [String: Any] {
-        try await guidedPlayback("G9") { probe in
+        try await guidedPlayback("G7") { probe in
             let answer = await CheckUI.shared.ask("Reset media services", "Open Settings > Developer > Reset Media Services, then come back to this app.\n\nA tone is playing.",
                                                   buttons: ["Skip"], cap: 600) { note in
                 note.name == AVAudioSession.mediaServicesWereResetNotification ? "media services reset" : nil

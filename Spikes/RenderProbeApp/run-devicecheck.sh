@@ -19,9 +19,11 @@ echo "device $DEVICE, app args: --check $*"
 LEASE=()
 command -v lease >/dev/null && LEASE=(lease --class build --)
 xcodegen generate --quiet
-${LEASE[@]+"${LEASE[@]}"} xcodebuild build -project RenderProbe.xcodeproj -scheme RenderProbe -destination "id=$DEVICE" \
-  -derivedDataPath build -allowProvisioningUpdates -quiet
-xcrun devicectl device install app --device "$DEVICE" build/Build/Products/Debug-iphoneos/RenderProbe.app
+for scheme in RenderProbe InterruptorApp; do
+  ${LEASE[@]+"${LEASE[@]}"} xcodebuild build -project RenderProbe.xcodeproj -scheme "$scheme" -destination "id=$DEVICE" \
+    -derivedDataPath build -allowProvisioningUpdates -quiet
+  xcrun devicectl device install app --device "$DEVICE" "build/Build/Products/Debug-iphoneos/$scheme.app"
+done
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -36,20 +38,29 @@ if locked; then
 fi
 
 xcrun devicectl device process launch --terminate-existing --device "$DEVICE" "$BUNDLE" --check "$@" >/dev/null
-echo "launched; polling for check-done every 30 s (30 min cap)"
+echo "launched; polling for check-done every 5 s (30 min cap)"
 
 documents() {
   xcrun devicectl device info files --device "$DEVICE" --domain-type appDataContainer --domain-identifier "$BUNDLE" \
     --subdirectory Documents 2>/dev/null || true
 }
 
-# The app deletes the previous run's flag on launch, well before the first poll.
+# The app deletes the previous run's flags on launch, well before the first poll. A10 asks for
+# InterruptorApp through a flag because only devicectl can start another app.
 start=$(date +%s)
 finished=no
+interrupted=no
 while [ $(( $(date +%s) - start )) -lt 1800 ]; do
-  sleep 30
-  if documents | grep -qE '(^|[[:space:]/])check-done([[:space:]]|$)'; then finished=yes; break; fi
-  echo "  waiting ($(( ($(date +%s) - start) / 60 )) min)"
+  sleep 5
+  listing="$(documents)"
+  if grep -qE '(^|[[:space:]/])check-done([[:space:]]|$)' <<<"$listing"; then finished=yes; break; fi
+  if [ "$interrupted" = no ] && grep -qE '(^|[[:space:]/])interruptor-wanted([[:space:]]|$)' <<<"$listing"; then
+    interrupted=yes
+    echo "  A10: launching InterruptorApp"
+    xcrun devicectl device process launch --device "$DEVICE" "$BUNDLE.interruptor" >/dev/null || echo "  InterruptorApp launch failed"
+  fi
+  elapsed=$(( $(date +%s) - start ))
+  if [ $(( elapsed % 60 )) -lt 5 ]; then echo "  waiting ($(( elapsed / 60 )) min)"; fi
 done
 
 for file in check.json check.md check.log $(documents | grep -oE 'mic-check-[A-Za-z0-9]+\.wav' | sort -u); do

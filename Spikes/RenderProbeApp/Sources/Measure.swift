@@ -45,6 +45,14 @@ final class ClockTrace: @unchecked Sendable {
 
     func stop() { timer?.cancel() }
 
+    /// The largest step back between consecutive polls in [from, to], in seconds; 0 when monotonic.
+    func largestStepBack(from: Double, to: Double) -> Double {
+        lock.withLock {
+            let window = pairs.filter { $0.host >= from && $0.host <= to }
+            return zip(window, window.dropFirst()).map { $0.media - $1.media }.max().map { max(0, $0) } ?? 0
+        }
+    }
+
     /// First host time at which the clock reached `media`, interpolated between polls.
     func host(at media: Double) -> Double? {
         lock.withLock {
