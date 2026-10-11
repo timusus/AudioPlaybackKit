@@ -1,0 +1,161 @@
+import AVFoundation
+import CoreMedia
+
+/// The device's audio output: one `AVSampleBufferAudioRenderer` on an
+/// `AVSampleBufferRenderSynchronizer`, mapped one to one onto `AudioOutput`. Every rule lives in
+/// the core above it (ADR-0018).
+///
+/// It never configures or activates `AVAudioSession`: on iOS the app owns the category, activation
+/// and interruptions. `.stalled` is never sent: the renderer has no signal for it, since an underrun
+/// runs the clock on silently (ADR-0018) and a failed renderer surfaces on the next enqueue.
+final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
+    private let renderer = AVSampleBufferAudioRenderer()
+    private let synchronizer = AVSampleBufferRenderSynchronizer()
+    private let formats = FormatDescriptionCache()
+    private let lock = NSLock()
+    private var handler: (@Sendable (AudioOutputEvent) -> Void)?
+    private var observer: (any NSObjectProtocol)?
+
+    init() {
+        // The iOS default (lowQualityZeroLatency) is wrong for speech; timeDomain had the shortest
+        // dropout on a rate change on the iPhone probe (97 ms to 2x, 140 ms back).
+        renderer.audioTimePitchAlgorithm = .timeDomain
+        synchronizer.addRenderer(renderer)
+        observer = NotificationCenter.default.addObserver(
+            forName: .AVSampleBufferAudioRendererWasFlushedAutomatically,
+            object: renderer, queue: nil
+        ) { [weak self] note in
+            guard let self else { return }
+            let flushTime = (note.userInfo?[AVSampleBufferAudioRendererFlushTimeKey] as? NSValue)?.timeValue
+            let time = flushTime?.seconds ?? currentTime()
+            lock.withLock { self.handler }?(.autoFlushed(at: time))
+        }
+    }
+
+    deinit {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+    }
+
+    func enqueue(_ samples: [Float], format: PCMFormat, at time: TimeInterval) throws {
+        let buffer = try makeSampleBuffer(
+            samples, description: formats.description(for: format),
+            presentationTime: presentationTime(time, sampleRate: format.sampleRate)
+        )
+        renderer.enqueue(buffer)
+        if renderer.status == .failed { throw AudioOutputError.formatRejected(format) }
+    }
+
+    func flush() {
+        renderer.flush()
+    }
+
+    func setRate(_ rate: Double, at time: TimeInterval?) {
+        if let time {
+            synchronizer.setRate(Float(rate), time: CMTime(seconds: time, preferredTimescale: anchorTimescale))
+        } else {
+            synchronizer.rate = Float(rate)
+        }
+    }
+
+    func currentTime() -> TimeInterval {
+        synchronizer.currentTime().seconds
+    }
+
+    var outputLatency: TimeInterval {
+        #if os(iOS)
+        // Read per call: it changes with the route. The iPhone probe heard currentTime 11 ms ahead
+        // with outputLatency at 9.7 ms (ADR-0018).
+        AVAudioSession.sharedInstance().outputLatency
+        #else
+        // The macOS clock already includes the output latency (ADR-0018).
+        0
+        #endif
+    }
+
+    var isReadyForMoreData: Bool {
+        renderer.isReadyForMoreMediaData
+    }
+
+    func setEventHandler(_ handler: @escaping @Sendable (AudioOutputEvent) -> Void) {
+        lock.withLock { self.handler = handler }
+    }
+}
+
+/// Nanoseconds: an anchor is a clock reading or a written end at some item's rate, so no one
+/// sample-rate timescale fits every anchor.
+private let anchorTimescale: CMTimeScale = 1_000_000_000
+
+/// `time` as a frame count in the buffer's own sample-rate timescale. Rounded to a frame, so a
+/// buffer stamped at the previous one's end in the same format joins with no gap or overlap.
+func presentationTime(_ time: TimeInterval, sampleRate: Double) -> CMTime {
+    CMTime(value: CMTimeValue((time * sampleRate).rounded()), timescale: CMTimeScale(sampleRate))
+}
+
+/// One `CMAudioFormatDescription` per format, so a long run of buffers shares one description.
+final class FormatDescriptionCache: @unchecked Sendable {
+    private let lock = NSLock()
+    private var descriptions: [PCMFormat: CMAudioFormatDescription] = [:]
+
+    func description(for format: PCMFormat) throws -> CMAudioFormatDescription {
+        try lock.withLock {
+            if let description = descriptions[format] { return description }
+            let description = try makeFormatDescription(format)
+            descriptions[format] = description
+            return description
+        }
+    }
+}
+
+/// Packed Float32 interleaved LPCM, the decoder's output (ADR-0010).
+func makeFormatDescription(_ format: PCMFormat) throws -> CMAudioFormatDescription {
+    let bytesPerFrame = UInt32(MemoryLayout<Float>.size * format.channelCount)
+    var asbd = AudioStreamBasicDescription(
+        mSampleRate: format.sampleRate, mFormatID: kAudioFormatLinearPCM,
+        mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
+        mBytesPerPacket: bytesPerFrame, mFramesPerPacket: 1, mBytesPerFrame: bytesPerFrame,
+        mChannelsPerFrame: UInt32(format.channelCount), mBitsPerChannel: 32, mReserved: 0
+    )
+    var layout = AudioChannelLayout()
+    switch format.channelCount {
+    case 1: layout.mChannelLayoutTag = kAudioChannelLayoutTag_Mono
+    case 2: layout.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo
+    default: layout.mChannelLayoutTag = kAudioChannelLayoutTag_DiscreteInOrder | UInt32(format.channelCount)
+    }
+    var description: CMAudioFormatDescription?
+    let status = CMAudioFormatDescriptionCreate(
+        allocator: nil, asbd: &asbd, layoutSize: MemoryLayout<AudioChannelLayout>.size, layout: &layout,
+        magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &description
+    )
+    guard status == noErr, let description else { throw osStatusError(status) }
+    return description
+}
+
+/// Copies `samples` into one ready sample buffer of `samples.count / channels` frames.
+func makeSampleBuffer(
+    _ samples: [Float], description: CMAudioFormatDescription, presentationTime: CMTime
+) throws -> CMSampleBuffer {
+    let channels = Int(description.audioStreamBasicDescription?.mChannelsPerFrame ?? 1)
+    let bytes = samples.count * MemoryLayout<Float>.size
+    var block: CMBlockBuffer?
+    var status = CMBlockBufferCreateWithMemoryBlock(
+        allocator: nil, memoryBlock: nil, blockLength: bytes, blockAllocator: nil, customBlockSource: nil,
+        offsetToData: 0, dataLength: bytes, flags: kCMBlockBufferAssureMemoryNowFlag, blockBufferOut: &block
+    )
+    guard status == noErr, let block else { throw osStatusError(status) }
+    status = samples.withUnsafeBytes {
+        CMBlockBufferReplaceDataBytes(with: $0.baseAddress!, blockBuffer: block, offsetIntoDestination: 0, dataLength: bytes)
+    }
+    guard status == noErr else { throw osStatusError(status) }
+    var buffer: CMSampleBuffer?
+    status = CMAudioSampleBufferCreateReadyWithPacketDescriptions(
+        allocator: nil, dataBuffer: block, formatDescription: description,
+        sampleCount: samples.count / channels, presentationTimeStamp: presentationTime,
+        packetDescriptions: nil, sampleBufferOut: &buffer
+    )
+    guard status == noErr, let buffer else { throw osStatusError(status) }
+    return buffer
+}
+
+private func osStatusError(_ status: OSStatus) -> NSError {
+    NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+}

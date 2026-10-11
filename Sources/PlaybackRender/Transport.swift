@@ -56,6 +56,13 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// A position reported before its item's first chunk gave the rate; sent once the rate is known.
     private var unratedPosition: MediaPositionMap.Position?
 
+    /// Plays through the device's audio output (`AVSampleBufferAudioRenderer`). The transport never
+    /// touches `AVAudioSession`: on iOS the app sets the category and activates the session before
+    /// `play()`, and handles interruptions. `onEvent` is called on the transport's queue.
+    public convenience init(onEvent: @escaping @Sendable (TransportEvent<Item>) -> Void) {
+        self.init(output: SampleBufferAudioOutput(), onEvent: onEvent)
+    }
+
     init(
         output: any AudioOutput,
         timer: any PumpTimer = DispatchPumpTimer(),
