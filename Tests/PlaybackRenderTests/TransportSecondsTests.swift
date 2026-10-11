@@ -112,7 +112,7 @@ final class TransportSecondsTests: XCTestCase {
 
         let events = rig.recorder.events.compactMap { event -> String? in
             switch event {
-            case let .sought(item, seconds): "sought \(item) \(seconds)"
+            case let .sought(item, seconds, applied): "sought \(item) \(seconds)\(applied ? "" : " ignored")"
             case let .position(item, seconds, _): "position \(item) \(seconds)"
             case .crossed, .status, .failed: nil
             }
@@ -121,7 +121,7 @@ final class TransportSecondsTests: XCTestCase {
             "sought a 0.0", "position a 0.0", "position a 1.0",
             "sought a 5.0", "position a 5.0",
             "sought b 2.0", "position b 2.0",
-            "sought a 1.0",
+            "sought a 1.0 ignored",
         ], "a seek to an item passed is ignored but still answered")
     }
 }

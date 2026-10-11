@@ -30,7 +30,7 @@ this page has the order of work and the traps. Paths are relative to each app's 
 | Next track reached the speaker | | `TransportEvent.crossed(item:)` |
 | Playing, buffering, paused, ended | | `TransportEvent.status(_:)` with `TransportStatus` |
 | A track or output failed | | `TransportEvent.failed(item:error:)` |
-| A seek or track change taken; events before it are stale | | `TransportEvent.sought(item:seconds:)` |
+| A seek or track change taken; if applied, events before it are stale | | `TransportEvent.sought(item:seconds:applied:)` |
 | Speed, volume | | `setRate(_:)`, `setVolume(_:)` |
 
 ### Shuttle Podcasts
