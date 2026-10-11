@@ -466,6 +466,89 @@ final class PlayerSessionTests: XCTestCase {
         XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [])
     }
 
+    func testAStopDuringAnInterruptionResumesNothing() async {
+        startPlaying()
+        session.interruptionBegan()
+        player.stop()
+        XCTAssertEqual(player.suppression, .none)
+        session.interruptionEnded(shouldResume: true)
+        XCTAssertEqual(session.calls, [.configure, .activate], "nothing loaded, so nothing activates")
+        XCTAssertEqual(player.state, .idle)
+
+        player.play()
+        XCTAssertTrue(isHeard())
+        XCTAssertEqual(session.calls, [.configure, .activate, .activate])
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [])
+    }
+
+    func testEmptyingTheListDuringAnInterruptionResumesNothing() {
+        let edits: [(String, (Player<String>) -> Void)] = [
+            ("removeAll", { $0.removeAll() }),
+            ("setItems([])", { $0.setItems([]) }),
+            ("replaceItems([])", { $0.replaceItems([], currentIndex: 0) }),
+            ("remove the only item", { $0.remove(at: 0) }),
+        ]
+        for (name, edit) in edits {
+            rig = PlayerRig()
+            startPlaying(["a"])
+            session.interruptionBegan()
+            edit(player)
+            XCTAssertEqual(player.suppression, .none, name)
+            session.interruptionEnded(shouldResume: true)
+            XCTAssertEqual(session.calls, [.configure, .activate], name)
+            XCTAssertEqual(player.state, .idle, name)
+        }
+    }
+
+    func testRemovingTheLastCurrentItemDuringAnInterruptionEndsAndResumesNothing() {
+        startPlaying()
+        player.seek(to: 0, itemAt: 1)
+        session.interruptionBegan()
+        player.remove(at: 1)
+        XCTAssertEqual(player.state, .ended)
+        XCTAssertEqual(player.suppression, .none)
+        session.interruptionEnded(shouldResume: true)
+        XCTAssertEqual(session.calls, [.configure, .activate], "nothing loaded, so nothing activates")
+        XCTAssertEqual(player.state, .ended)
+
+        player.play()
+        XCTAssertTrue(isHeard())
+        XCTAssertEqual(player.currentItem, "a")
+    }
+
+    // The end was heard before the interruption's pause reached the transport.
+    func testTheListEndingDuringAnInterruptionResumesNothing() {
+        startPlaying(["a"])
+        rig.run(for: 8.75)
+        let end = rig.inFlight {
+            rig.output.advance(by: 0.25)
+            rig.timer.fire()
+        }
+        XCTAssertTrue(end.contains { if case .status(.ended) = $0 { true } else { false } })
+        session.interruptionBegan()
+        rig.deliver(end)
+        XCTAssertEqual(player.state, .ended)
+        XCTAssertEqual(player.suppression, .none)
+        session.interruptionEnded(shouldResume: true)
+        XCTAssertEqual(session.calls, [.configure, .activate], "nothing left to play, so nothing activates")
+
+        player.play()
+        rig.run(for: 1)
+        XCTAssertTrue(isHeard(), "restarted from 0")
+        XCTAssertEqual(session.calls, [.configure, .activate, .activate])
+    }
+
+    func testAnInterruptionAtTheEndOfTheListResumesNothing() {
+        startPlaying(["a"])
+        rig.run(for: 10)
+        XCTAssertEqual(player.state, .ended)
+        session.interruptionBegan()
+        XCTAssertEqual(player.suppression, .none)
+        session.interruptionEnded(shouldResume: true)
+        XCTAssertEqual(session.calls, [.configure, .activate])
+    }
+
     func testAStopWhileActivatingIgnoresTheLateAnswer() {
         session.holdsActivation = true
         player.setItems(["a"])

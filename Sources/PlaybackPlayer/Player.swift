@@ -196,7 +196,6 @@ public final class Player<Item: Hashable & Sendable> {
         currentIndex = nil
         error = nil
         unload(as: .idle)
-        deactivate()
         position = 0
         duration = nil
         isLive = false
@@ -238,7 +237,6 @@ public final class Player<Item: Hashable & Sendable> {
     /// `.idle` with the items and position kept; `play()` prepares the current item again.
     public func stop() {
         unload(as: .idle)
-        deactivate()
     }
 
     public var repeatMode = RepeatMode.off {
@@ -411,8 +409,8 @@ public final class Player<Item: Hashable & Sendable> {
             // The system has deactivated the session, so the next play activates it again.
             sessionActive = false
             pendingActivation = nil
-            // Stopped or failed, nothing plays to suppress, so the end has nothing to resume or cancel.
-            guard intent, loadedKey != nil, error == nil else { return }
+            // Stopped, ended or failed, nothing plays to suppress, so the end has nothing to resume or cancel.
+            guard intent, loadedKey != nil, !atEnd, error == nil else { return }
             suppression = .interruption
             transport.pause()
         case let .interruptionEnded(shouldResume):
@@ -574,6 +572,7 @@ public final class Player<Item: Hashable & Sendable> {
         guard pauseAtEndOfItem, let next = following(current) else {
             if pauseAtEndOfItem { pauseByPlayer(.endOfItem) }
             atEnd = true
+            nothingToPlay(.ended)
             return false
         }
         pauseByPlayer(.endOfItem)
@@ -628,7 +627,16 @@ public final class Player<Item: Hashable & Sendable> {
         armedKey = nil
         seekTarget = nil
         unloadedState = state
+        nothingToPlay(state)
         refreshState()
+    }
+
+    /// Nothing playable is left, so an interruption has nothing to resume and its end activates
+    /// nothing. Idle also gives the session up: media3 abandons focus in `STATE_IDLE` but holds it in
+    /// `STATE_ENDED`, where `play()` restarts at once.
+    private func nothingToPlay(_ state: PlaybackState) {
+        suppression = .none
+        if state == .idle { deactivate() }
     }
 
     /// A transport key for `entryID`; `replacing` forgets the keys of everything a `setCurrent` drops.
@@ -681,8 +689,7 @@ public final class Player<Item: Hashable & Sendable> {
     /// has nothing left to resume.
     private func reportFailure(at index: Int, _ error: PlaybackError) {
         self.error = error
-        suppression = .none
-        deactivate()
+        nothingToPlay(.idle)
         refreshState()
         send(.itemFailed(index: index, error: error))
     }
