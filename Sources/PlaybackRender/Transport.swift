@@ -168,9 +168,9 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         }
     }
 
-    /// Output gain, clamped to 0...1, heard at once (unlike a processor, which acts on audio queued
-    /// ~2 s ahead). It holds across items, seeks and route changes. No ramp: an app fades by calling it repeatedly.
+    /// Gain applied at once, clamped to 0...1 (non-finite ignored); apps fade by calling it repeatedly.
     public func setVolume(_ volume: Float) {
+        guard volume.isFinite else { return }
         queue.async { [self] in output.setVolume(min(max(volume, 0), 1)) }
     }
 

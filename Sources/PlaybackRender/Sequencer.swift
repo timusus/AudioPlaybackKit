@@ -132,7 +132,7 @@ final class Sequencer: @unchecked Sendable {
         }
     }
 
-    /// Empties the window and interrupts the source in flight; `pull` reports `.ended` from here.
+    /// Empties the window and interrupts the source in flight; `pull` returns `.pending` from here until a new item is set.
     func clear() {
         let interruptStale = lock.withLock {
             window = []

@@ -187,6 +187,12 @@ final class TransportTests: XCTestCase {
         transport.setVolume(-1)
         timer.sync()
         XCTAssertEqual(output.volume, 0)
+
+        transport.setVolume(0.5)
+        transport.setVolume(.nan)
+        transport.setVolume(.infinity)
+        timer.sync()
+        XCTAssertEqual(output.volume, 0.5)
     }
 
     func testVolumeHoldsAcrossAnItemChangeASeekAndARouteChange() {
