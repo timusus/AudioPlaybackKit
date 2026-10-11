@@ -275,11 +275,15 @@ public final class FFmpegStreamDecoder {
             if reason == .failure, let failure { throw failure }
             // The seek is the answer to an interruption, so both sides of it are cleared before
             // anything reads: leaving either latched would make one interrupted read permanent.
-            // Not one aimed at this generation, though: that is meant for this seek.
+            // Not one aimed at this generation, though: that is meant for this seek, so it is raised
+            // again. The reader is cleared outside the lock, and one landing after it is seen here.
+            reader.clearInterrupt()
             interruptLock.withLock {
-                if let interruptedThrough, interruptedThrough >= generation { return }
-                reader.clearInterrupt()
-                stream_decoder_clear_interrupt(handle)
+                if let interruptedThrough, interruptedThrough >= generation {
+                    raiseInterrupt()
+                } else {
+                    stream_decoder_clear_interrupt(handle)
+                }
             }
             var landed: Double = 0
             let status = stream_decoder_seek(handle, seconds, &landed)
