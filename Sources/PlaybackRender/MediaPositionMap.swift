@@ -54,6 +54,12 @@ struct MediaPositionMap: Sendable {
         writtenEnd = time
     }
 
+    /// An underrun re-anchored the clock at `writtenEnd` once all of it was heard: the playhead holds
+    /// there, as after a reset, while audio written next is still reaching the hardware.
+    mutating func holdAtWrittenEnd() {
+        epochStart = writtenEnd
+    }
+
     mutating func append(_ tag: SegmentTag, sampleRate: Double) {
         if let last = segments.last, last.tag.item == tag.item, last.sampleRate == sampleRate,
            last.tag.mediaStartFrame + last.tag.frameCount == tag.mediaStartFrame {

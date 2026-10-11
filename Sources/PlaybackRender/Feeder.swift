@@ -133,9 +133,11 @@ final class Feeder {
             restart(from: currentPosition(at: map.playhead(currentTime: time, outputLatency: output.outputLatency)))
         }
 
-        // Pause before refilling: audio stamped behind a running clock never plays.
+        // Pause before refilling: audio stamped behind a running clock never plays. Only once the
+        // written end is heard, so the clock runs one output latency past it.
         if outputRunning, playhead() >= map.writtenEnd {
             output.setRate(0, at: map.writtenEnd)
+            map.holdAtWrittenEnd()
             outputRunning = false
             if !upstreamEnded { setStatus(.buffering) }
         }

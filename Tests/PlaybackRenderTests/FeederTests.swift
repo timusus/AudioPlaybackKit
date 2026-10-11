@@ -12,8 +12,9 @@ final class FeederTests: XCTestCase {
     private var events: [FeederEvent] = []
     private var feeder: Feeder!
 
-    private func makeFeeder(_ items: [FakeUpstream.Item], chunkFrames: Int64 = 2) {
+    private func makeFeeder(_ items: [FakeUpstream.Item], chunkFrames: Int64 = 2, latency: TimeInterval = 0) {
         output = FakeAudioOutput()
+        output.outputLatency = latency
         upstream = FakeUpstream(items, chunkFrames: chunkFrames)
         events = []
         feeder = Feeder(output: output, upstream: upstream) { [unowned self] in events.append($0) }
@@ -113,6 +114,39 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(crossed, [0, 1])
         XCTAssertEqual(heard, ramp(0, 0..<4))
         XCTAssertEqual(output.rate, 0)
+    }
+
+    // iOS reports an output latency, so the heard playhead trails the clock by it.
+    func testWithOutputLatencyTheEndIsHeardBeforeEnded() {
+        makeFeeder([item(0, 8)], latency: 0.25)
+        feeder.play()
+        run(for: 3)
+
+        XCTAssertEqual(positions.map(\.mediaFrame), [0, 1, 2, 3, 4, 5, 6, 7, 8])
+        XCTAssertEqual(crossed, [0])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        guard case .status(.ended)? = events.last else { return XCTFail("ended is not last: \(events)") }
+        XCTAssertEqual(heard, ramp(0, 0..<8))
+        XCTAssertEqual(output.rate, 0)
+    }
+
+    func testWithOutputLatencyAnUnderrunResumesWithNoLostOrRepeatedFrames() {
+        makeFeeder([item(0, 16)], latency: 0.25)
+        upstream.available = 2
+        feeder.play()
+        run(for: 1.5)
+
+        XCTAssertEqual(output.currentTime(), 1, "re-anchored at the written end")
+        XCTAssertEqual(output.rate, 0)
+        XCTAssertEqual(positions.map(\.mediaFrame), [0, 1, 2, 3, 4])
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering])
+
+        upstream.available = nil
+        feeder.pump()
+        run(for: 4)
+        XCTAssertEqual(heard, ramp(0, 0..<16))
+        XCTAssertEqual(positions.map(\.mediaFrame), Array(0...16))
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing, .ended])
     }
 
     func testAnAutoFlushMidItemResuppliesFromTheFlushPosition() {
