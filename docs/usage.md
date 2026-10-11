@@ -224,10 +224,11 @@ speaker reached the new item.
 `setProcessors(_:)`. They run on interleaved Float32 PCM on the transport's queue, in order, and
 may drop frames (`ProcessorOutput.dropped`, so positions stay in media time) but never add them. A
 processor cannot change the sample rate; `configure(_:)` receives the item's format, so a filter that
-depends on the rate (an EQ) derives its coefficients there and again after each `flush()`. Toggling a
-processor or changing its `isActive` or output format needs another `setProcessors` call, which
-never flushes: the old chain drains into the queued audio and the new one takes over at the next
-chunk. A processor's own parameters (enabled, a gain, EQ bands) apply live, read under its own lock.
+depends on the rate (an EQ) derives its coefficients there and again after each `flush()`. Adding or
+removing a processor, changing its `isActive` or changing its output format needs another
+`setProcessors` call, which never flushes: the old chain drains into the queued audio and the new
+one takes over at the next chunk. A processor's own parameters (a gain, EQ bands, or an "enabled"
+flag it reads inside a stage that stays `isActive`) apply live, read under its own lock.
 
 **Processed PCM is heard about one feed depth later.** A change a processor makes at "now", or a new
 chain from `setProcessors`, reaches the speaker roughly two seconds on, without a gap. Fades,

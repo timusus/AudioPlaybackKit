@@ -461,6 +461,50 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(positions, positionsOfLong())
     }
 
+    // The pending chain is swapped in by the decode job that follows the seek, not lost with the
+    // queued audio the seek discards, and it starts at the new position.
+    func testAPendingChainRacingASeekIsAppliedOnceFromTheNewPosition() {
+        playLongThenChange(processors: []) {
+            transport.setProcessors([GainProcessor()])
+            transport.seek(item: "a", toFrame: 40)
+            pump()
+        }
+
+        XCTAssertEqual(heard, (0..<8).map(Float.init) + (40..<80).map { Float($0) * 2 })
+        XCTAssertEqual(output.flushes, [0, 1])
+        XCTAssertEqual(statuses.last, .ended)
+        XCTAssertEqual(positions.last, Heard(item: "a", frame: 80))
+    }
+
+    func testAPendingChainRacingASetCurrentIsAppliedOnceFromTheNewItem() {
+        playLongThenChange(processors: []) {
+            transport.setProcessors([GainProcessor()])
+            transport.setCurrent(item: "b", source: b)
+            pump()
+        }
+
+        XCTAssertEqual(heard, (0..<8).map(Float.init) + allOfB.map { $0 * 2 })
+        XCTAssertEqual(crossed, ["a", "b"])
+        XCTAssertEqual(statuses.last, .ended)
+    }
+
+    // The output format changes (stereo to mono) at a chunk boundary inside the item: the old chain
+    // drains first, and positions stay in media time.
+    func testAPendingChainThatChangesTheFormatMidItemLosesAndRepeatsNothing() {
+        transport.setCurrent(item: "a", source: FakeItemSource(format: PCMFormat(sampleRate: 8, channelCount: 2), frames: 80, chunkFrames: 2))
+        transport.play()
+        pump()
+        run(for: 1)
+        transport.setProcessors([MonoProcessor()])
+        run(for: 9.25)
+
+        // Stereo sample f * 2 + c, averaged to f * 2 + 0.5.
+        XCTAssertEqual(heard, (0..<48).map(Float.init) + (24..<80).map { Float($0 * 2) + 0.5 })
+        XCTAssertEqual(positions, positionsOfLong())
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(statuses.last, .ended)
+    }
+
     func testSetProcessorsAfterAProcessorFailedReplaysFromTheHeardFrame() {
         transport.setProcessors([FixedRateProcessor(sampleRate: 44100)])
         transport.setCurrent(item: "a", source: a)

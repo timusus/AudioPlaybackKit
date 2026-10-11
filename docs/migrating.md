@@ -144,8 +144,9 @@ Each step ships on its own. Put the new path behind a flag until step 5.
   of the playhead. Fades, ducks and mutes go through `setVolume`, called repeatedly from the app's timer;
   never from a processor.
 - **A toggle is heard about two seconds late, without a gap.** A processor's own parameters apply live
-  from the next chunk it processes, and `setProcessors` drains the old chain and swaps at the next chunk;
-  neither flushes. Call `setProcessors` only when the chain, `isActive` or the output format changes.
+  from the next chunk it processes (including an "enabled" flag it reads inside a stage that stays
+  `isActive`), and `setProcessors` drains the old chain and swaps at the next chunk; neither flushes.
+  Call `setProcessors` only when the chain, `isActive` or the output format changes.
 - **Recovery lands paused.** A failed renderer or a media-services reset is rebuilt once and the transport
   lands paused at the same position. The app calls `play()` again when it still means to play. A second
   failure surfaces as `TransportEvent.failed`, and `play()` does nothing until a `seek`, `setCurrent` or
