@@ -161,8 +161,9 @@ final class ToneSource: ItemSource, @unchecked Sendable {
 /// that the public API keeps inside. Those two are read by reflection, for measuring only.
 final class CheckProbe: @unchecked Sendable {
     struct Event { let host: Double; let kind: String; let detail: String }
-    struct Position { let host: Double; let item: String; let seconds: Double; let clock: Double; let latency: Double }
-    struct Flush { let host: Double; let flushTime: Double?; let clock: Double; let latency: Double }
+    struct Position { let host: Double; let item: String; let seconds: Double; let clock: Double; let latency: Double; let sampleRate: Double }
+    /// `refeed` is the media second the feeder restarted from, read from its state shortly after the flush.
+    struct Flush { let host: Double; let flushTime: Double?; let clock: Double; let latency: Double; var refeed: Double? }
 
     let transport: Transport<String>
     private let lock = NSLock()
@@ -182,8 +183,13 @@ final class CheckProbe: @unchecked Sendable {
         observer = NotificationCenter.default.addObserver(forName: .AVSampleBufferAudioRendererWasFlushedAutomatically, object: nil, queue: nil) { [weak self] note in
             guard let self, let (synchronizer, renderer) = Self.current(transport), note.object as AnyObject? === renderer else { return }
             let flushTime = (note.userInfo?[AVSampleBufferAudioRendererFlushTimeKey] as? NSValue)?.timeValue.seconds
-            let flush = Flush(host: hostNow(), flushTime: flushTime, clock: synchronizer.currentTime().seconds, latency: Session.shared.outputLatency)
+            let flush = Flush(host: hostNow(), flushTime: flushTime, clock: synchronizer.currentTime().seconds, latency: Session.shared.outputLatency, refeed: nil)
             lock.withLock { self._flushes.append(flush) }
+            // The feeder restarts on its next pump; the published position is clamped, its restart position is not.
+            Task { [weak self] in
+                try? await pause(0.3)
+                self?.recordRefeed(forFlushAt: flush.host)
+            }
             Log.shared.write("AUTO-FLUSH flushTime \(flushTime.map { fmt($0) } ?? "?") clock \(fmt(flush.clock)) latency \(fmt(flush.latency * 1000, 1)) ms \(Session.outputs)")
         }
     }
@@ -197,6 +203,14 @@ final class CheckProbe: @unchecked Sendable {
     }
 
     var synchronizer: AVSampleBufferRenderSynchronizer { Self.current(transport)!.0 }
+
+    private func recordRefeed(forFlushAt host: Double) {
+        guard let frame = reflected(transport, "feeder", "restartPosition", "mediaFrame") as? Int64,
+              let rate = positions.last?.sampleRate else { return }
+        lock.withLock {
+            if let i = _flushes.firstIndex(where: { $0.host == host }) { _flushes[i].refeed = Double(frame) / rate }
+        }
+    }
 
     deinit {
         observer.map(NotificationCenter.default.removeObserver)
@@ -238,7 +252,7 @@ final class CheckProbe: @unchecked Sendable {
         let host = hostNow()
         switch event {
         case let .position(item, frame, sampleRate, _):
-            let position = Position(host: host, item: item, seconds: Double(frame) / sampleRate, clock: clock, latency: Session.shared.outputLatency)
+            let position = Position(host: host, item: item, seconds: Double(frame) / sampleRate, clock: clock, latency: Session.shared.outputLatency, sampleRate: sampleRate)
             lock.withLock { _positions.append(position) }
         case let .crossed(item):
             add(Event(host: host, kind: "crossed", detail: item))

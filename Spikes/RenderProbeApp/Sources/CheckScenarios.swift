@@ -358,14 +358,17 @@ enum CheckScenarios {
     static func flushReport(_ probe: CheckProbe, _ flush: CheckProbe.Flush) -> [String: Any] {
         let before = probe.positions.filter { $0.host < flush.host && $0.host > flush.host - 1 && $0.seconds > 0 }
         let offset = median(before.map { $0.clock - $0.latency - $0.seconds })
-        let refeed = probe.positions.filter { $0.host > flush.host && $0.host < flush.host + 0.5 }.map(\.seconds).min()
+        // Positions never step back within an item, so their minimum measures the clamp, not the re-feed.
+        let published = probe.positions.filter { $0.host > flush.host && $0.host < flush.host + 0.5 }.map(\.seconds).min()
+        let refeed = flush.refeed
         let heard = flush.clock - flush.latency - offset
         let flushMedia = flush.flushTime.map { $0 - offset }
         var report: [String: Any] = [
             "flushTime": flush.flushTime.map(round3) ?? NSNull(), "clockAtNotification": round3(flush.clock), "outputLatencyMs": round3(flush.latency * 1000),
             "flushTimeMinusClockMs": flush.flushTime.map { round3(($0 - flush.clock) * 1000) } ?? NSNull(),
+            "publishedAfterFlush": published.map(round3) ?? NSNull(),
         ]
-        guard !before.isEmpty, let refeed else { return report.merging(["note": "no positions around the flush"]) { a, _ in a } }
+        guard !before.isEmpty, let refeed else { return report.merging(["note": "no positions before the flush, or the feeder's restart position was unreadable"]) { a, _ in a } }
         report["refeedS"] = round3(refeed)
         report["refeedMinusHeardMs"] = round3((refeed - heard) * 1000)
         report["refeedMinusFlushTimeMs"] = flushMedia.map { round3((refeed - $0) * 1000) } ?? NSNull()
