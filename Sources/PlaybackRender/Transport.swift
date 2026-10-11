@@ -24,8 +24,8 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     case failed(item: Item?, error: any Error)
 }
 
-/// Gap between pumps. The output plays at most this times the rate between refills (0.3 s at 3x),
-/// under the feeder's 0.5 s `resumeDepth`, so the pump's cadence alone never starves it.
+/// Gap between pumps. The feeder's 0.5 s `resumeDepth` is playout time at any rate, so even a pump
+/// the OS coalesces to twice this never starves the output.
 let pumpInterval: TimeInterval = 0.1
 
 /// The one thing an app drives (ADR-0018): a current item, optionally one or more next items joined

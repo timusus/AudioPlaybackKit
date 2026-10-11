@@ -222,6 +222,26 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(output.rate, 2)
     }
 
+    // macOS coalesces the 0.1 s pump timer to about 0.2 s: at 3x that tick plays 0.6 s of audio, more
+    // than a resume depth counted in media time.
+    func testCoalescedTicksAtThreeTimesNeverRunTheOutputDry() {
+        let tenths = PCMFormat(sampleRate: 10, channelCount: 1)
+        makeFeeder([item(0, 400, tenths)], chunkFrames: 1)
+        feeder.setRate(3)
+        // Decode has just reached half a second when the output could start, then supplies 0.8 s a tick.
+        upstream.available = 5
+        feeder.play()
+        for _ in 0..<25 {
+            output.advance(by: 0.2)
+            upstream.available = (upstream.available ?? 0) + 8
+            feeder.pump()
+        }
+
+        XCTAssertEqual(statuses, [.buffering, .playing])
+        let gaps = output.played.filter { if case let .silence(_, duration) = $0 { duration > 1e-6 } else { false } }
+        XCTAssertEqual(gaps, [])
+    }
+
     // #102: the iPhone clock steps back about 50 ms on a rate change, an interruption's resume and a
     // late auto-flush; an app counting listening time from position deltas must never see one go back.
     func testThePositionHoldsWhenTheClockStepsBackOnARateChange() {

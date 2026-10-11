@@ -34,6 +34,9 @@ enum FeederEvent {
 /// `targetDepth` written ahead of the playhead, pauses through an underrun and re-feeds after any
 /// flush (ADR-0018). It knows nothing of items beyond the tags.
 ///
+/// Both depths are playout time, wall seconds at the current rate: the time between pumps is wall
+/// time, so a depth in media time would shrink at speed until one late pump runs the output dry.
+///
 /// Threading: confined to the caller's one serial queue; output events, on any thread, wait in an inbox
 /// that the next `pump()` drains, and call `wake` so the caller pumps now.
 final class Feeder {
@@ -152,7 +155,7 @@ final class Feeder {
 
         let depth = map.writtenEnd - playhead()
         if playWhenReady, !outputRunning, !failed, status == .buffering,
-           upstreamEnded ? depth > 0 : depth >= resumeDepth {
+           upstreamEnded ? depth > 0 : depth >= resumeDepth * rate {
             output.setRate(rate, at: nil)
             outputRunning = true
             setStatus(.playing)
@@ -192,7 +195,7 @@ final class Feeder {
     /// Pulls even after an end: an end is an underrun with no supply coming, so supply that comes
     /// later (a next item) is written at `writtenEnd` and resumes through the underrun path.
     private func fill() {
-        while !failed, map.writtenEnd - playhead() < targetDepth {
+        while !failed, map.writtenEnd - playhead() < targetDepth * rate {
             let supply = upstream.pull()
             if case .ended = supply {
                 upstreamEnded = true
