@@ -307,7 +307,7 @@ private func defaultOutputDevice() -> AudioObjectID? {
 }
 
 /// BlackHole if installed, since it is silent and always there on a test Mac; otherwise any other
-/// output device Core Audio lists. Skips when there is none.
+/// output device Core Audio lists that answers. Skips when there is none.
 private func otherOutputDevice() throws -> String {
     var address = AudioObjectPropertyAddress(
         mSelector: kAudioHardwarePropertyDevices,
@@ -322,12 +322,26 @@ private func otherOutputDevice() throws -> String {
     }
 
     let current = defaultOutputDevice()
-    let outputs = devices.filter { $0 != current && hasOutputStreams($0) }.compactMap(uniqueID)
-    if outputs.contains("BlackHole2ch_UID") { return "BlackHole2ch_UID" }
-    guard let other = outputs.first else {
-        throw XCTSkip("no BlackHole2ch_UID nor any other output device than the default")
+    let outputs = devices.filter { $0 != current && hasOutputStreams($0) }
+    let blackHole = outputs.filter { uniqueID($0) == "BlackHole2ch_UID" }
+    guard let other = (blackHole + outputs).first(where: answersCoreAudio).flatMap(uniqueID) else {
+        throw XCTSkip("no output device other than the default that answers Core Audio")
     }
     return other
+}
+
+/// A wedged HAL driver (seen with BlackHole after the Mac idled, until coreaudiod restarts) blocks
+/// every IOProc call for coreaudiod's 60 s IPC timeout, and the renderer's first enqueue with it.
+private func answersCoreAudio(_ device: AudioObjectID) -> Bool {
+    let answered = DispatchSemaphore(value: 0)
+    Thread.detachNewThread {
+        var proc: AudioDeviceIOProcID?
+        if AudioDeviceCreateIOProcIDWithBlock(&proc, device, nil, { _, _, _, _, _ in }) == noErr, let proc {
+            AudioDeviceDestroyIOProcID(device, proc)
+        }
+        answered.signal()
+    }
+    return answered.wait(timeout: .now() + 2) == .success
 }
 
 private func hasOutputStreams(_ device: AudioObjectID) -> Bool {
