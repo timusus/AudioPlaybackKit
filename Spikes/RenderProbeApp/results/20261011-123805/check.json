@@ -1,0 +1,257 @@
+{
+  "complete" : true,
+  "device" : "iPhone",
+  "ios" : "26.6.1",
+  "micPermission" : "granted",
+  "scenarios" : [
+    {
+      "endedMinusHeardEndMs" : 162.79300000000001,
+      "guided" : false,
+      "heardSeconds" : 4.0499999999999998,
+      "id" : "A1",
+      "lastPositionS" : 4,
+      "outputLatencyMs" : 9.7289999999999992,
+      "playToHeardMs" : 266.37700000000001,
+      "playToPlayingEventMs" : 220.05500000000001,
+      "question" : "play to heard; .ended against the heard end",
+      "seconds" : 6.1180000000000003,
+      "snrDb" : 23.373999999999999,
+      "status" : "fail",
+      "verdict" : "heard 4.050 s of 4; .ended 162.8 ms after the heard end; play -> heard 266 ms"
+    },
+    {
+      "guided" : false,
+      "heardMinusPositionMedianMs" : -17.774000000000001,
+      "heardMinusPositionMs" : [
+        0.71399999999999997,
+        0.27800000000000002,
+        -142.28299999999999,
+        0.89600000000000002,
+        -17.774000000000001,
+        -133.381,
+        -103.593,
+        0.54300000000000004,
+        -17.838999999999999,
+        -150.47900000000001,
+        0.46100000000000002
+      ],
+      "id" : "A2",
+      "inputLatencyMs" : 0.625,
+      "outputLatencyMs" : 9.7289999999999992,
+      "positionVsClockMinusLatencyMs" : {
+        "max" : 1.4259999999999999,
+        "median" : 0.66600000000000004,
+        "min" : 0.28699999999999998
+      },
+      "question" : "position against the synchronizer and the heard click",
+      "seconds" : 14.391,
+      "status" : "fail",
+      "verdict" : "click heard -17.8 ms after the position said (spread 151.4 ms, 11 clicks); outputLatency 9.7 ms; position = clock - latency within 1.4 ms"
+    },
+    {
+      "dropoutMs" : [
+        51,
+        139
+      ],
+      "glitch" : {
+        "dips" : [
+          {
+            "at" : 2.6800000000000002,
+            "ms" : 8
+          },
+          {
+            "at" : 2.6890000000000001,
+            "ms" : 11
+          },
+          {
+            "at" : 2.7040000000000002,
+            "ms" : 11
+          },
+          {
+            "at" : 2.7160000000000002,
+            "ms" : 6
+          },
+          {
+            "at" : 2.7229999999999999,
+            "ms" : 7
+          },
+          {
+            "at" : 2.7309999999999999,
+            "ms" : 6
+          },
+          {
+            "at" : 6.7549999999999999,
+            "ms" : 136
+          }
+        ],
+        "dipsNearMarks" : 7,
+        "levelDb" : -51.692,
+        "phaseJumps" : 1,
+        "phaseJumpsNearMarks" : 1,
+        "snrDb" : 23.614000000000001
+      },
+      "guided" : false,
+      "id" : "A3",
+      "positionJumpMs" : 1.0740000000000001,
+      "positionRateAt2x" : 2,
+      "question" : "dropout at rate 1 -> 2 -> 1",
+      "seconds" : 11.728999999999999,
+      "status" : "measured",
+      "verdict" : "dropout 51 ms to 2x, 139 ms back (ADR: 97 \/ 140 ms); position runs at 2.00x; largest position jump 1 ms"
+    },
+    {
+      "crossedAfterHeardJoinMs" : {
+        "B" : 72.233999999999995,
+        "C" : 72.867000000000004
+      },
+      "ended" : true,
+      "failed" : [
+
+      ],
+      "fixtureToTone48kDipsMs" : [
+
+      ],
+      "guided" : false,
+      "heardJoinsAfterPlayS" : [
+        3.2330000000000001,
+        6.2329999999999997
+      ],
+      "id" : "A4",
+      "question" : "gapless joins: fixture 44.1k stereo -> 48k stereo -> 44.1k mono",
+      "seconds" : 10.82,
+      "status" : "measured",
+      "tone48kToTone44kMonoDipMs" : [
+        0
+      ],
+      "toneJoinGlitch" : {
+        "dips" : [
+
+        ],
+        "dipsNearMarks" : 0,
+        "levelDb" : -50.195,
+        "phaseJumps" : 0,
+        "phaseJumpsNearMarks" : 0,
+        "snrDb" : 25.395
+      },
+      "verdict" : "fixture 44.1k -> 48k dips [] ms; 48k stereo -> 44.1k mono dip 0 ms (ADR: 8-11 ms); crossed 72 \/ 73 ms after the heard joins"
+    },
+    {
+      "firstPositionAfterSeekS" : 12,
+      "guided" : false,
+      "id" : "A5",
+      "positionMinusHeardAfter2sMs" : 1.7689999999999999,
+      "question" : "seek: silence and landing",
+      "seconds" : 7.3739999999999997,
+      "seekToSoundMs" : 375.375,
+      "silenceMs" : 339,
+      "status" : "pass",
+      "verdict" : "landed at 12.000 s of 12; sound back 375 ms after the call (silence 339 ms); position vs heard 2 s on 1.8 ms"
+    },
+    {
+      "crossed" : [
+        "1",
+        "2",
+        "3"
+      ],
+      "endedCount" : 2,
+      "guided" : false,
+      "id" : "A6",
+      "joinDipMs" : 0,
+      "question" : "setNext near the end, and after .ended",
+      "seconds" : 11.926,
+      "setNextAfterEndedToHeardMs" : 108.039,
+      "status" : "pass",
+      "statusesAfterFirstEnd" : [
+        "buffering",
+        "playing",
+        "ended"
+      ],
+      "verdict" : "join dip 0 ms; crossed [\"1\", \"2\", \"3\"]; .ended 2x; setNext after .ended heard 108 ms later"
+    },
+    {
+      "flushes" : [
+
+      ],
+      "guided" : false,
+      "id" : "A7",
+      "question" : "auto-flush re-feed (port override): replayed or skipped audio",
+      "seconds" : 10.396000000000001,
+      "status" : "inconclusive",
+      "verdict" : "no auto-flush on the port overrides"
+    },
+    {
+      "guided" : true,
+      "id" : "G1",
+      "question" : "Plug in wired headphones",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G2",
+      "question" : "Unplug the headphones",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G3",
+      "question" : "Connect Bluetooth",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G4",
+      "question" : "Disconnect Bluetooth",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G5",
+      "question" : "Pick AirPlay",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G6",
+      "question" : "Back to the iPhone",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G7",
+      "question" : "Take a call",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G8",
+      "question" : "Ask Siri",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    },
+    {
+      "guided" : true,
+      "id" : "G9",
+      "question" : "Reset media services (#100)",
+      "seconds" : 0,
+      "status" : "skipped",
+      "verdict" : "skipped by --skip-guided"
+    }
+  ],
+  "skipGuided" : true,
+  "started" : "2026-10-11T01:40:16Z"
+}

@@ -1,0 +1,36 @@
+device 00008140-000539602E90401C, app args: --check --skip-guided
+2026-10-11 12:38:08.280 xcodebuild[91862:11500736] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+App installed:
+• bundleID: com.simplecityapps.renderprobe
+• installationURL: file:///private/var/containers/Bundle/Application/366E7510-67A3-4D2C-8940-31BBB2581C1F/RenderProbe.app/
+• launchServicesIdentifier: unknown
+• databaseUUID: 490CDBE6-833A-43BA-BBD3-156E9580DF4E
+• databaseSequenceNumber: 5624
+• options: 
+iPhone is locked: unlock it within 2 minutes
+launched; polling for check-done every 30 s (30 min cap)
+  waiting (0 min)
+  waiting (1 min)
+# PlaybackRender device check
+
+iPhone iOS 26.6.1, started 2026-10-11T01:40:16Z, mic granted
+
+| Scenario | Status | Result |
+|---|---|---|
+| A1 | fail | heard 4.050 s of 4; .ended 162.8 ms after the heard end; play -> heard 266 ms |
+| A2 | fail | click heard -17.8 ms after the position said (spread 151.4 ms, 11 clicks); outputLatency 9.7 ms; position = clock - latency within 1.4 ms |
+| A3 | measured | dropout 51 ms to 2x, 139 ms back (ADR: 97 / 140 ms); position runs at 2.00x; largest position jump 1 ms |
+| A4 | measured | fixture 44.1k -> 48k dips [] ms; 48k stereo -> 44.1k mono dip 0 ms (ADR: 8-11 ms); crossed 72 / 73 ms after the heard joins |
+| A5 | pass | landed at 12.000 s of 12; sound back 375 ms after the call (silence 339 ms); position vs heard 2 s on 1.8 ms |
+| A6 | pass | join dip 0 ms; crossed ["1", "2", "3"]; .ended 2x; setNext after .ended heard 108 ms later |
+| A7 | inconclusive | no auto-flush on the port overrides |
+| G1 | skipped | skipped by --skip-guided |
+| G2 | skipped | skipped by --skip-guided |
+| G3 | skipped | skipped by --skip-guided |
+| G4 | skipped | skipped by --skip-guided |
+| G5 | skipped | skipped by --skip-guided |
+| G6 | skipped | skipped by --skip-guided |
+| G7 | skipped | skipped by --skip-guided |
+| G8 | skipped | skipped by --skip-guided |
+| G9 | skipped | skipped by --skip-guided |
+results in results/20261011-123805
