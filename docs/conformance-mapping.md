@@ -211,10 +211,11 @@ inside MPEG-TS (`TsExtractor`).
 
 | media3 asset or test | Ours |
 |---|---|
-| `bear.flac`, `bear_one_metadata_block.flac`, `bear_no_min_max_frame_size.flac`, `bear_no_seek_table.flac`, `bear_placeholder_seek_point_only.flac` | same names; I/O-error probe re-reads exceed the byte budget and unknown-length seeks land early (#111, #110, closed not planned) |
+| `bear.flac`, `bear_no_min_max_frame_size.flac`, `bear_no_seek_table.flac`, `bear_placeholder_seek_point_only.flac` | same names; I/O-error probe re-reads exceed the byte budget and unknown-length seeks land early (#111, #110, closed not planned) |
+| `bear_one_metadata_block.flac` | same name; only the partial-read I/O-error probe re-reads exceed the byte budget (#111); the plain I/O-error run stays in budget and there is no unknown-length seek finding (#110 does not apply) |
 | `bear_no_num_samples.flac`, `bear_no_seek_table_no_num_samples.flac` | same names; no findings (STREAMINFO has no total, duration reads 0) |
 | `bear_with_vorbis_comments.flac`, `bear_with_vorbis_comments_invalid_mutf8.flac` | same names; same findings as `bear.flac` |
-| `bear_with_id3.flac`, `bear_with_picture.flac` | same names; same findings as `bear.flac` (the picture block raises the budget) |
+| `bear_with_id3.flac`, `bear_with_picture.flac` | same names; same seek findings as `bear.flac` (#110); the probe byte counts differ, pinned per file in `KnownIssues.swift` (#111); the picture block raises the budget |
 | `bear_uncommon_sample_rate.flac`, `bear_32bit.flac` | same names; the 44 kHz seek lands early (#110), no seek finding for 32-bit |
 | ID3-disabled and picture-disabled variants, metadata-only and seeker-only cases | n/a (API: flags; metadata) |
 
