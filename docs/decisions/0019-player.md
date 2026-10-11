@@ -85,7 +85,7 @@ public typealias ItemSourceFactory<Item> = @MainActor (Item) throws -> any ItemS
 
 /// media3 `Player.State`: `.idle` has nothing prepared or stopped on an error; `.buffering` is
 /// `playWhenReady` with decode behind the clock, or an item opening; `.ready` can play at once;
-/// `.ended` is the end of the last item (or of the current one with `pauseAtEndOfItem`).
+/// `.ended` is the end of the last item.
 public enum PlaybackState: Sendable { case idle, buffering, ready, ended }
 
 /// Why audio is not heard although `playWhenReady` is true and the state is `.ready`.
@@ -95,6 +95,8 @@ public enum PlaybackSuppression: Sendable {
     case interruption
 }
 
+/// media3 `Player.RepeatMode`. Only the advance at the end of an item follows `.one`; `skipToNext`
+/// and `skipToPrevious` treat it as `.off`.
 public enum RepeatMode: Sendable { case off, all, one }
 
 public struct PlaybackError: Error, Sendable {
@@ -106,10 +108,10 @@ public struct PlaybackError: Error, Sendable {
 /// Discrete things the state cannot carry: each is sent once, in order.
 public enum PlayerEvent<Item: Hashable & Sendable>: Sendable {
     /// `currentIndex` moved: `.auto` when the previous item ended, `.seek` on `skipToNext`, `seek(to:itemAt:)`
-    /// or an edit that removed the current item, `.repeat` when `.one` restarted it.
+    /// or an edit that removed the current item, `.repeat` when the end of an item restarted it.
     case itemTransition(from: Int?, to: Int?, reason: TransitionReason)
-    /// The item at `index` failed. If it is the current item the player is `.idle` with `error` set;
-    /// a later item is dropped from the pre-arm and reported here, the queue entry stays.
+    /// The item at `index` failed, and the player is `.idle` on it with `error` set. A next item that
+    /// failed while the current played is reported once playback reaches it, after its `itemTransition`.
     case itemFailed(index: Int, error: PlaybackError)
     /// The seek's audio reached the speaker; `position` is where it landed.
     case seekLanded(index: Int, position: TimeInterval)
@@ -175,9 +177,16 @@ public final class Player<Item: Hashable & Sendable> {
 `moveMediaItems` and `removeMediaItems`: the current item keeps playing through any insert or move,
 and `currentIndex` is renumbered. Removing the current item plays the item that takes its index from
 position 0 (the next, or under `.all` the first); removing the last remaining item leaves `.idle` with
-no current index. Removing the current item when it is the last leaves index 0 in `.ended`, as media3
-does. `setItems` and `replaceItems` send no `itemTransition`. Any edit that changes which item follows
-the current re-issues `setNext` (or `clearNext`), so the pre-armed next is always the list's next.
+no current index. Removing the current item when it is the last leaves index 0 in `.ended` (under `.all`
+it plays index 0), and under `.one` removing the current item always ends, as media3 does
+(`removeMediaItem_withRepeatModeOne_endsPlaybackAndStopsLoading`). Adding to an ended list stays
+`.ended` until a seek, as media3 does. `setItems` and `replaceItems` send no `itemTransition`. Any edit
+that changes which item follows the current re-issues `setNext` (or `clearNext`), so the pre-armed next
+is always the list's next. The transport keys each load and each arm afresh and the player resolves a
+`.crossed` key to its entry, so a crossing into a next armed before an edit is reported at that entry's
+new index. Once decode has reached the armed next the transport has joined into it, so it is still heard:
+an insert after that point plays after it (media3 would drop the read-ahead), and a removed next is
+replaced by a jump to the list's next as soon as the crossing arrives.
 
 **State.** `playWhenReady` is the app's intent and only the app or a session event changes it.
 `state` is what the transport reports: `TransportStatus.paused` or `.playing` with a current item is
@@ -217,9 +226,12 @@ as `itemFailed` for that item; the app, which knows the stream can be re-resolve
 
 **Errors.** The `Transport` reports a source, processor or output failure with its item. If the item is
 current, `error` is set, `state` is `.idle`, `playWhenReady` is kept and `play()` re-prepares the current
-item from `position` (media3: `prepare()` after an error). If it is a later item (the pre-arm opened it
-early), the player sends `itemFailed`, drops it as next and continues the current item; at the end of the
-current the queue stops `.idle` with `error` set on that item unless the app removed or replaced it. There
+item from `position` (media3: `prepare()` after an error). If it is the armed next (the pre-arm opened
+it early, or it failed while decoded ahead), the current item plays on, and the failure is held until
+playback reaches it: then the player moves to that item, sends `itemTransition(.auto)`, stops `.idle`
+with `error` set and sends `itemFailed`, as media3 reports a read-ahead error only after the transition
+(`mediaPeriodMaybeThrowPrepareError_isNotThrownUntilPlaybackReachedFailingItem`). If the app removes or
+replaces it first, it is never reported. There
 is no automatic skip: Shuttle2 skips up to 15 failed tracks unless the track already played and
 Podcasts stops, so the policy is the app's, in one `events` handler.
 
@@ -293,7 +305,7 @@ struct NowPlayingBar: View {
 | Ordered list, current index, insert, move, remove, replace | player | Needed to pre-arm the right next item and to renumber on edits; media3 `Player` has them all |
 | Repeat `.off`, `.all`, `.one` | player | The player must know what follows the last item to arm it gaplessly; `.one` is the same entry armed twice (`Transport` allows a repeated item) |
 | Shuffle order | app | Both apps keep it in Kotlin: Shuttle2's `QueueModel` holds entries plus a `ShuffleOrder` of indices, with media3 `DefaultShuffleOrder` semantics (the current item first, an add goes to the end of the order, play-next after the current, a move moves within the order and never reshuffles). It is persisted and shared with Android. The player takes the list in play order and `replaceItems` keeps the current track playing when shuffle toggles. Putting a second `ShuffleOrder` in the player would be a second record of the same thing |
-| Pause at end of item | player | `pauseAtEndOfItem`, media3 `setPauseAtEndOfMediaItems`: the player sends `clearNext`, and at `.ended` sets `playWhenReady` false, advances `currentIndex` and prepares the next item paused at 0. Shuttle2's `setPauseAtEnd` and `onPausedAtEnd` map onto it |
+| Pause at end of item | player | `pauseAtEndOfItem`, media3 `setPauseAtEndOfMediaItems`: the player sends `clearNext`, and at `.ended` sets `playWhenReady` false, advances `currentIndex` and prepares the next item paused at 0 (media3 instead pauses at the end of the item and moves on at `play`; landing on the next lets the UI show what `play` starts). At the last item it ends. Set after the next was armed, the crossing pauses the next at 0. Shuttle2's `setPauseAtEnd` and `onPausedAtEnd` map onto it |
 | Sleep timer | app | A countdown (`SleepTimerManager.kt`, `SleepTimer.kt`) that calls `pause()`, or sets `pauseAtEndOfItem` for "end of episode"; the Podcasts fade is a `volume` ramp. Policy and UI differ per app |
 | Crossfade | out of scope | Neither app has it on iOS (Shuttle2's `crossfade_duration_ms` is Android-only). ADR-0018 places it in the render layer as a second `Transition`, not in the player; the player gains one property when that exists |
 | Pre-arm and gapless handoff | player | As soon as a current item is set and the list has a next, `setNext(next)`; again on every edit that changes the next, `clearNext` when nothing follows or `pauseAtEndOfItem` is on. `Transport` decodes ahead, so the next opens early (Shuttle2's `PreopenLead` is deleted). `.crossed` advances `currentIndex` and sends `itemTransition(.auto)`; the item after the new current is armed then |
@@ -351,10 +363,13 @@ Cases each slice must have:
   `.idle`; `replaceItems` with the same current item keeps the position; with another item restarts.
 - **Advance**: `.crossed` advances the index and sends `itemTransition(.auto)`; the item after it is
   armed; `.all` wraps and `.one` re-arms the same entry; `.off` ends with `.ended`; `play()` on `.ended`
-  restarts at 0; `pauseAtEndOfItem` lands paused at 0 of the next with `playWhenReady` false.
+  restarts at 0; `pauseAtEndOfItem` lands paused at 0 of the next with `playWhenReady` false; a crossing
+  into a next armed before an edit resolves by entry. Each in-scope `ExoPlayerTest` case is ported, and
+  `docs/player-conformance-mapping.md` maps every one.
 - **Errors**: a current item failing to open gives `.idle`, `error`, `itemFailed`, and `play()` retries
-  from `position`; a next item failing to open keeps the current playing (no `Transport.pause`) and drops
-  the arm; the queue then stops at the end with that error unless the item was removed.
+  from `position`; a next item failing to open or mid-decode keeps the current playing (no
+  `Transport.pause`) and is reported after its `itemTransition` when playback reaches it, never if it was
+  removed first.
 - **Session**: the first `play()` activates once before `Transport.play()`; a throwing activation
   refuses with a `.session` error and leaves `playWhenReady` true; interruption began suppresses and
   pauses the transport; ended with `shouldResume` reactivates and plays; without it sets `playWhenReady`
