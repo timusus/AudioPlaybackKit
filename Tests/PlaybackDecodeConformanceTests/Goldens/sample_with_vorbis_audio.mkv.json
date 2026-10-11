@@ -1,0 +1,57 @@
+{
+  "bytesBeforeFirstAudioMax" : 99328,
+  "channels" : 1,
+  "durationAtEofS" : 1.0115192743764172,
+  "durationS" : 1.07,
+  "expect" : "decodes",
+  "fixture" : "sample_with_vorbis_audio.mkv",
+  "frames" : 44608,
+  "pcmSha256PerSecondInt16" : [
+    "dd6d384f53c4ae87807bb33d72403468ca479c6bd46ada17a8d363397108ea4d",
+    "cb414d3f40e7a93a0f279f48400875c62ea59dc512e936bdb531c261ba307ddc"
+  ],
+  "sampleRate" : 44100,
+  "seeks" : [
+    {
+      "alignFrames" : -131,
+      "landedS" : 0.003,
+      "toS" : 0,
+      "tolS" : 0.03,
+      "windowFrames" : 4096,
+      "windowSha256Int16" : "c2a0426b5ef631ff3c0eec13bfb7dda390514ee9a407c2b0473f4b1ef2116be7"
+    },
+    {
+      "alignFrames" : -135,
+      "landedS" : 0.337,
+      "toS" : 0.337,
+      "tolS" : 0.03,
+      "windowFrames" : 4096,
+      "windowSha256Int16" : "10d45b30b50b33497d77d11346fee9759b45d7d18cbab38a7c4e4347119e3e7a"
+    },
+    {
+      "alignFrames" : -165,
+      "landedS" : 0.674,
+      "toS" : 0.674,
+      "tolS" : 0.03,
+      "windowFrames" : 4096,
+      "windowSha256Int16" : "70f30b1b045a7c5f3ea668716e80bda59606df413823299383358bddef098b49"
+    },
+    {
+      "alignFrames" : -114,
+      "landedS" : 0.912,
+      "toS" : 0.912,
+      "tolS" : 0.03,
+      "windowFrames" : 256,
+      "windowSha256Int16" : "dfa7eef08838df8c20b9841a0b6bc32105bf5e948ce604faf9bf5ca664cb745c"
+    },
+    {
+      "alignFrames" : -119,
+      "landedS" : 1.012,
+      "toS" : 1.012,
+      "tolS" : 0.03,
+      "windowFrames" : 98,
+      "windowSha256Int16" : "4f34186c916ad8191ca75f385972a2df28affef52e12a72724859b0837136724"
+    }
+  ],
+  "sha256" : "625b1931f27e4fe460f6b642a999045e37aa3071239feabffe62882004ed9ca0"
+}

@@ -119,7 +119,56 @@ enum KnownIssues {
              fixture: "sample_partially_fragmented.mp4", kind: .seekPCM, switches: unknownLengthCombos,
              messages: partiallyFragmentedSeeks
                 .map { "seek to \($0)s: PCM after the landing at 0.11072562358276644s is not in the clean decode" }),
+    ] + mediaThreeFlacRules
+
+    // media3 FlacExtractorTest port. `found` is the bytes read under ioError, partial+ioError and
+    // partial+ioError+unknownLength, in that order.
+    private static let flacByteFindings: [(fixture: String, allowed: Int, found: [Int])] = [
+        ("bear.flac", 66560, [131146, 167354, 138586]),
+        ("bear_no_min_max_frame_size.flac", 66560, [131146, 167354, 138586]),
+        ("bear_no_seek_table.flac", 66560, [131146, 167354, 138586]),
+        ("bear_placeholder_seek_point_only.flac", 66560, [131146, 167354, 138586]),
+        ("bear_with_vorbis_comments.flac", 66560, [131146, 167354, 138586]),
+        ("bear_with_vorbis_comments_invalid_mutf8.flac", 66560, [131146, 167354, 138586]),
+        ("bear_32bit.flac", 66560, [131146, 167948, 139180]),
+        ("bear_uncommon_sample_rate.flac", 66560, [131146, 168004, 139236]),
+        ("bear_with_id3.flac", 66560, [131156, 166016, 135900]),
+        ("bear_with_picture.flac", 99328, [196686, 230578, 169038]),
     ]
+    // Seek findings: (fixture, landing, frames the PCM sits off).
+    private static let flacSeekFindings: [(fixture: String, landing: String, off: Int)] = [
+        ("bear.flac", "2.741s", -496),
+        ("bear_no_min_max_frame_size.flac", "2.741s", -496),
+        ("bear_placeholder_seek_point_only.flac", "2.741s", -496),
+        ("bear_with_vorbis_comments.flac", "2.741s", -496),
+        ("bear_with_vorbis_comments_invalid_mutf8.flac", "2.741s", -496),
+        ("bear_with_id3.flac", "2.741s", -496),
+        ("bear_with_picture.flac", "2.741s", -496),
+        ("bear_uncommon_sample_rate.flac", "2.7409999999999997s", -796),
+    ]
+
+    private static let mediaThreeFlacRules: [Rule] = {
+        let ioIssue = "https://github.com/timusus/AudioPlaybackKit/issues/111 (closed, not planned: FLAC I/O error during the probe re-reads)"
+        let seekIssue = "https://github.com/timusus/AudioPlaybackKit/issues/110 (closed, not planned: FLAC unknown-length seek lands early)"
+        let byteCombos: [FaultSwitches] = [.ioErrorOncePerPosition, [.partialReads, .ioErrorOncePerPosition],
+                                           [.partialReads, .ioErrorOncePerPosition, .unknownLength]]
+        var rules: [Rule] = flacByteFindings.flatMap { finding in
+            zip(byteCombos, finding.found).map { combo, bytes in
+                Rule(issue: ioIssue, fixture: finding.fixture, kind: .bytes, switches: [combo],
+                     messages: ["\(bytes) bytes read before the first audio, golden allows \(finding.allowed)"])
+            }
+        }
+        // With one metadata block the plain ioError run stays in budget, and both partial runs read the same.
+        rules.append(Rule(issue: ioIssue, fixture: "bear_one_metadata_block.flac", kind: .bytes,
+                          switches: [[.partialReads, .ioErrorOncePerPosition],
+                                     [.partialReads, .ioErrorOncePerPosition, .unknownLength]],
+                          messages: ["102410 bytes read before the first audio, golden allows 66560"]))
+        rules += flacSeekFindings.map { finding in
+            Rule(issue: seekIssue, fixture: finding.fixture, kind: .seekPCM, switches: unknownLengthCombos,
+                 messages: ["seek to 2.741s: PCM after the landing at \(finding.landing) sits \(finding.off) frames off, clean seek 0"])
+        }
+        return rules
+    }()
 
     private static let unknownLengthCombos: [FaultSwitches] = [
         .unknownLength, [.partialReads, .unknownLength], [.ioErrorOncePerPosition, .unknownLength],

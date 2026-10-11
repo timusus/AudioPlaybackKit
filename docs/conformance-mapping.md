@@ -204,3 +204,33 @@ inside MPEG-TS (`TsExtractor`).
 | `sample_latm.ts` (`TsExtractorTest`) | n/a (MPEG-TS container, which this repo does not support; the repo's own `latm_loas.aac` covers raw LOAS/LATM) |
 | `bbb_1ch_8kHz_aac_lc.aac`, `sine.aac` | n/a (used by transformer tests, not an extractor test; `bbb_*` is not copied) |
 | the extractor's `FLAG_ENABLE_CONSTANT_BITRATE_SEEKING` | n/a (API: flag; seeks are sample-accurate here) |
+
+## FLAC (`libraries/extractor/.../flac/`)
+
+### FlacExtractorTest (one row per asset; each runs the 4 `.N.dump` seek variants and `unknown_length`)
+
+| media3 asset or test | Ours |
+|---|---|
+| `bear.flac`, `bear_one_metadata_block.flac`, `bear_no_min_max_frame_size.flac`, `bear_no_seek_table.flac`, `bear_placeholder_seek_point_only.flac` | same names; I/O-error probe re-reads exceed the byte budget and unknown-length seeks land early (#111, #110, closed not planned) |
+| `bear_no_num_samples.flac`, `bear_no_seek_table_no_num_samples.flac` | same names; no findings (STREAMINFO has no total, duration reads 0) |
+| `bear_with_vorbis_comments.flac`, `bear_with_vorbis_comments_invalid_mutf8.flac` | same names; same findings as `bear.flac` |
+| `bear_with_id3.flac`, `bear_with_picture.flac` | same names; same findings as `bear.flac` (the picture block raises the budget) |
+| `bear_uncommon_sample_rate.flac`, `bear_32bit.flac` | same names; the 44 kHz seek lands early (#110), no seek finding for 32-bit |
+| ID3-disabled and picture-disabled variants, metadata-only and seeker-only cases | n/a (API: flags; metadata) |
+
+## Matroska (`libraries/extractor/.../mkv/`)
+
+Only cases that carry decodable audio are ported.
+
+### MatroskaExtractorTest and `media/mka/` assets
+
+| media3 asset or test | Ours |
+|---|---|
+| `bear-flac-16bit.mka`, `bear-flac-24bit.mka`, `bear-flac-32bit.mka`, `bear-alac.mka` | same names; no findings |
+| `bear-opus.mka`, `bear-opus-negative-gain.mka`, `opus-5.1.mka` | same names; no findings |
+| `sample_with_opus_audio.mkv`, `sample_with_vorbis_audio.mkv` | same names; no findings |
+| `sample_with_dts*.mkv/.mka` | n/a (codec: no DTS decoder in the build, ADR-0006) |
+| `sample.mkv`, `sample_last_cluster.mkv`, `sample_with_multiple_key_frames.mkv`, `full_blocks.mkv` | n/a (video only: FFmpeg finds no audio stream, the golden decoded nothing) |
+| subtitle, encryption, chapters and AV1 cases | n/a (subtitle / encrypted / metadata / video) |
+| 2 MB `pcm-f64le` asset | n/a (size: not worth 2 MB for a codec the WAV rows cover) |
+| `bbb_*.webm` | n/a (video-heavy; `bbb_*` is not copied) |

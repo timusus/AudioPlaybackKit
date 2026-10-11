@@ -491,7 +491,7 @@ final class ConformanceMatrixTests: XCTestCase {
             return
         }
         let urls = GoldenStore.fixtureURLs()
-        XCTAssertEqual(urls.count, 103, "fixture corpus changed: update the count with the goldens")
+        XCTAssertEqual(urls.count, 125, "fixture corpus changed: update the count with the goldens")
         for url in urls {
             try ConformanceMatrix.run(fixture: url)
         }
