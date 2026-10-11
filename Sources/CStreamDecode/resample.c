@@ -26,6 +26,10 @@ static int init_swr_from(StreamDecoder *d, int in_rate, int in_fmt, const AVChan
      * one); an input with another count is remixed to it by the resampler. */
     if (d->out_channels > 0 && in_layout.nb_channels != d->out_channels) {
         av_channel_layout_default(&out_layout, d->out_channels);
+    } else if (in_layout.nb_channels > 2) {
+        /* The output format names no layout, so above stereo it is FFmpeg's default order for the
+         * count, which the render labels; any other layout of that count is remapped to it. */
+        av_channel_layout_default(&out_layout, in_layout.nb_channels);
     } else {
         av_channel_layout_copy(&out_layout, &in_layout);
     }

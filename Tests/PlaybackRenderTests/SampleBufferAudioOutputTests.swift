@@ -86,6 +86,36 @@ final class SampleBufferAudioOutputTests: XCTestCase {
         XCTAssertEqual(layoutTag(description), kAudioChannelLayoutTag_Mono)
     }
 
+    /// Above stereo the decoder's PCM is in FFmpeg's default order for its count; each channel is
+    /// labelled so a downmix or spatial render puts centre and LFE where they belong.
+    func testMultichannelFormatDescriptionLabelsFFmpegsDefaultOrder() throws {
+        let expected: [Int: [AudioChannelLabel]] = [
+            3: [kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_LFEScreen],
+            4: [kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_Center, kAudioChannelLabel_CenterSurround],
+            5: [kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_Center,
+                kAudioChannelLabel_LeftSurround, kAudioChannelLabel_RightSurround],
+            6: [kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_Center, kAudioChannelLabel_LFEScreen,
+                kAudioChannelLabel_LeftSurround, kAudioChannelLabel_RightSurround],
+            7: [kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_Center, kAudioChannelLabel_LFEScreen,
+                kAudioChannelLabel_CenterSurround, kAudioChannelLabel_LeftSurround, kAudioChannelLabel_RightSurround],
+            8: [kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_Center, kAudioChannelLabel_LFEScreen,
+                kAudioChannelLabel_RearSurroundLeft, kAudioChannelLabel_RearSurroundRight,
+                kAudioChannelLabel_LeftSurround, kAudioChannelLabel_RightSurround],
+        ]
+        for (channels, labels) in expected {
+            let description = try makeFormatDescription(PCMFormat(sampleRate: 48000, channelCount: channels))
+            let layout = try XCTUnwrap(CMAudioFormatDescriptionGetChannelLayout(description, sizeOut: nil), "\(channels)")
+            XCTAssertEqual(layout.pointee.mChannelLayoutTag, kAudioChannelLayoutTag_UseChannelDescriptions, "\(channels)")
+            let first = UnsafeRawPointer(layout)
+                .advanced(by: MemoryLayout<AudioChannelLayout>.offset(of: \.mChannelDescriptions)!)
+                .assumingMemoryBound(to: AudioChannelDescription.self)
+            let got = (0..<Int(layout.pointee.mNumberChannelDescriptions)).map { first[$0].mChannelLabel }
+            XCTAssertEqual(got, labels, "\(channels)")
+        }
+        let nine = try makeFormatDescription(PCMFormat(sampleRate: 48000, channelCount: 9))
+        XCTAssertEqual(layoutTag(nine), kAudioChannelLayoutTag_DiscreteInOrder | 9)
+    }
+
     private func layoutTag(_ description: CMAudioFormatDescription) -> AudioChannelLayoutTag? {
         CMAudioFormatDescriptionGetChannelLayout(description, sizeOut: nil)?.pointee.mChannelLayoutTag
     }

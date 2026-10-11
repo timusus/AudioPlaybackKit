@@ -48,6 +48,45 @@ final class OutputFormatTests: XCTestCase {
         return Double(crossings) / (Double(range.count) / rate)
     }
 
+    // MARK: - Channel order
+
+    /// A 16-bit WAVE_FORMAT_EXTENSIBLE of `frames` frames, channel `i` held at `(i + 1) * 3000`.
+    private func constantWAV(channelMask: UInt32, channels: Int, frames: Int) throws -> URL {
+        func le<T: FixedWidthInteger>(_ value: T) -> [UInt8] { withUnsafeBytes(of: value.littleEndian, Array.init) }
+        let dataBytes = frames * channels * 2
+        var wav = Array("RIFF".utf8) + le(UInt32(60 + dataBytes)) + Array("WAVEfmt ".utf8) + le(UInt32(40))
+        wav += le(UInt16(0xFFFE)) + le(UInt16(channels)) + le(UInt32(48000)) + le(UInt32(48000 * channels * 2))
+        wav += le(UInt16(channels * 2)) + le(UInt16(16)) + le(UInt16(22)) + le(UInt16(16)) + le(channelMask)
+        // KSDATAFORMAT_SUBTYPE_PCM
+        wav += [0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71]
+        wav += Array("data".utf8) + le(UInt32(dataBytes))
+        for _ in 0..<frames {
+            for channel in 0..<channels { wav += le(Int16((channel + 1) * 3000)) }
+        }
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).wav")
+        try Data(wav).write(to: url)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        return url
+    }
+
+    /// Above stereo the output is in FFmpeg's default order for its count, the one the render labels:
+    /// a 6.0 source (FL FR FC BC SL SR) comes out as 5.1 (FL FR FC LFE BL BR), its LFE silent and its
+    /// back centre folded into the back pair, not played as LFE.
+    func testSixChannelsComeOutInFFmpegsDefaultFivePointOneOrder() throws {
+        try skipUnlessAvailable()
+        let url = try constantWAV(channelMask: 0x707, channels: 6, frames: 4800)
+        let (decoder, format) = try decoder(url)
+        XCTAssertEqual(format.channelCount, 6)
+        let pcm = decodeAll(decoder)
+        let frame = Array(pcm[(2400 * 6)..<(2401 * 6)])
+        XCTAssertEqual(frame[0], 3000 / 32768, accuracy: 1e-4, "FL")
+        XCTAssertEqual(frame[1], 6000 / 32768, accuracy: 1e-4, "FR")
+        XCTAssertEqual(frame[2], 9000 / 32768, accuracy: 1e-4, "FC")
+        XCTAssertEqual(frame[3], 0, accuracy: 1e-4, "LFE")
+        XCTAssertGreaterThan(frame[4], 15000 / 32768, "BL holds SL and part of BC")
+        XCTAssertGreaterThan(frame[5], 18000 / 32768, "BR holds SR and part of BC")
+    }
+
     // MARK: - Resample
 
     /// 44.1 kHz out at 48 kHz: as many frames as the native decode times 48/44.1, to a frame, and the

@@ -120,6 +120,22 @@ final class FormatDescriptionCache: @unchecked Sendable {
     }
 }
 
+/// The decoder's channel order above stereo (FFmpeg's default layout for the count); unlabelled
+/// discrete channels would play centre and LFE as plain left/right.
+private let ffmpegDefaultLabels: [Int: [AudioChannelLabel]] = [
+    3: [kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_LFEScreen],
+    4: [kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_Center, kAudioChannelLabel_CenterSurround],
+    5: [kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_Center,
+        kAudioChannelLabel_LeftSurround, kAudioChannelLabel_RightSurround],
+    6: [kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_Center, kAudioChannelLabel_LFEScreen,
+        kAudioChannelLabel_LeftSurround, kAudioChannelLabel_RightSurround],
+    7: [kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_Center, kAudioChannelLabel_LFEScreen,
+        kAudioChannelLabel_CenterSurround, kAudioChannelLabel_LeftSurround, kAudioChannelLabel_RightSurround],
+    8: [kAudioChannelLabel_Left, kAudioChannelLabel_Right, kAudioChannelLabel_Center, kAudioChannelLabel_LFEScreen,
+        kAudioChannelLabel_RearSurroundLeft, kAudioChannelLabel_RearSurroundRight,
+        kAudioChannelLabel_LeftSurround, kAudioChannelLabel_RightSurround],
+]
+
 /// Packed Float32 interleaved LPCM, the decoder's output (ADR-0010).
 func makeFormatDescription(_ format: PCMFormat) throws -> CMAudioFormatDescription {
     let bytesPerFrame = UInt32(MemoryLayout<Float>.size * format.channelCount)
@@ -129,15 +145,26 @@ func makeFormatDescription(_ format: PCMFormat) throws -> CMAudioFormatDescripti
         mBytesPerPacket: bytesPerFrame, mFramesPerPacket: 1, mBytesPerFrame: bytesPerFrame,
         mChannelsPerFrame: UInt32(format.channelCount), mBitsPerChannel: 32, mReserved: 0
     )
-    var layout = AudioChannelLayout()
+    let labels = ffmpegDefaultLabels[format.channelCount] ?? []
+    let layoutSize = AudioChannelLayout.sizeInBytes(maximumDescriptions: max(labels.count, 1))
+    let raw = UnsafeMutableRawPointer.allocate(byteCount: layoutSize, alignment: MemoryLayout<AudioChannelLayout>.alignment)
+    defer { raw.deallocate() }
+    raw.initializeMemory(as: UInt8.self, repeating: 0, count: layoutSize)
+    let layout = raw.bindMemory(to: AudioChannelLayout.self, capacity: 1)
     switch format.channelCount {
-    case 1: layout.mChannelLayoutTag = kAudioChannelLayoutTag_Mono
-    case 2: layout.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo
-    default: layout.mChannelLayoutTag = kAudioChannelLayoutTag_DiscreteInOrder | UInt32(format.channelCount)
+    case 1: layout.pointee.mChannelLayoutTag = kAudioChannelLayoutTag_Mono
+    case 2: layout.pointee.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo
+    case _ where !labels.isEmpty:
+        layout.pointee.mChannelLayoutTag = kAudioChannelLayoutTag_UseChannelDescriptions
+        layout.pointee.mNumberChannelDescriptions = UInt32(labels.count)
+        let descriptions = (raw + MemoryLayout<AudioChannelLayout>.offset(of: \.mChannelDescriptions)!)
+            .assumingMemoryBound(to: AudioChannelDescription.self)
+        for (index, label) in labels.enumerated() { descriptions[index].mChannelLabel = label }
+    default: layout.pointee.mChannelLayoutTag = kAudioChannelLayoutTag_DiscreteInOrder | UInt32(format.channelCount)
     }
     var description: CMAudioFormatDescription?
     let status = CMAudioFormatDescriptionCreate(
-        allocator: nil, asbd: &asbd, layoutSize: MemoryLayout<AudioChannelLayout>.size, layout: &layout,
+        allocator: nil, asbd: &asbd, layoutSize: layoutSize, layout: layout,
         magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &description
     )
     guard status == noErr, let description else { throw osStatusError(status) }
