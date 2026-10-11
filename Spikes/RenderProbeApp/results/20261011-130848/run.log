@@ -1,0 +1,63 @@
+device 00008140-000539602E90401C, app args: --check --skip-guided
+2026-10-11 13:08:51.001 xcodebuild[65081:11808024] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+error: the following command failed with exit code 0 but produced no further output
+SwiftCompile normal arm64 (in target 'RenderProbe' from project 'RenderProbe')
+/Users/tim/projects/simplecity-apps/shuttle-playback/.claude/worktrees/render-devicecheck/Spikes/RenderProbeApp/Sources/Probes.swift:251:24: warning: consider using asynchronous alternative function
+249 |             var stops: [Double] = []
+250 |             for _ in 0..<8 {
+251 |                 player.scheduleBuffer(tone, at: nil, options: .loops, completionHandler: nil)
+    |                        `- warning: consider using asynchronous alternative function
+252 |                 player.play()
+253 |                 try await pause(1)
+
+/Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS27.2.sdk/System/Library/Frameworks/AVFAudio.framework/Headers/AVAudioPlayerNode.h:202:1: note: 'scheduleBuffer(_:at:options:)' declared here
+200 | 		or before the buffer is played completely.
+201 | */
+202 | - (void)scheduleBuffer:(AVAudioPCMBuffer *)buffer atTime:(AVAudioTime * __nullable)when options:(AVAudioPlayerNodeBufferOptions)options completionHandler:(AVAudioNodeCompletionHandler __nullable)completionHandler;
+    | `- note: 'scheduleBuffer(_:at:options:)' declared here
+203 | 
+204 | /*! @method scheduleBuffer:atTime:options:completionCallbackType:completionHandler:
+warning: All interface orientations must be supported unless the app requires full screen. (in target 'RenderProbe' from project 'RenderProbe')
+App installed:
+• bundleID: com.simplecityapps.renderprobe
+• installationURL: file:///private/var/containers/Bundle/Application/DA119E5C-B13C-4227-A80E-DF2BD5D368B8/RenderProbe.app/
+• launchServicesIdentifier: unknown
+• databaseUUID: 490CDBE6-833A-43BA-BBD3-156E9580DF4E
+• databaseSequenceNumber: 5648
+• options: 
+2026-10-11 13:08:58.992 xcodebuild[65824:11809593] [MT] IDERunDestination: Supported platforms for the buildables in the current scheme is empty.
+App installed:
+• bundleID: com.simplecityapps.renderprobe.interruptor
+• installationURL: file:///private/var/containers/Bundle/Application/E43B47F1-CC8F-44DE-80CE-7D236CEE59F0/InterruptorApp.app/
+• launchServicesIdentifier: unknown
+• databaseUUID: 490CDBE6-833A-43BA-BBD3-156E9580DF4E
+• databaseSequenceNumber: 5656
+• options: 
+launched; polling for check-done every 5 s (30 min cap)
+  waiting (1 min)
+  A10: launching InterruptorApp
+  waiting (2 min)
+# PlaybackRender device check
+
+iPhone iOS 26.6.1, started 2026-10-11T02:09:03Z, mic granted
+
+| Scenario | Status | Result |
+|---|---|---|
+| A1 | pass | heard 4.000 s of 4; .ended 136.9 ms after the heard end; play -> heard 318 ms |
+| A2 | pass | click heard 0.7 ms after the position said (spread 0.4 ms, 11 of 11 clicks); outputLatency 9.7 ms; position = clock - latency within 2.2 ms |
+| A3 | measured | dropout 94 ms to 2x, 140 ms back (ADR: 97 / 140 ms); position runs at 2.00x; largest position jump 1 ms |
+| A4 | measured | fixture 44.1k -> 48k dips ["9"] ms; 48k stereo -> 44.1k mono dip 10 ms (ADR: 8-11 ms); crossed 63 / 63 ms after the heard joins |
+| A5 | pass | landed at 12.000 s of 12; sound back 353 ms after the call (silence 314 ms); position vs heard 2 s on 0.9 ms |
+| A6 | pass | join dip 0 ms; crossed ["1", "2", "3"]; .ended 2x; setNext after .ended heard 110 ms later |
+| A7 | inconclusive | no auto-flush on the port overrides |
+| A8 | measured | rate 2.0: 0 flush(es), latency 9.7 -> 9.7 ms, jump -20 ms, clock back 48.5 ms / rate 1.0: 0 flush(es), latency 9.7 -> 9.7 ms, jump 0 ms, clock back 0.0 ms / rate 0.5: 0 flush(es), latency 9.7 -> 9.7 ms, jump 0 ms, clock back 0.0 ms; .ended after 4.50 s |
+| A9 | measured | override speaker: 1 flush(es) (re-feed -27.24 ms vs heard, -9.099 vs flush time, silence <null> ms), latency 4.5 -> 9.7 ms, jump -43 ms, clock back 0.0 ms / override none: 1 flush(es) (re-feed -22.279 ms vs heard, -3.751 vs flush time, silence <null> ms), latency 9.7 -> 4.5 ms, jump -39 ms, clock back 0.0 ms / category playback: 1 flush(es) (re-feed -7.129 ms vs heard, -14.71 vs flush time), latency 4.5 -> 15.4 ms, jump -105 ms, clock back 2.8 ms / category playAndRecord: 1 flush(es) (re-feed -22.37 ms vs heard, -3.948 vs flush time, silence <null> ms), latency 15.4 -> 4.5 ms, jump -32 ms, clock back 0.0 ms; .ended after 2.34 s |
+| A10 | measured | InterruptorApp: 0 flush(es), latency 15.4 -> 15.4 ms, jump -55 ms, clock back 51.6 ms; .ended after 2.44 s |
+| G1 | skipped | skipped by --skip-guided |
+| G2 | skipped | skipped by --skip-guided |
+| G3 | skipped | skipped by --skip-guided |
+| G4 | skipped | skipped by --skip-guided |
+| G5 | skipped | skipped by --skip-guided |
+| G6 | skipped | skipped by --skip-guided |
+| G7 | skipped | skipped by --skip-guided |
+results in results/20261011-130848

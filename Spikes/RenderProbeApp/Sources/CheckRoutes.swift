@@ -34,8 +34,15 @@ extension CheckScenarios {
         return try await flushRun(ear: ear, replayFromMic: true, [
             Step(name: "override speaker") { _ in try session.overrideOutputAudioPort(.speaker) },
             Step(name: "override none") { _ in try session.overrideOutputAudioPort(.none) },
-            Step(name: "category playback") { _ in try session.setCategory(.playback, mode: .default, options: []) },
-            Step(name: "category playAndRecord") { _ in try session.setCategory(.playAndRecord, mode: .measurement, options: []) },
+            // .playback refuses to replace a category with running input (!pri), so the mic sits this one out.
+            Step(name: "category playback") { _ in
+                ear.mic.stop()
+                try session.setCategory(.playback, mode: .default, options: [])
+            },
+            Step(name: "category playAndRecord") { _ in
+                try session.setCategory(.playAndRecord, mode: .measurement, options: [])
+                try ear.mic.start()
+            },
         ])
     }
 
@@ -52,7 +59,15 @@ extension CheckScenarios {
                 probe.transport.pause()
                 let ended = await interruption(.ended, cap: 20)
                 Log.shared.write("interruption ended: \(ended)")
-                try Session.shared.setActive(true)
+                // The ended note reaches this app in the background while InterruptorApp still holds the
+                // foreground, and activation fails (!int) until it reopens this app.
+                var attempts = 1
+                while (try? Session.shared.setActive(true)) == nil {
+                    guard attempts < 40 else { throw CheckError("session not reactivated in 10 s") }
+                    attempts += 1
+                    try await pause(0.25)
+                }
+                Log.shared.write("session reactivated after \(attempts) attempt(s)")
                 probe.transport.play()
             },
         ])
