@@ -96,8 +96,8 @@ Each step ships on its own. Put the new path behind a flag until step 5.
    `.error`. `isPlayIntended` stays the app's own flag, set on the call and not on the event.
 4. `seek` calls `seek(item:toFrame:)`; the `seekLanded` event is sent when the app next sees a `.position`
    at or past the target.
-5. Order the chain as it runs today: `SilenceGate`, then `VoiceEnhanceProcessor`. Toggling either calls
-   `setProcessors` (see [#114](https://github.com/timusus/AudioPlaybackKit/issues/114)).
+5. Order the chain as it runs today: `SilenceGate`, then `VoiceEnhanceProcessor`. Toggling either sets a
+   flag the processor reads under its lock, or calls `setProcessors`; neither flushes.
 6. The sleep-timer fade and the skip layer's pre-seek fade are `setVolume` ramps from the app's timer.
 7. Delete `reanchorAfterEngineRestart`, `restartEngineIfNeeded`, `recoverStalledClock` and the schedule
    budget, and `BufferingPolicy`'s clock-stall handling: the transport owns them.
@@ -143,10 +143,9 @@ Each step ships on its own. Put the new path behind a flag until step 5.
 - **Effects are heard about two seconds after they are processed.** The transport keeps PCM written ahead
   of the playhead. Fades, ducks and mutes go through `setVolume`, called repeatedly from the app's timer;
   never from a processor.
-- **`setProcessors` flushes.** It re-feeds from the playhead, which can click. A toggle mid-play (skip
-  silence, Voice Boost, EQ on or off) therefore glitches until [#114](https://github.com/timusus/AudioPlaybackKit/issues/114).
-  Prefer a processor that stays in the chain and changes its own parameters under its lock, and call
-  `setProcessors` only when `isActive` or the output format changes.
+- **A toggle is heard about two seconds late, without a gap.** A processor's own parameters apply live
+  from the next chunk it processes, and `setProcessors` drains the old chain and swaps at the next chunk;
+  neither flushes. Call `setProcessors` only when the chain, `isActive` or the output format changes.
 - **Recovery lands paused.** A failed renderer or a media-services reset is rebuilt once and the transport
   lands paused at the same position. The app calls `play()` again when it still means to play. A second
   failure surfaces as `TransportEvent.failed`, and `play()` does nothing until a `seek`, `setCurrent` or
@@ -182,7 +181,7 @@ Both apps:
 Shuttle Podcasts also:
 
 - Skip silence on and off mid-episode; the displayed position and the savings counter stay in media time.
-- Voice Boost on and off mid-episode (expect a brief glitch until #114).
+- Voice Boost on and off mid-episode, with no gap or click.
 - Smart Skip: scan, seek past an ad, the chime, the duck, undo.
 - Sleep timer fade out.
 - Continue Listening restores to the saved position after a seek and after a force quit.

@@ -180,11 +180,14 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         queue.async { [self] in output.setVolume(min(max(volume, 0), 1)) }
     }
 
-    /// Replaces the processor chain, applied from what is heard now by re-feeding (a flush). Call it
-    /// again after a change that alters a processor's `isActive` or output format.
+    /// Replaces the processor chain without a flush: the old chain drains into what is queued and
+    /// the new one applies from the next chunk, heard about two seconds on. Call it again after a
+    /// change that alters a processor's `isActive` or output format; other parameters apply live.
+    /// After a failure it re-feeds from the heard frame instead, since nothing is playing.
     public func setProcessors(_ processors: [any AudioProcessor]) {
         queue.async { [self] in
             upstream.setProcessors(processors)
+            guard failed else { return }
             failed = false
             feeder.flush()
         }

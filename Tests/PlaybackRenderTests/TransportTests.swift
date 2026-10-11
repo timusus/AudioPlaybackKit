@@ -390,23 +390,74 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(positions, [Heard(item: "a", frame: 4)])
     }
 
-    func testSetProcessorsMidPlaybackRefeedsFromTheHeardFramePastWhatWasDropped() {
-        transport.setProcessors([DropRangesProcessor([4..<12])])
-        transport.setCurrent(item: "a", source: a)
+    /// Ten seconds of `long`, positions every chunk, `skipping` left out.
+    private func positionsOfLong(skipping skipped: Range<Int64> = 0..<0) -> [Heard] {
+        stride(from: Int64(0), through: 80, by: 2).filter { !skipped.contains($0) }.map { Heard(item: "a", frame: $0) }
+    }
+
+    /// Plays `long` for a second, by when frames 0 to 23 are written (two seconds ahead), then calls `change`.
+    private func playLongThenChange(processors: [any AudioProcessor], _ change: () -> Void) {
+        transport.setProcessors(processors)
+        transport.setCurrent(item: "a", source: long)
         transport.play()
         pump()
         run(for: 1)
-        XCTAssertEqual(positions.last, Heard(item: "a", frame: 16))
-        let written = output.enqueues.count
+        change()
+        run(for: 9.25)
+    }
+
+    // #114, as media3 applies an `AudioProcessor`'s own parameters: live, never through the sink.
+    func testALiveParameterChangeIsHeardAfterWhatWasWrittenWithNoFlush() {
+        let boost = LiveGainProcessor()
+        playLongThenChange(processors: [boost]) { boost.gain = 2 }
+
+        XCTAssertEqual(heard, (0..<24).map(Float.init) + (24..<80).map { Float($0) * 2 })
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(positions, positionsOfLong())
+    }
+
+    // #114: a chain change drains the old chain into the queued audio, as media3 `DefaultAudioSink`
+    // drains its processors on a configuration change instead of flushing the `AudioTrack`.
+    func testAddingAProcessorMidPlaybackAppliesAfterWhatWasWrittenWithNoFlush() {
+        playLongThenChange(processors: []) { transport.setProcessors([GainProcessor()]) }
+
+        XCTAssertEqual(heard, (0..<24).map(Float.init) + (24..<80).map { Float($0) * 2 })
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(positions, positionsOfLong())
+    }
+
+    func testAddingADroppingProcessorMidPlaybackSkipsThePositionWithNoFlush() {
+        playLongThenChange(processors: []) { transport.setProcessors([DropRangesProcessor([0..<8])]) }
+
+        XCTAssertEqual(heard, (0..<24).map(Float.init) + (32..<80).map(Float.init))
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(positions, positionsOfLong(skipping: 24..<32))
+    }
+
+    func testRemovingAProcessorMidPlaybackKeepsTheAudioItHeldBack() {
+        playLongThenChange(processors: [DelayProcessor(frames: 3)]) { transport.setProcessors([]) }
+
+        XCTAssertEqual(heard, (0..<80).map(Float.init))
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(positions, positionsOfLong())
+    }
+
+    func testSetProcessorsAfterAProcessorFailedReplaysFromTheHeardFrame() {
+        transport.setProcessors([FixedRateProcessor(sampleRate: 44100)])
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        pump()
+        XCTAssertEqual(failedItems, ["a"])
 
         transport.setProcessors([])
+        transport.play()
         pump()
-        // One flush per setProcessors and one for setCurrent.
-        XCTAssertEqual(output.flushes, [0, 0, 1])
-        XCTAssertEqual(output.enqueues[written], FakeAudioOutput.Enqueue(samples: [16, 17], format: mono, time: 1))
-
-        run(for: 1.25)
-        XCTAssertEqual(heard, [0, 1, 2, 3, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23])
+        run(for: 3.25)
+        XCTAssertEqual(heard, allOfA)
         XCTAssertEqual(statuses.last, .ended)
     }
 

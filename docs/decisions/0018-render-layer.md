@@ -72,6 +72,13 @@ How features fit:
 - Speed is the transport setting the output rate.
 - None of them adds a branch to the feeder, the timeline or the output. A feature that needs one is designed wrong.
 
+### Effect changes
+
+As in media3, nothing about an effect flushes. A parameter (a gain, EQ bands, a toggle) applies live under
+the processor's own lock from the next chunk it processes, about one feed depth before it is heard. A
+chain change (`setProcessors`) drains the old chain into the queued audio and swaps at the next chunk, as
+`DefaultAudioSink` drains its processors on a configuration change, so the tags stay contiguous.
+
 ### Recovery
 
 A failed renderer is terminal. This happens through its `status`, a failed enqueue, or an iOS media-services reset. The feeder then rebuilds the output and restarts from the heard position through the one restart path. The rebuild makes a fresh renderer and synchronizer with the same volume, pitch algorithm and device. Recovery always lands paused, so the user chooses to play on (owner decision). As media3's `pendingRecoverableRendererError` does, it retries once: a second failure before `.playing`, or a rebuild that throws, surfaces as `.failed` with no further rebuild. A media-services reset is a separate event that always rebuilds, since it can follow the failure it caused.

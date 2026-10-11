@@ -225,10 +225,11 @@ may drop frames (`ProcessorOutput.dropped`, so positions stay in media time) but
 processor cannot change the sample rate; `configure(_:)` receives the item's format, so a filter that
 depends on the rate (an EQ) derives its coefficients there and again after each `flush()`. Toggling a
 processor or changing its `isActive` or output format needs another `setProcessors` call, which
-re-feeds from the playhead. A processor's own parameters (a gain value) are read under its own lock.
+never flushes: the old chain drains into the queued audio and the new one takes over at the next
+chunk. A processor's own parameters (enabled, a gain, EQ bands) apply live, read under its own lock.
 
-**Processed PCM is heard about one feed depth later.** A change a processor makes at "now" reaches the
-speaker roughly two seconds on, and a call to `setProcessors` re-feeds, which can click. Fades,
+**Processed PCM is heard about one feed depth later.** A change a processor makes at "now", or a new
+chain from `setProcessors`, reaches the speaker roughly two seconds on, without a gap. Fades,
 ducks and mutes therefore go through `setVolume`, which acts at once: the app calls it repeatedly
 from its own timer or display link.
 

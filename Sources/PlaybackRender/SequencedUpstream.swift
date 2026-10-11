@@ -12,6 +12,8 @@ final class SequencedUpstream: FeederUpstream {
     private var endQueued = false
     /// A chunk of a new format, waiting for the pipeline to drain.
     private var held: TaggedChunk?
+    /// A chain set while the pipeline runs, waiting for it to drain.
+    private var pendingProcessors: [any AudioProcessor]?
     private var failed = false
     /// Where `Sequencer.setCurrent` already starts decode, so the feeder's restart there needs no seek.
     private var freshStart: MediaPositionMap.Position?
@@ -31,10 +33,10 @@ final class SequencedUpstream: FeederUpstream {
         freshStart = MediaPositionMap.Position(item: item, mediaFrame: startFrame)
     }
 
-    /// Takes effect at the next resupply, which the transport forces with a feeder flush.
+    /// Takes effect at the next chunk pulled: the old chain drains first, as at a format change, so
+    /// nothing queued is re-fed and the timeline stays contiguous. A resupply applies it at once.
     func setProcessors(_ processors: [any AudioProcessor]) {
-        pipeline = AudioProcessingPipeline(processors)
-        restartPipeline()
+        pendingProcessors = processors
     }
 
     /// Empties the window and drops what the pipeline holds, so nothing more is supplied.
@@ -53,6 +55,11 @@ final class SequencedUpstream: FeederUpstream {
         while !failed {
             if let chunk = pipeline.getOutput() { return .chunk(chunk) }
             if endQueued, !pipeline.isEnded { return .pending }
+            if pendingProcessors != nil, pipelineFormat != nil, !endQueued {
+                pipeline.queueEndOfStream()
+                endQueued = true
+                continue
+            }
             let next: TaggedChunk
             if let held {
                 next = held
@@ -82,6 +89,7 @@ final class SequencedUpstream: FeederUpstream {
                 continue
             }
             if pipelineFormat == nil || endQueued {
+                applyPendingProcessors()
                 do {
                     try pipeline.configure(next.format)
                 } catch {
@@ -104,8 +112,15 @@ final class SequencedUpstream: FeederUpstream {
         sequencer.seek(item: position.item, mediaFrame: position.mediaFrame)
     }
 
+    private func applyPendingProcessors() {
+        guard let pendingProcessors else { return }
+        pipeline = AudioProcessingPipeline(pendingProcessors)
+        self.pendingProcessors = nil
+    }
+
     private func restartPipeline() {
         pipeline.reset()
+        applyPendingProcessors()
         pipelineFormat = nil
         endQueued = false
         held = nil

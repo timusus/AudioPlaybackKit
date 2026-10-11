@@ -81,6 +81,22 @@ final class GainProcessor: TestProcessor, @unchecked Sendable {
     }
 }
 
+/// A gain the app changes while playing, read on the processing thread as a Voice Boost level would be.
+final class LiveGainProcessor: TestProcessor, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _gain: Float = 1
+
+    var gain: Float {
+        get { lock.withLock { _gain } }
+        set { lock.withLock { _gain = newValue } }
+    }
+
+    override func process(_ samples: [Float], format: PCMFormat) -> ProcessorOutput {
+        let gain = gain
+        return ProcessorOutput(samples: samples.map { $0 * gain })
+    }
+}
+
 /// Holds back the last `frames` input frames, like a lookahead limiter, and hands them over at end of stream.
 final class DelayProcessor: TestProcessor, @unchecked Sendable {
     let frames: Int
