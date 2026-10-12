@@ -326,4 +326,64 @@ final class AudioProcessingPipelineTests: XCTestCase {
                            .sampleRateChanged(from: format, to: PCMFormat(sampleRate: 88200, channelCount: 2)))
         }
     }
+
+    // MARK: in place (ADR-0026)
+
+    // Every stage is lent the decoder's own buffer and the output is that buffer: no copy, no allocation.
+    func testInPlaceStagesRewriteTheInputBufferItself() throws {
+        let eq = InPlaceGainProcessor()
+        let limiter = InPlaceGainProcessor()
+        let pipeline = try started([eq, limiter], format: mono)
+        for start in [0, 4, 8] {
+            // Built at run time like a decoder's: a constant literal can be static storage, never unique.
+            let samples = (1...4).map(Float.init)
+            let input = samples.withUnsafeBufferPointer { $0.baseAddress }
+            pipeline.queueInput(chunk(consume samples, format: mono, tags: [tag(0, Int64(start), 4)]))
+            let output = try XCTUnwrap(pipeline.getOutput())
+            XCTAssertEqual(output.samples, [4, 8, 12, 16])
+            XCTAssertEqual(output.tags, [tag(0, Int64(start), 4)])
+            XCTAssertEqual(eq.buffers.last, input, "the first stage was lent the input's own storage")
+            XCTAssertEqual(limiter.buffers.last, input, "the second stage rewrote the same storage")
+            XCTAssertEqual(output.samples.withUnsafeBufferPointer { $0.baseAddress }, input)
+        }
+        XCTAssertEqual(eq.buffers.count, 3)
+    }
+
+    func testInPlaceStageAfterADroppingStageKeepsTheRewrittenTags() throws {
+        let pipeline = try started([DropRangesProcessor([1..<3]), InPlaceGainProcessor()], format: mono)
+        pipeline.queueInput(chunk([1, 2, 3, 4], format: mono, tags: [tag(0, 10, 4)]))
+        let output = try XCTUnwrap(pipeline.getOutput())
+        XCTAssertEqual(output.samples, [2, 8])
+        XCTAssertEqual(output.tags, [tag(0, 10, 1), tag(0, 13, 1)])
+    }
+
+    func testInPlaceStageBeforeADelayDrainsAtEndOfStream() throws {
+        let pipeline = try started([InPlaceGainProcessor(), DelayProcessor(frames: 2)], format: mono)
+        pipeline.queueInput(chunk([1, 2, 3], format: mono, tags: [tag(0, 0, 3)]))
+        XCTAssertEqual(pipeline.getOutput()?.samples, [2])
+        pipeline.queueEndOfStream()
+        XCTAssertFalse(pipeline.isEnded)
+        XCTAssertEqual(pipeline.getOutput()?.samples, [4, 6])
+        XCTAssertTrue(pipeline.isEnded)
+    }
+
+    func testInPlaceStageEndsOnceItsOutputIsHandedOver() throws {
+        let pipeline = try started([InPlaceGainProcessor()], format: mono)
+        pipeline.queueInput(chunk([1], format: mono, tags: [tag(0, 0, 1)]))
+        pipeline.queueEndOfStream()
+        XCTAssertFalse(pipeline.isEnded)
+        XCTAssertEqual(pipeline.getOutput()?.samples, [2])
+        XCTAssertTrue(pipeline.isEnded)
+        XCTAssertNil(pipeline.getOutput())
+    }
+
+    func testInactiveInPlaceStageIsSkipped() throws {
+        let gain = InPlaceGainProcessor()
+        gain.enabled = false
+        let pipeline = try started([gain], format: mono)
+        XCTAssertFalse(pipeline.isOperational)
+        pipeline.queueInput(chunk([1], format: mono, tags: [tag(0, 0, 1)]))
+        XCTAssertEqual(pipeline.getOutput()?.samples, [1])
+        XCTAssertTrue(gain.buffers.isEmpty)
+    }
 }

@@ -3,17 +3,34 @@ import Foundation
 /// An ordered chain of processors over `TaggedChunk`s, modelled on media3 `AudioProcessingPipeline`.
 /// It is the one place tags are rewritten: each stage's dropped frames become a jump in
 /// `mediaStartFrame`, so the tags of every output chunk still sum to its frame count (ADR-0018).
+/// An in-place stage rewrites the chunk's own samples and keeps its tags, so a chain of them
+/// allocates nothing per chunk (ADR-0026).
 final class AudioProcessingPipeline {
     private final class Stage {
         let processor: AudioProcessor
+        /// Nil for an in-place stage.
+        let buffering: BufferingAudioProcessor?
         let outputFormat: PCMFormat
         /// Input tags not yet matched to output, with whether any of their frames came out.
         var pending: [(tag: SegmentTag, emitted: Bool)] = []
+        /// Chunks an in-place stage processed, not yet handed on.
+        var processed: [TaggedChunk] = []
         var endQueued = false
 
         init(_ processor: AudioProcessor, outputFormat: PCMFormat) {
             self.processor = processor
+            buffering = processor as? BufferingAudioProcessor
             self.outputFormat = outputFormat
+        }
+
+        var isEnded: Bool {
+            guard let buffering else { return endQueued && processed.isEmpty }
+            return buffering.isEnded
+        }
+
+        func queueEndOfStream() {
+            endQueued = true
+            buffering?.queueEndOfStream()
         }
     }
 
@@ -48,6 +65,8 @@ final class AudioProcessingPipeline {
                 guard output.sampleRate == format.sampleRate else {
                     throw AudioProcessingError.sampleRateChanged(from: format, to: output)
                 }
+                precondition(processor is BufferingAudioProcessor || output == format,
+                             "\(processor) processes in place, so it cannot change the format")
                 active.append((processor, output))
                 format = output
             }
@@ -80,7 +99,9 @@ final class AudioProcessingPipeline {
     /// False with no active stage: input then comes out of `getOutput` unchanged.
     var isOperational: Bool { !stages.isEmpty }
 
-    func queueInput(_ chunk: TaggedChunk) {
+    /// Consuming, so an in-place stage owns the only reference to the samples and rewrites them
+    /// without a copy.
+    func queueInput(_ chunk: consuming TaggedChunk) {
         precondition(chunk.format == inputFormat, "input format changed without configure and flush")
         guard let first = stages.first else {
             passThrough.append(chunk)
@@ -96,10 +117,12 @@ final class AudioProcessingPipeline {
         }
         var carried: TaggedChunk?
         for (index, stage) in stages.enumerated() {
-            if let carried, index > 0 { accept(carried, into: stage) }
-            if index > 0, stages[index - 1].processor.isEnded, !stage.endQueued {
-                stage.endQueued = true
-                stage.processor.queueEndOfStream()
+            if index > 0, let chunk = carried {
+                carried = nil
+                accept(consume chunk, into: stage)
+            }
+            if index > 0, stages[index - 1].isEnded, !stage.endQueued {
+                stage.queueEndOfStream()
             }
             carried = drain(stage)
         }
@@ -110,13 +133,12 @@ final class AudioProcessingPipeline {
     func queueEndOfStream() {
         inputEnded = true
         guard let first = stages.first, !first.endQueued else { return }
-        first.endQueued = true
-        first.processor.queueEndOfStream()
+        first.queueEndOfStream()
     }
 
     var isEnded: Bool {
         guard let last = stages.last else { return inputEnded && passThrough.isEmpty }
-        return last.processor.isEnded
+        return last.isEnded
     }
 
     func reset() {
@@ -130,17 +152,26 @@ final class AudioProcessingPipeline {
         inputEnded = false
     }
 
-    private func accept(_ chunk: TaggedChunk, into stage: Stage) {
+    private func accept(_ chunk: consuming TaggedChunk, into stage: Stage) {
+        guard let buffering = stage.buffering else {
+            guard !chunk.samples.isEmpty || !chunk.tags.isEmpty else { return }
+            chunk.samples.withUnsafeMutableBufferPointer { stage.processor.process($0) }
+            stage.processed.append(chunk)
+            return
+        }
         stage.pending.append(contentsOf: chunk.tags.map { ($0, false) })
-        stage.processor.queueInput(chunk.samples)
+        buffering.queueInput(chunk.samples)
     }
 
-    private func drain(_ stage: Stage) -> TaggedChunk {
-        let output = stage.processor.getOutput()
+    private func drain(_ stage: Stage) -> TaggedChunk? {
+        guard let buffering = stage.buffering else {
+            return stage.processed.isEmpty ? nil : stage.processed.removeFirst()
+        }
+        let output = buffering.getOutput()
         let frames = Int64(output.samples.count / stage.outputFormat.channelCount)
         let tags = rewrite(stage, outputFrames: frames, dropped: output.dropped)
-        if stage.processor.isEnded {
-            precondition(stage.pending.isEmpty, "\(stage.processor) ended without handing over all its input")
+        if buffering.isEnded {
+            precondition(stage.pending.isEmpty, "\(buffering) ended without handing over all its input")
         }
         return TaggedChunk(samples: output.samples, format: stage.outputFormat, tags: tags)
     }

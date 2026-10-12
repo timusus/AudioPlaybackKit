@@ -122,7 +122,7 @@ final class SequencedUpstream: FeederUpstream {
                 pipelineItem = tag.item
                 endQueued = false
             }
-            pipeline.queueInput(next)
+            pipeline.queueInput(consume next)
         }
         return .pending
     }

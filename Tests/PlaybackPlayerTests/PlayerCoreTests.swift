@@ -264,6 +264,14 @@ final class PlayerCoreTests: XCTestCase {
         XCTAssertEqual(rig.output.enqueues.first?.samples, [-1000, -1001])
     }
 
+    func testBufferingProcessorsReachTheTransport() {
+        player.setProcessors([QueuedNegate()])
+        player.setItems(["b"])
+        rig.pump()
+
+        XCTAssertEqual(rig.output.enqueues.first?.samples, [-1000, -1001])
+    }
+
     // The transport is keyed by private ids; a processor still gets the app's item, repeats included.
     func testProcessorsAreFlushedWithTheAppsItemAtEachJoin() {
         let negate = Negate()
@@ -335,6 +343,23 @@ final class PlayerCoreTests: XCTestCase {
 
 /// Negates every sample, so audio that went through it is recognisable.
 private final class Negate: AudioProcessor, @unchecked Sendable {
+    func configure(_ input: PCMFormat) throws -> PCMFormat { input }
+    var isActive: Bool { true }
+
+    func process(_ samples: UnsafeMutableBufferPointer<Float>) {
+        for index in samples.indices { samples[index] = -samples[index] }
+    }
+
+    private(set) var flushes: [StreamMetadata] = []
+
+    func flush(_ metadata: StreamMetadata) {
+        flushes.append(metadata)
+    }
+    func reset() {}
+}
+
+/// Negates through the queue, so a buffering stage keeps its shape behind the player's wrapper.
+private final class QueuedNegate: BufferingAudioProcessor, @unchecked Sendable {
     private var held: [Float] = []
     private var ended = false
 
@@ -349,11 +374,6 @@ private final class Negate: AudioProcessor, @unchecked Sendable {
 
     func queueEndOfStream() { ended = true }
     var isEnded: Bool { ended && held.isEmpty }
-    private(set) var flushes: [StreamMetadata] = []
-
-    func flush(_ metadata: StreamMetadata) {
-        held = []
-        flushes.append(metadata)
-    }
+    func flush(_ metadata: StreamMetadata) { held = [] }
     func reset() { held = []; ended = false }
 }

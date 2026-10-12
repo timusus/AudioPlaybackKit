@@ -20,8 +20,17 @@ final class KeyedItems<Item: Hashable & Sendable>: @unchecked Sendable {
     }
 }
 
+extension KeyedItems {
+    /// Hands `base` the app's item at flush, keeping its shape so an in-place stage stays in place.
+    func keyed(_ base: any AudioProcessor) -> any AudioProcessor {
+        guard let buffering = base as? any BufferingAudioProcessor else { return KeyedProcessor(base, items: self) }
+        return KeyedBufferingProcessor(buffering, items: self)
+    }
+}
+
 /// Hands a processor the app's item at flush instead of the player's private transport key.
-final class KeyedProcessor<Item: Hashable & Sendable>: AudioProcessor {
+// Unchecked only because it is not final; every stored property is a Sendable let.
+class KeyedProcessor<Item: Hashable & Sendable>: AudioProcessor, @unchecked Sendable {
     private let base: any AudioProcessor
     private let items: KeyedItems<Item>
 
@@ -32,10 +41,7 @@ final class KeyedProcessor<Item: Hashable & Sendable>: AudioProcessor {
 
     func configure(_ input: PCMFormat) throws -> PCMFormat { try base.configure(input) }
     var isActive: Bool { base.isActive }
-    func queueInput(_ samples: [Float]) { base.queueInput(samples) }
-    func getOutput() -> ProcessorOutput { base.getOutput() }
-    func queueEndOfStream() { base.queueEndOfStream() }
-    var isEnded: Bool { base.isEnded }
+    func process(_ samples: UnsafeMutableBufferPointer<Float>) { base.process(samples) }
 
     func flush(_ metadata: StreamMetadata) {
         // Every key is recorded before the transport is given it, so the lookup does not miss.
@@ -44,4 +50,19 @@ final class KeyedProcessor<Item: Hashable & Sendable>: AudioProcessor {
     }
 
     func reset() { base.reset() }
+}
+
+final class KeyedBufferingProcessor<Item: Hashable & Sendable>: KeyedProcessor<Item>, BufferingAudioProcessor,
+    @unchecked Sendable {
+    private let buffering: any BufferingAudioProcessor
+
+    init(_ base: any BufferingAudioProcessor, items: KeyedItems<Item>) {
+        buffering = base
+        super.init(base, items: items)
+    }
+
+    func queueInput(_ samples: [Float]) { buffering.queueInput(samples) }
+    func getOutput() -> ProcessorOutput { buffering.getOutput() }
+    func queueEndOfStream() { buffering.queueEndOfStream() }
+    var isEnded: Bool { buffering.isEnded }
 }

@@ -4,7 +4,7 @@ import Foundation
 /// Stages the format at `configure` and applies it at `flush`, like media3 `BaseAudioProcessor`.
 /// Subclasses override `outputFormat(for:)` and `process`.
 // Unchecked: each test drives one from a single queue at a time.
-class TestProcessor: AudioProcessor, @unchecked Sendable {
+class TestProcessor: BufferingAudioProcessor, @unchecked Sendable {
     var enabled = true
     /// Samples handed over per `getOutput`, the rest stays held (media3's small-limit processors).
     var maxOutputSamples = Int.max
@@ -101,6 +101,23 @@ final class RecordingProcessor: TestProcessor, @unchecked Sendable {
         events.append(.input(frames: samples.count / format.channelCount))
         return ProcessorOutput(samples: samples)
     }
+}
+
+/// Doubles every sample in place, like an EQ or ReplayGain, and records each buffer it was lent.
+final class InPlaceGainProcessor: AudioProcessor, @unchecked Sendable {
+    var enabled = true
+    private(set) var buffers: [UnsafePointer<Float>?] = []
+
+    func configure(_ input: PCMFormat) throws -> PCMFormat { input }
+    var isActive: Bool { enabled }
+
+    func process(_ samples: UnsafeMutableBufferPointer<Float>) {
+        buffers.append(UnsafePointer(samples.baseAddress))
+        for index in samples.indices { samples[index] *= 2 }
+    }
+
+    func flush(_ metadata: StreamMetadata) {}
+    func reset() {}
 }
 
 /// One to one, like ReplayGain.

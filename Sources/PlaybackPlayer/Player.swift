@@ -354,7 +354,7 @@ public final class Player<Item: Hashable & Sendable> {
 
     /// Each processor's `flush` gets the `Item` whose frames follow.
     public func setProcessors(_ processors: [any AudioProcessor]) {
-        transport.setProcessors(processors.map { KeyedProcessor($0, items: keyedItems) })
+        transport.setProcessors(processors.map(keyedItems.keyed))
     }
 
     // MARK: Transport events
