@@ -30,13 +30,12 @@ final class SequencerInterruptTests: XCTestCase {
             }
             done.wait()
         }
-        let start = Date()
         // Far past what the open buffered, so the seek has to go to the reader.
         sequencer.seek(item: 1, to: .frame(80000))
         let chunk = firstChunk(sequencer)
 
         XCTAssertEqual(chunk?.tags.first?.mediaStartFrame, 44100)
-        XCTAssertLessThan(Date().timeIntervalSince(start), 1, "the interrupted seek ran on to its stall")
+        XCTAssertFalse(reader.stallRanOut, "the interrupted seek ran on to its stall")
     }
 
     private func firstChunk(_ sequencer: Sequencer, file: StaticString = #filePath, line: UInt = #line) -> TaggedChunk? {
@@ -68,6 +67,7 @@ private final class StallingReader: StreamByteReader, @unchecked Sendable {
     private var interrupted = false
     private var stallsNextCall = false
     private var hook: (() -> Void)?
+    private var _stallRanOut = false
 
     init(url: URL) throws {
         file = try FileByteReader(url: url)
@@ -76,6 +76,9 @@ private final class StallingReader: StreamByteReader, @unchecked Sendable {
     func beforeNextClear(_ hook: @escaping () -> Void) {
         condition.withLock { self.hook = hook }
     }
+
+    /// Whether a stall waited out its whole `stall` rather than ending on an interrupt.
+    var stallRanOut: Bool { condition.withLock { _stallRanOut } }
 
     var totalLength: Int64? { file.totalLength }
     var position: Int64 { file.position }
@@ -96,6 +99,7 @@ private final class StallingReader: StreamByteReader, @unchecked Sendable {
                 stallsNextCall = false
                 let deadline = Date().addingTimeInterval(stall)
                 while !interrupted, condition.wait(until: deadline) {}
+                if !interrupted { _stallRanOut = true }
             }
             if interrupted { throw StreamByteReaderError.interrupted }
         }

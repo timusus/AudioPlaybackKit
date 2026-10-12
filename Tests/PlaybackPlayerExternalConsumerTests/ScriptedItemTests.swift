@@ -75,7 +75,9 @@ final class ScriptedItemTests: XCTestCase {
         stall.entered.wait()
         XCTAssertTrue(stall.hasStalled)
         source.interrupt(through: 2)
-        XCTAssertEqual(opened.wait(timeout: .now() + 0.2), .timedOut, "an earlier epoch's interrupt leaves it held")
+        // `interrupt` releases synchronously, so a release it made is visible on return.
+        XCTAssertFalse(stall.wasReleased, "an earlier epoch's interrupt leaves it held")
+        XCTAssertEqual(opened.wait(timeout: .now()), .timedOut, "an earlier epoch's interrupt leaves it held")
         source.interrupt(through: 3)
         XCTAssertEqual(opened.wait(timeout: .now() + 5), .success)
     }

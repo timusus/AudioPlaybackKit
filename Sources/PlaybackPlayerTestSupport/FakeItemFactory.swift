@@ -80,8 +80,11 @@ public final class SourceStall: @unchecked Sendable {
     private let lock = NSLock()
     private var _hasStalled = false
     private var blocking = false
+    private var _wasReleased = false
 
     public var hasStalled: Bool { lock.withLock { _hasStalled } }
+    /// Set by the release itself, before the held call wakes, so a test can check it without waiting.
+    public var wasReleased: Bool { lock.withLock { _wasReleased } }
 
     public init(frame: Int64?, entered: DispatchSemaphore = DispatchSemaphore(value: 0)) {
         self.frame = frame
@@ -89,6 +92,7 @@ public final class SourceStall: @unchecked Sendable {
     }
 
     public func release() {
+        lock.withLock { _wasReleased = true }
         released.signal()
     }
 

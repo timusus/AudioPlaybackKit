@@ -110,7 +110,9 @@ extension GrowingFileByteSourceTests {
         // +28.1 s: the retry's wait ends; 0.2 s later the last one goes out with what is left of the window.
         clock.advance(by: GrowingFileByteSource.retryRequestTimeoutSeconds + GrowingFileDownload.Retry.firstBackoffSeconds * 2)
         XCTAssertTrue(waitUntil { server.requestedRanges.count == 3 }, "no retry inside the window")
-        XCTAssertFalse(pending.finished(within: 0.1), "the read failed inside the window")
+        // Timers fire inside `advance`, so the source has decided by now: a failure would have ended the attempt.
+        XCTAssertTrue(source.awaitsNetworkForTest, "the read failed inside the window")
+        XCTAssertFalse(pending.finished(within: 0), "the read failed inside the window")
 
         clock.advance(by: 1.7 + 0.01)
         XCTAssertTrue(pending.finished(within: 10), "an attempt ran past the window's end")
