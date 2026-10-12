@@ -9,48 +9,9 @@ import Observation
 import PlaybackPlayer
 import PlaybackPlayerTestSupport
 import PlaybackRender
+import PlaybackNowPlayingTestSupport
 import PlaybackRenderTestSupport
 @testable import PlaybackNowPlaying
-
-/// Records every write; `info` reads one key of what was written last.
-@MainActor
-final class FakeInfoCenter: NowPlayingInfoCenter {
-    var nowPlayingInfo: [String: Any]? {
-        didSet { writes += 1 }
-    }
-    var playbackState: MPNowPlayingPlaybackState = .unknown
-    private(set) var writes = 0
-
-    subscript<T>(_ key: String) -> T? { nowPlayingInfo?[key] as? T }
-}
-
-/// Keeps each command's handler, so a command is enabled exactly while it has one.
-@MainActor
-final class FakeCommandCenter: RemoteCommandCenter {
-    private(set) var handlers: [RemoteCommand: (RemoteCommandEvent) -> MPRemoteCommandHandlerStatus] = [:]
-    private(set) var intervals: (forward: TimeInterval, backward: TimeInterval)?
-    private(set) var rates: [Double]?
-
-    var enabled: Set<RemoteCommand> { Set(handlers.keys) }
-
-    func setHandler(for command: RemoteCommand, _ handler: ((RemoteCommandEvent) -> MPRemoteCommandHandlerStatus)?) {
-        handlers[command] = handler
-    }
-
-    func setSkipIntervals(_ intervals: (forward: TimeInterval, backward: TimeInterval)?) {
-        self.intervals = intervals
-    }
-
-    func setSupportedRates(_ rates: [Double]) {
-        self.rates = rates
-    }
-
-    /// What the handler answered, or nil for a disabled command.
-    @discardableResult
-    func fire(_ command: RemoteCommand, _ event: RemoteCommandEvent = .plain) -> MPRemoteCommandHandlerStatus? {
-        handlers[command]?(event)
-    }
-}
 
 /// An app's policy over the player, as Shuttle2's `SessionPlayer`: everything else forwards.
 @MainActor @Observable
@@ -86,8 +47,8 @@ final class NowPlayingRig {
     static let format = PCMFormat(sampleRate: 8, channelCount: 1)
 
     let base: PlayerTestRig<String>
-    let info = FakeInfoCenter()
-    let commands = FakeCommandCenter()
+    let info = FakeNowPlayingInfoCenter()
+    let commands = FakeRemoteCommandCenter()
     private(set) var session: NowPlayingSession<String>!
     /// Artwork loads for these items wait for `deliverArtwork`.
     var heldArtwork: Set<String> = []
@@ -105,12 +66,9 @@ final class NowPlayingRig {
         unknownLength: Set<String> = [],
         wrap: (Player<String>) -> any NowPlayingControllable<String> = { $0 }
     ) {
-        base = PlayerTestRig { item in
-            let source = FakeItemSource(format: Self.format, frames: 80, chunkFrames: 2)
-            if live.contains(item) { source.duration = nil }
-            if unknownLength.contains(item) { (source.duration, source.seekable) = (nil, true) }
-            return source
-        }
+        let factory = FakeItemFactory<String>(format: Self.format)
+        (factory.live, factory.unknownLength) = (live, unknownLength)
+        base = PlayerTestRig { try factory.make($0) }
         session = NowPlayingSession(
             player: wrap(base.player),
             supportedRates: supportedRates,
@@ -133,7 +91,7 @@ final class NowPlayingRig {
     /// runs on its own queue, so a session reading before this would race it.
     func settle() async {
         base.settle()
-        await session.pendingRefresh?.value
+        await session.settle()
     }
 
     /// Resumes the latest held load of `item`, so loads can finish newest first.

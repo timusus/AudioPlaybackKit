@@ -42,7 +42,7 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     /// Seconds on a monotonic clock, to tell how far the system has extrapolated elapsed time.
     private let now: () -> TimeInterval
 
-    private(set) var pendingRefresh: Task<Void, Never>?
+    @_spi(Testing) public private(set) var pendingRefresh: Task<Void, Never>?
     private(set) var artworkLoad: Task<Void, Never>?
     private var released = false
     private var enabledCommands: Set<RemoteCommand>?
@@ -88,7 +88,7 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         )
     }
 
-    init(
+    @_spi(Testing) public init(
         player: any NowPlayingControllable<Item>,
         supportedRates: [Double],
         metadata: @escaping @MainActor (Item) -> NowPlayingMetadata,

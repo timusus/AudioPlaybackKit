@@ -478,6 +478,13 @@ final class SessionPlayer: ForwardingNowPlayingControllable {
 The next button calls `seekToNext()`, previous `seekToPrevious()` (the previous item, or a restart with
 none), the skip buttons `seek(by:)` and the scrubber `seek(to:)`.
 
+**Test it.** `PlaybackNowPlayingTestSupport` builds the session on a `FakeNowPlayingInfoCenter` and a
+`FakeRemoteCommandCenter`, with `now:` as its clock: pass `infoCenter:`, `commandCenter:` and `now:` to
+`NowPlayingSession`'s initialiser. After driving the player, `await session.settle()` before reading
+`info[MPMediaItemPropertyTitle]`, `info.playbackState`, `commands.enabled`, `commands.intervals` or
+`commands.rates`; `commands.press(.pause)` runs a command as the lock screen would. See
+`Tests/PlaybackPlayerExternalConsumerTests/NowPlayingTests.swift`.
+
 ## Write a byte source of your own
 
 Conform to `StreamByteReader`: `read` blocks until at least one byte, returning 0 only at end of

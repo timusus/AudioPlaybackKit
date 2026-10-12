@@ -47,7 +47,7 @@ final class NowPlayingCommandTests: XCTestCase {
         await rig.settle()
 
         XCTAssertEqual(enabled, [.play, .pause, .togglePlayPause])
-        XCTAssertEqual(rig.commands.fire(.play), .noActionableNowPlayingItem)
+        XCTAssertEqual(rig.commands.press(.play), .noActionableNowPlayingItem)
         XCTAssertFalse(rig.player.playWhenReady)
     }
 
@@ -79,7 +79,7 @@ final class NowPlayingCommandTests: XCTestCase {
 
         XCTAssertFalse(rig.player.isLive)
         XCTAssertTrue(enabled.contains(.changePlaybackPosition))
-        XCTAssertEqual(rig.commands.fire(.changePlaybackPosition, .position(6)), .success)
+        XCTAssertEqual(rig.commands.press(.changePlaybackPosition, .position(6)), .success)
         XCTAssertEqual(rig.player.position, 6)
     }
 
@@ -228,9 +228,9 @@ final class NowPlayingCommandTests: XCTestCase {
     func testPlayAndPauseSetPlayWhenReady() async {
         await opened()
 
-        XCTAssertEqual(rig.commands.fire(.play), .success)
+        XCTAssertEqual(rig.commands.press(.play), .success)
         XCTAssertTrue(rig.player.playWhenReady)
-        XCTAssertEqual(rig.commands.fire(.pause), .success)
+        XCTAssertEqual(rig.commands.press(.pause), .success)
         XCTAssertFalse(rig.player.playWhenReady)
     }
 
@@ -238,9 +238,9 @@ final class NowPlayingCommandTests: XCTestCase {
     func testTogglePausesWhilePlayingAndPlaysWhilePaused() async {
         await opened()
 
-        rig.commands.fire(.togglePlayPause)
+        rig.commands.press(.togglePlayPause)
         XCTAssertTrue(rig.player.playWhenReady)
-        rig.commands.fire(.togglePlayPause)
+        rig.commands.press(.togglePlayPause)
         XCTAssertFalse(rig.player.playWhenReady)
     }
 
@@ -252,7 +252,7 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertEqual(rig.player.state, .ended)
         XCTAssertTrue(rig.player.playWhenReady)
 
-        rig.commands.fire(.togglePlayPause)
+        rig.commands.press(.togglePlayPause)
         await rig.run(for: 1)
 
         XCTAssertTrue(rig.player.isPlaying)
@@ -267,7 +267,7 @@ final class NowPlayingCommandTests: XCTestCase {
         rig.base.session.interruptionBegan()
         XCTAssertEqual(rig.player.suppression, .interruption)
 
-        rig.commands.fire(.togglePlayPause)
+        rig.commands.press(.togglePlayPause)
         await rig.run(for: 1)
 
         XCTAssertTrue(rig.player.playWhenReady)
@@ -278,10 +278,10 @@ final class NowPlayingCommandTests: XCTestCase {
     func testNextAndPreviousSkip() async {
         await opened(at: 1)
 
-        XCTAssertEqual(rig.commands.fire(.nextTrack), .success)
+        XCTAssertEqual(rig.commands.press(.nextTrack), .success)
         XCTAssertEqual(rig.player.currentIndex, 2)
         await rig.settle()
-        XCTAssertEqual(rig.commands.fire(.previousTrack), .success)
+        XCTAssertEqual(rig.commands.press(.previousTrack), .success)
         XCTAssertEqual(rig.player.currentIndex, 1)
     }
 
@@ -291,7 +291,7 @@ final class NowPlayingCommandTests: XCTestCase {
         await opened()
         XCTAssertGreaterThan(rig.player.position, 0)
 
-        XCTAssertEqual(rig.commands.fire(.previousTrack), .success)
+        XCTAssertEqual(rig.commands.press(.previousTrack), .success)
 
         XCTAssertEqual(rig.player.currentIndex, 0)
         XCTAssertEqual(rig.player.position, 0)
@@ -303,9 +303,9 @@ final class NowPlayingCommandTests: XCTestCase {
         await opened()
         rig.player.seek(to: 1)
 
-        XCTAssertEqual(rig.commands.fire(.skipForward, .interval(3)), .success)
+        XCTAssertEqual(rig.commands.press(.skipForward, .interval(3)), .success)
         XCTAssertEqual(rig.player.position, 4)
-        XCTAssertEqual(rig.commands.fire(.skipBackward, .interval(2)), .success)
+        XCTAssertEqual(rig.commands.press(.skipBackward, .interval(2)), .success)
         XCTAssertEqual(rig.player.position, 2)
     }
 
@@ -313,7 +313,7 @@ final class NowPlayingCommandTests: XCTestCase {
     func testChangePlaybackPositionSeeks() async {
         await opened()
 
-        XCTAssertEqual(rig.commands.fire(.changePlaybackPosition, .position(6)), .success)
+        XCTAssertEqual(rig.commands.press(.changePlaybackPosition, .position(6)), .success)
 
         XCTAssertEqual(rig.player.position, 6)
     }
@@ -323,7 +323,7 @@ final class NowPlayingCommandTests: XCTestCase {
         rig = NowPlayingRig(supportedRates: [1, 1.5])
         await opened()
 
-        XCTAssertEqual(rig.commands.fire(.changePlaybackRate, .rate(1.5)), .success)
+        XCTAssertEqual(rig.commands.press(.changePlaybackRate, .rate(1.5)), .success)
 
         XCTAssertEqual(rig.player.rate, 1.5)
     }
@@ -332,7 +332,7 @@ final class NowPlayingCommandTests: XCTestCase {
     func testAMalformedEventFails() async {
         await opened()
 
-        XCTAssertEqual(rig.commands.fire(.changePlaybackPosition, .plain), .commandFailed)
+        XCTAssertEqual(rig.commands.press(.changePlaybackPosition, .plain), .commandFailed)
         XCTAssertEqual(rig.player.position, 1, accuracy: 0.5)
     }
 
@@ -345,7 +345,7 @@ final class NowPlayingCommandTests: XCTestCase {
         await opened(at: 1)
 
         XCTAssertEqual(enabled, [.play, .pause, .togglePlayPause, .previousTrack, .changePlaybackPosition])
-        XCTAssertNil(rig.commands.fire(.nextTrack))
+        XCTAssertNil(rig.commands.press(.nextTrack))
         XCTAssertEqual(rig.player.currentIndex, 1)
     }
 
@@ -354,7 +354,7 @@ final class NowPlayingCommandTests: XCTestCase {
         policy.vetoesNext = true
         await opened(at: 1)
 
-        XCTAssertEqual(rig.commands.fire(.nextTrack), .success)
+        XCTAssertEqual(rig.commands.press(.nextTrack), .success)
 
         XCTAssertEqual(policy.vetoedNexts, 1)
         XCTAssertEqual(rig.player.currentIndex, 1)
@@ -369,7 +369,7 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertTrue(enabled.isDisjoint(with: [.nextTrack, .previousTrack]))
         XCTAssertEqual(rig.commands.intervals?.forward, 30)
         XCTAssertEqual(rig.commands.intervals?.backward, 30)
-        XCTAssertEqual(rig.commands.fire(.skipBackward, .interval(30)), .success)
+        XCTAssertEqual(rig.commands.press(.skipBackward, .interval(30)), .success)
         XCTAssertEqual(rig.player.position, 0)
 
         rig.player.seek(to: 0, itemAt: 1)
@@ -377,7 +377,7 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertTrue(enabled.isSuperset(of: [.nextTrack, .previousTrack]))
         XCTAssertTrue(enabled.isDisjoint(with: [.skipForward, .skipBackward]))
         XCTAssertNil(rig.commands.intervals)
-        XCTAssertEqual(rig.commands.fire(.nextTrack), .success)
+        XCTAssertEqual(rig.commands.press(.nextTrack), .success)
         XCTAssertEqual(rig.player.currentIndex, 2)
     }
 
@@ -387,14 +387,14 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertTrue(enabled.contains(.changePlaybackPosition))
 
         policy.removed = .seekInCurrentItem
-        XCTAssertEqual(rig.commands.fire(.changePlaybackPosition, .position(6)), .commandFailed, "refused before the refresh")
+        XCTAssertEqual(rig.commands.press(.changePlaybackPosition, .position(6)), .commandFailed, "refused before the refresh")
         XCTAssertEqual(rig.player.position, 1, accuracy: 0.5)
         await rig.settle()
         XCTAssertFalse(enabled.contains(.changePlaybackPosition))
 
         policy.removed = []
         await rig.settle()
-        XCTAssertEqual(rig.commands.fire(.changePlaybackPosition, .position(6)), .success)
+        XCTAssertEqual(rig.commands.press(.changePlaybackPosition, .position(6)), .success)
         XCTAssertEqual(rig.player.position, 6)
     }
 

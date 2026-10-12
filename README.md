@@ -35,6 +35,7 @@ Link only the products you import.
 | `PlaybackNowPlaying` | `NowPlayingSession`: a `Player` on the lock screen, Control Centre and CarPlay, with the remote commands routed back to it. |
 | `PlaybackStreamingTestSupport` | `LoopbackMediaServer`: a local HTTP server for testing code that streams. |
 | `PlaybackPlayerTestSupport` | `FakeAudioSession`, `PlayerTestRig` and `FakeItemFactory`: a `Player` on a fake output and manual clock over items scripted to fail, end early or stall, for testing an app's coordinator. |
+| `PlaybackNowPlayingTestSupport` | `FakeNowPlayingInfoCenter` and `FakeRemoteCommandCenter`: a `NowPlayingSession` publishing to fakes, for pressing remote commands and reading what is shown. |
 | `FFmpeg` | The LGPL-only FFmpeg as a dynamic framework, for an app with its own C code against libavformat. |
 
 **Which product do I need?** PCM only: `PlaybackDecode` (plus `PlaybackStreaming` for URLs). Your own queue and

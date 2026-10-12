@@ -2,13 +2,13 @@ import Foundation
 import MediaPlayer
 
 /// The remote commands a session answers.
-enum RemoteCommand: CaseIterable {
+public enum RemoteCommand: CaseIterable, Sendable {
     case play, pause, togglePlayPause, nextTrack, previousTrack, skipForward, skipBackward
     case changePlaybackPosition, changePlaybackRate
 }
 
 /// A command's payload, unwrapped from its `MPRemoteCommandEvent` subclass.
-enum RemoteCommandEvent: Equatable {
+public enum RemoteCommandEvent: Equatable, Sendable {
     case plain
     case position(TimeInterval)
     case interval(TimeInterval)
@@ -16,8 +16,8 @@ enum RemoteCommandEvent: Equatable {
 }
 
 /// `MPRemoteCommandCenter` behind a seam: its events cannot be constructed, so tests call handlers.
-@MainActor
-protocol RemoteCommandCenter: AnyObject {
+@MainActor @_spi(Testing)
+public protocol RemoteCommandCenter: AnyObject {
     /// Enables `command` with `handler`, replacing any earlier one; nil disables it.
     func setHandler(for command: RemoteCommand, _ handler: ((RemoteCommandEvent) -> MPRemoteCommandHandlerStatus)?)
     /// The intervals drawn in the skip glyphs; nil clears them.
@@ -27,13 +27,13 @@ protocol RemoteCommandCenter: AnyObject {
 }
 
 /// `MPNowPlayingInfoCenter` behind a seam.
-@MainActor
-protocol NowPlayingInfoCenter: AnyObject {
+@MainActor @_spi(Testing)
+public protocol NowPlayingInfoCenter: AnyObject {
     var nowPlayingInfo: [String: Any]? { get set }
     var playbackState: MPNowPlayingPlaybackState { get set }
 }
 
-extension MPNowPlayingInfoCenter: NowPlayingInfoCenter {}
+@_spi(Testing) extension MPNowPlayingInfoCenter: NowPlayingInfoCenter {}
 
 /// The shared command centre: one target per command, removed before a replacement is added.
 @MainActor
