@@ -1,14 +1,18 @@
 import Foundation
 
-/// The feeder's upstream: sequencer chunks through the processor pipeline. A format change, at a
-/// join, drains the pipeline before reconfiguring it, as media3 `DefaultAudioSink` does, so audio a
-/// processor holds back is never lost. Confined to the transport's queue.
+/// The feeder's upstream: sequencer chunks through the processor pipeline. Every join, gapless or
+/// not, drains the pipeline before reconfiguring and flushing it with the next item's metadata, as
+/// media3 `DefaultAudioSink` does at a format change, so audio a processor holds back is never lost
+/// and no processor sees an item's frames before its flush (ADR-0021). Confined to the transport's queue.
 final class SequencedUpstream: FeederUpstream {
     private let sequencer: Sequencer
+    private let item: (_ id: Int) -> any Hashable & Sendable
     private let onFailure: (_ item: Int, _ error: any Error) -> Void
     private var pipeline = AudioProcessingPipeline([])
     /// The input format applied to the pipeline; nil until the first chunk after a restart.
     private var pipelineFormat: PCMFormat?
+    /// The item whose frames the pipeline was last flushed for.
+    private var pipelineItem: Int?
     private var endQueued = false
     /// A chunk of a new format, waiting for the pipeline to drain.
     private var held: TaggedChunk?
@@ -22,8 +26,14 @@ final class SequencedUpstream: FeederUpstream {
     /// so it is also the rate of the item's frames at the output.
     private(set) var sampleRates: [Int: Double] = [:]
 
-    init(sequencer: Sequencer, onFailure: @escaping (_ item: Int, _ error: any Error) -> Void) {
+    /// `item` maps an id to the app's item for `StreamMetadata`.
+    init(
+        sequencer: Sequencer,
+        item: @escaping (_ id: Int) -> any Hashable & Sendable,
+        onFailure: @escaping (_ item: Int, _ error: any Error) -> Void
+    ) {
         self.sequencer = sequencer
+        self.item = item
         self.onFailure = onFailure
     }
 
@@ -91,7 +101,9 @@ final class SequencedUpstream: FeederUpstream {
                     return .pending
                 }
             }
-            if pipelineFormat != nil, !endQueued, next.format != pipelineFormat {
+            // Sequencer chunks carry one tag each.
+            let tag = next.tags[0]
+            if pipelineFormat != nil, !endQueued, next.format != pipelineFormat || tag.item != pipelineItem {
                 held = next
                 pipeline.queueEndOfStream()
                 endQueued = true
@@ -102,11 +114,12 @@ final class SequencedUpstream: FeederUpstream {
                 do {
                     try pipeline.configure(next.format)
                 } catch {
-                    fail(next.tags[0].item, error)
+                    fail(tag.item, error)
                     return .pending
                 }
-                pipeline.flush()
+                pipeline.flush(StreamMetadata(item: item(tag.item), mediaStartFrame: tag.mediaStartFrame))
                 pipelineFormat = next.format
+                pipelineItem = tag.item
                 endQueued = false
             }
             pipeline.queueInput(next)
@@ -131,6 +144,7 @@ final class SequencedUpstream: FeederUpstream {
         pipeline.reset()
         applyPendingProcessors()
         pipelineFormat = nil
+        pipelineItem = nil
         endQueued = false
         held = nil
         failed = false

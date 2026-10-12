@@ -69,10 +69,10 @@ final class AudioProcessingPipeline {
     }
 
     /// Applies the staged configuration and drops everything buffered.
-    func flush() {
+    func flush(_ metadata: StreamMetadata) {
         inputFormat = pendingInput
         stages = pendingActive.map { Stage($0.processor, outputFormat: $0.output) }
-        stages.forEach { $0.processor.flush() }
+        stages.forEach { $0.processor.flush(metadata) }
         passThrough = []
         inputEnded = false
     }

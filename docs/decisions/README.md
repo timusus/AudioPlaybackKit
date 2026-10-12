@@ -26,5 +26,6 @@ and is kept as history. The overview is in [architecture](../architecture.md).
 | [0018](0018-render-layer.md) | A `PlaybackRender` product: processor pipeline, position map and gapless scheduler over ASBAR + synchronizer. | Accepted |
 | [0019](0019-player.md) | A `PlaybackPlayer` product over `Transport` (item list, `playWhenReady` and state, seconds, audio session) and a separate `PlaybackNowPlaying`; shuffle, sleep timer and persistence stay in the apps. | Accepted (2026-10-11) |
 | [0020](0020-now-playing-drives-a-protocol.md) | `NowPlayingSession` drives `NowPlayingControllable`; an app's forwarding wrapper sets the available commands and per-item skip intervals, as media3's `ForwardingPlayer`. | Accepted (2026-10-12) |
+| [0021](0021-processor-stream-metadata.md) | `AudioProcessor.flush(_:)` gets a `StreamMetadata` naming the item that follows; the chain drains and flushes at every join. | Accepted (2026-10-12) |
 
 These decisions were first made in the Shuttle Podcasts app and moved here with the code.

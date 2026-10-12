@@ -109,14 +109,13 @@ Details:
    `onFailed` is `itemFailed`; `onPosition` is `position` (seconds times 1000 for the Kotlin millisecond
    callbacks). The `commands` / `superseded` count the adapter keeps goes: `Player` drops a stale event
    itself.
-2. **ReplayGain.** `gainDb` is per track and a processor does not see which item a chunk belongs to. Wrap
-   `FFmpegItemSource` in an `ItemSource` that scales each chunk in `nextChunk()`, ahead of the chain, so
-   the EQ and limiter see gained audio as they do now.
+2. **ReplayGain.** `gainDb` is per track: a first processor, ahead of the EQ and limiter, picks the gain
+   for `metadata.item` in `flush(_:)`, which names the item whose frames follow (ADR-0021).
 3. **EQ.** The coefficients come from the shared Kotlin code for one rate. The processor's `configure(_:)`
-   gets the item's rate and must ask for coefficients for it, again after each `flush()` that follows a
+   gets the item's rate and must ask for coefficients for it, again after each `flush(_:)` that follows a
    rate change. Never cache a 44.1 kHz set.
-4. **Limiter and EQ state across a join.** A format change at a join re-configures and flushes the
-   pipeline, so filter memory and the limiter envelope reset there; with the same format they carry on.
+4. **Limiter and EQ state across a join.** Every join drains, re-configures and flushes the pipeline,
+   so filter memory and the limiter envelope reset there, whatever the format.
 5. **Remove the fixed output format.** Each item plays at its own sample rate and channel count, so
    `PCMProcessor` loses its assumption of stereo at `outputSampleRate`.
 6. **Progressive transcodes** (`isSeekable` false, `onSeekUnsupported`): an `ItemSource.seek` that throws
@@ -148,7 +147,8 @@ Each step ships on its own. Put the new path behind a flag until step 4; the ada
 
 - `configure(_:)` receives the item's `PCMFormat` and returns the output format; with `isActive` false the
   stage is skipped. A format that changes the sample rate throws `AudioProcessingError.sampleRateChanged`.
-- `configure(_:)` only stages and `flush()` applies, so a rate-dependent filter rebuilds in `flush()`. A
+- `configure(_:)` only stages and `flush(_:)` applies, so a rate-dependent filter rebuilds in `flush(_:)`,
+  which also names the item whose frames follow. A
   toggle or gain the app changes while playing is read under the processor's own lock.
 - A stage that removes audio (a silence gate) reports each removal as `DroppedFrames`, in input frames, at
   the output frame it precedes. Positions then stay in media time, which is what the ad-skip arithmetic and

@@ -23,7 +23,7 @@ final class AudioProcessingPipelineTests: XCTestCase {
     private func started(_ processors: [AudioProcessor], format: PCMFormat? = nil) throws -> AudioProcessingPipeline {
         let pipeline = AudioProcessingPipeline(processors)
         try pipeline.configure(format ?? self.format)
-        pipeline.flush()
+        pipeline.flush(.itemZero)
         return pipeline
     }
 
@@ -43,7 +43,7 @@ final class AudioProcessingPipelineTests: XCTestCase {
         XCTAssertFalse(pipeline.isOperational)
         try pipeline.configure(format)
         XCTAssertFalse(pipeline.isOperational, "configure alone must not apply")
-        pipeline.flush()
+        pipeline.flush(.itemZero)
         XCTAssertTrue(pipeline.isOperational)
     }
 
@@ -54,7 +54,7 @@ final class AudioProcessingPipelineTests: XCTestCase {
         processor.enabled = false
         try pipeline.configure(format)
         XCTAssertTrue(pipeline.isOperational)
-        pipeline.flush()
+        pipeline.flush(.itemZero)
         XCTAssertFalse(pipeline.isOperational)
     }
 
@@ -63,7 +63,7 @@ final class AudioProcessingPipelineTests: XCTestCase {
         try pipeline.configure(mono)
         pipeline.queueInput(chunk([1, 2], tags: [tag(0, 0, 1)]))
         XCTAssertEqual(pipeline.getOutput()?.format, format, "audio queued before the flush keeps the old format")
-        pipeline.flush()
+        pipeline.flush(.itemZero)
         pipeline.queueInput(chunk([1, 2], format: mono, tags: [tag(0, 0, 2)]))
         XCTAssertEqual(pipeline.getOutput()?.format, mono)
     }
@@ -73,7 +73,7 @@ final class AudioProcessingPipelineTests: XCTestCase {
         processor.enabled = false
         let pipeline = AudioProcessingPipeline([processor])
         let output = try pipeline.configure(format)
-        pipeline.flush()
+        pipeline.flush(.itemZero)
         XCTAssertEqual(output, format)
         XCTAssertFalse(pipeline.isOperational)
     }
@@ -118,7 +118,7 @@ final class AudioProcessingPipelineTests: XCTestCase {
         pipeline.queueInput(chunk([1, 2, 3, 4], tags: [tag(0, 0, 2)]))
         pipeline.queueEndOfStream()
         _ = pipeline.getOutput()
-        pipeline.flush()
+        pipeline.flush(.itemZero)
         XCTAssertFalse(pipeline.isEnded)
         XCTAssertNil(pipeline.getOutput())
     }
@@ -293,7 +293,7 @@ final class AudioProcessingPipelineTests: XCTestCase {
         let higher = PCMFormat(sampleRate: 2000, channelCount: 1)
         XCTAssertThrowsError(try pipeline.configure(higher)) { XCTAssertTrue($0 is UnsupportedRate) }
         XCTAssertEqual(first.stagedInput, mono)
-        pipeline.flush()
+        pipeline.flush(.itemZero)
         XCTAssertEqual(first.appliedInput, mono)
         pipeline.queueInput(chunk([1, 2], format: mono, tags: [tag(0, 0, 2)]))
         XCTAssertEqual(pipeline.getOutput()?.tags, [tag(0, 0, 2)])

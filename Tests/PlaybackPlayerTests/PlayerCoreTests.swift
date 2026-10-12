@@ -264,6 +264,21 @@ final class PlayerCoreTests: XCTestCase {
         XCTAssertEqual(rig.output.enqueues.first?.samples, [-1000, -1001])
     }
 
+    // The transport is keyed by private ids; a processor still gets the app's item, repeats included.
+    func testProcessorsAreFlushedWithTheAppsItemAtEachJoin() {
+        let negate = Negate()
+        player.setProcessors([negate])
+        player.setItems(["a", "b", "a"], startIndex: 0, startPosition: 9)
+        player.play()
+        rig.run(for: 22)
+
+        XCTAssertEqual(negate.flushes, [
+            StreamMetadata(item: "a", mediaStartFrame: 72),
+            StreamMetadata(item: "b", mediaStartFrame: 0),
+            StreamMetadata(item: "a", mediaStartFrame: 0),
+        ])
+    }
+
     func testIsPlayingOnlyWhenReadyIntendedAndNotSuppressed() {
         for state in [PlaybackState.idle, .buffering, .ready, .ended] {
             for intent in [false, true] {
@@ -334,6 +349,11 @@ private final class Negate: AudioProcessor, @unchecked Sendable {
 
     func queueEndOfStream() { ended = true }
     var isEnded: Bool { ended && held.isEmpty }
-    func flush() { held = [] }
+    private(set) var flushes: [StreamMetadata] = []
+
+    func flush(_ metadata: StreamMetadata) {
+        held = []
+        flushes.append(metadata)
+    }
     func reset() { held = []; ended = false }
 }

@@ -56,7 +56,17 @@ class TestProcessor: AudioProcessor, @unchecked Sendable {
     func endOfStreamOutput() -> [Float] { [] }
     var isEnded: Bool { ended }
 
-    func flush() {
+    func flush(_ metadata: StreamMetadata) {
+        clear()
+    }
+
+    func reset() {
+        clear()
+        stagedInput = nil
+        appliedInput = nil
+    }
+
+    private func clear() {
         appliedInput = stagedInput
         held = []
         pendingDropped = []
@@ -65,13 +75,32 @@ class TestProcessor: AudioProcessor, @unchecked Sendable {
         onFlush()
     }
 
-    func reset() {
-        flush()
-        stagedInput = nil
-        appliedInput = nil
+    func onFlush() {}
+}
+
+extension StreamMetadata {
+    static let itemZero = StreamMetadata(item: 0, mediaStartFrame: 0)
+}
+
+/// Records each flush's metadata and the input frames between flushes, like a ReplayGain reading
+/// its item's gain at flush.
+final class RecordingProcessor: TestProcessor, @unchecked Sendable {
+    enum Event: Equatable {
+        case flush(StreamMetadata)
+        case input(frames: Int)
     }
 
-    func onFlush() {}
+    private(set) var events: [Event] = []
+
+    override func flush(_ metadata: StreamMetadata) {
+        super.flush(metadata)
+        events.append(.flush(metadata))
+    }
+
+    override func process(_ samples: [Float], format: PCMFormat) -> ProcessorOutput {
+        events.append(.input(frames: samples.count / format.channelCount))
+        return ProcessorOutput(samples: samples)
+    }
 }
 
 /// One to one, like ReplayGain.

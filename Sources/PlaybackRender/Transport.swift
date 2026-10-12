@@ -99,7 +99,11 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         // for the next tick.
         sequencer = Sequencer(executor: executor) { timer.wake() }
         // Weak: deinit's teardown runs after the transport is gone, and its events go nowhere.
-        upstream = SequencedUpstream(sequencer: sequencer) { [weak self] item, error in
+        // `ids` holds every item the sequencer can still decode, so the id fallback is never handed out.
+        upstream = SequencedUpstream(sequencer: sequencer, item: { [weak self] id in
+            if let item = self?.ids[id] { return item }
+            return id
+        }) { [weak self] item, error in
             self?.fail(item: item, error)
         }
         feeder = Feeder(output: output, upstream: upstream, wake: { timer.wake() }) { [weak self] in self?.handle($0) }
@@ -197,7 +201,8 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     }
 
     /// Replaces the processor chain without a flush: the old chain drains into what is queued and
-    /// the new one applies from the next chunk, heard about two seconds on. Call it again after a
+    /// the new one applies from the next chunk, heard about two seconds on. Each processor's `flush`
+    /// gets the `Item` whose frames follow. Call it again after a
     /// change that alters a processor's `isActive` or output format; other parameters apply live.
     /// After a failure it re-feeds from the heard frame instead, since nothing is playing.
     public func setProcessors(_ processors: [any AudioProcessor]) {

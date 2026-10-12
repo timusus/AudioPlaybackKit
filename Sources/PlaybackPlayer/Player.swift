@@ -56,6 +56,7 @@ public final class Player<Item: Hashable & Sendable> {
     /// and arm takes a fresh key, so a repeat of the current entry is told from its own first audio.
     @ObservationIgnored private var keyedEntries: [Int: Int] = [:]
     @ObservationIgnored private var lastKey = 0
+    @ObservationIgnored private let keyedItems = KeyedItems<Item>()
     /// The current entry's key while the transport holds it; nil when stopped, or ended by an edit.
     @ObservationIgnored private var loadedKey: Int?
     @ObservationIgnored private var armedKey: Int?
@@ -338,8 +339,9 @@ public final class Player<Item: Hashable & Sendable> {
         }
     }
 
+    /// Each processor's `flush` gets the `Item` whose frames follow.
     public func setProcessors(_ processors: [any AudioProcessor]) {
-        transport.setProcessors(processors)
+        transport.setProcessors(processors.map { KeyedProcessor($0, items: keyedItems) })
     }
 
     // MARK: Transport events
@@ -536,6 +538,7 @@ public final class Player<Item: Hashable & Sendable> {
     /// A gapless join reached the speaker. It is usually into the armed next, but may be into one
     /// armed before an edit that decode had already passed, so the item is found by its key.
     private func crossed(into key: Int) {
+        keyedItems.forget(below: key)
         // The first audio after a load or seek is the current item's own.
         guard key != loadedKey, let from = currentIndex, let entryID = keyedEntries[key] else { return }
         loadedKey = key
@@ -618,7 +621,7 @@ public final class Player<Item: Hashable & Sendable> {
             unload(as: .idle)
             return reportFailure(at: index, PlaybackError(kind: .source, underlying: error))
         }
-        let key = newKey(for: entry.id, replacing: true)
+        let key = newKey(for: entry, replacing: true)
         atEnd = false
         failedNext = nil
         unansweredCalls += 1
@@ -651,10 +654,11 @@ public final class Player<Item: Hashable & Sendable> {
     }
 
     /// A transport key for `entryID`; `replacing` forgets the keys of everything a `setCurrent` drops.
-    private func newKey(for entryID: Int, replacing: Bool = false) -> Int {
+    private func newKey(for entry: Entry, replacing: Bool = false) -> Int {
         lastKey += 1
         if replacing { keyedEntries = [:] }
-        keyedEntries[lastKey] = entryID
+        keyedEntries[lastKey] = entry.id
+        keyedItems.record(entry.item, for: lastKey)
         return lastKey
     }
 
@@ -674,7 +678,7 @@ public final class Player<Item: Hashable & Sendable> {
         }
         do {
             let source = try makeSource(next.item)
-            let key = newKey(for: next.id)
+            let key = newKey(for: next)
             transport.setNext(item: key, source: source)
             armedKey = key
         } catch {

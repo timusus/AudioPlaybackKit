@@ -24,6 +24,29 @@ public struct ProcessorOutput: Sendable {
     }
 }
 
+/// The item a processor is about to receive frames of, given at each `flush`, modelled on media3
+/// `AudioProcessor.StreamMetadata` (ADR-0021).
+public struct StreamMetadata: Sendable, CustomStringConvertible {
+    /// The app's item, as given to `Transport` or `Player`; cast it back to that type.
+    public let item: any Hashable & Sendable
+    /// The item's media frame, at its own rate, of the first frame after this flush: 0 at a join,
+    /// the landed frame after a seek.
+    public let mediaStartFrame: Int64
+
+    public init(item: any Hashable & Sendable, mediaStartFrame: Int64) {
+        self.item = item
+        self.mediaStartFrame = mediaStartFrame
+    }
+
+    public var description: String { "StreamMetadata(item: \(item), mediaStartFrame: \(mediaStartFrame))" }
+}
+
+extension StreamMetadata: Equatable {
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        AnyHashable(lhs.item) == AnyHashable(rhs.item) && lhs.mediaStartFrame == rhs.mediaStartFrame
+    }
+}
+
 public enum AudioProcessingError: Error, Equatable {
     /// Tags count frames at the chunk's rate, so a stage cannot resample; the output stage does.
     case sampleRateChanged(from: PCMFormat, to: PCMFormat)
@@ -36,6 +59,9 @@ public enum AudioProcessingError: Error, Equatable {
 ///
 /// Output is the input minus the dropped frames, in order, possibly delayed: a stage never adds
 /// frames. Between flushes, output plus dropped never exceeds input, and equals it once ended.
+///
+/// Every flush is followed by frames of one item only, from `metadata.mediaStartFrame` on: the
+/// chain is drained and flushed at every item change, gapless joins included, and after a seek.
 ///
 /// The transport calls every method on its own queue, so state the app also changes (a toggle, a
 /// gain, EQ bands) needs the processor's own lock; hence `Sendable`. Such a change applies live, as
@@ -52,8 +78,9 @@ public protocol AudioProcessor: AnyObject, Sendable {
     func queueEndOfStream()
     /// True once end of stream was queued and every output sample was handed over.
     var isEnded: Bool { get }
-    /// Applies the staged configuration and drops buffered audio.
-    func flush()
+    /// Applies the staged configuration and drops buffered audio; the frames that follow are of
+    /// `metadata.item`.
+    func flush(_ metadata: StreamMetadata)
     /// Flushes and forgets the staged configuration.
     func reset()
 }

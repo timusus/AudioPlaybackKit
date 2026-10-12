@@ -228,7 +228,11 @@ speaker reached the new item.
 `setProcessors(_:)`. They run on interleaved Float32 PCM on the transport's queue, in order, and
 may drop frames (`ProcessorOutput.dropped`, so positions stay in media time) but never add them. A
 processor cannot change the sample rate; `configure(_:)` receives the item's format, so a filter that
-depends on the rate (an EQ) derives its coefficients there and again after each `flush()`. Adding or
+depends on the rate (an EQ) derives its coefficients there and again after each `flush(_:)`. The
+chain is drained and flushed at every item change, gapless joins included, at the start and after a
+seek, and `flush(_:)` gets a `StreamMetadata`: the `item` whose frames follow (the app's own, as given
+to `Transport` or `Player`; cast it back) and its `mediaStartFrame`. ReplayGain reads its gain for
+`metadata.item` there (ADR-0021). Filter memory and a limiter's envelope reset at each join. Adding or
 removing a processor, changing its `isActive` or changing its output format needs another
 `setProcessors` call, which never flushes: the old chain drains into the queued audio and the new
 one takes over at the next chunk. A processor's own parameters (a gain, EQ bands, or an "enabled"
