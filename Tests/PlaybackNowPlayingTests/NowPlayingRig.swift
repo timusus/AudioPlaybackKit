@@ -25,6 +25,8 @@ final class PolicyPlayer: ForwardingNowPlayingControllable {
     var itemIntervals: [String: SkipIntervals] = [:]
     var vetoesNext = false
     private(set) var vetoedNexts = 0
+    /// Every rate set through the wrapper, as an app persisting its speed.
+    private(set) var savedRates: [Double] = []
 
     init(_ player: Player<String>, intervals: SkipIntervals? = nil) {
         self.player = player
@@ -34,6 +36,14 @@ final class PolicyPlayer: ForwardingNowPlayingControllable {
     var availableCommands: PlayerCommands { player.availableCommands.subtracting(removed) }
 
     var skipIntervals: SkipIntervals? { player.currentItem.flatMap { itemIntervals[$0] } ?? intervals }
+
+    var rate: Double {
+        get { player.rate }
+        set {
+            savedRates.append(newValue)
+            player.rate = newValue
+        }
+    }
 
     func seekToNext() {
         guard !vetoesNext else { return vetoedNexts += 1 }

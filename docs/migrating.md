@@ -84,7 +84,9 @@ Details:
 3. `durationChanged` is `duration` becoming non-nil, in seconds; fall back to the feed's duration while it is nil.
 4. Smart Skip's `seekLanded` is `PlayerEvent.seekLanded`; an ad range is `player.seek(to: cue.end)`.
 5. `NowPlayingSession` replaces both the info and command code, with `spokenAudio` behaviour: skip
-   intervals instead of next and previous, `supportedRates` for the rate command.
+   intervals instead of next and previous, `supportedRates` for the rate command. The wrapper takes the
+   commands over: its `rate` setter saves the speed in Kotlin before setting `player.rate`, and its
+   `seek(by:)` applies the app's own skip rules.
 6. A `recoveredPaused` event is new to Podcasts, which never handled a media-services reset: show paused,
    and let the user press play.
 

@@ -478,7 +478,9 @@ final class SessionPlayer: ForwardingNowPlayingControllable {
 ```
 
 The next button calls `seekToNext()`, previous `seekToPrevious()` (the previous item, or a restart with
-none), the skip buttons `seek(by:)` and the scrubber `seek(to:)`.
+none), the skip buttons `seek(by:)`, the scrubber `seek(to:)`, the rate command `rate`'s setter, and play,
+pause and toggle `play()` and `pause()`. Each is where the app takes the command over: declare it on the
+wrapper to persist a speed, log analytics or seek its own way, and call `player` for the default.
 
 **Test it.** `PlaybackNowPlayingTestSupport` builds the session on a `FakeNowPlayingInfoCenter` and a
 `FakeRemoteCommandCenter`, with `now:` as its clock: pass `infoCenter:`, `commandCenter:` and `now:` to

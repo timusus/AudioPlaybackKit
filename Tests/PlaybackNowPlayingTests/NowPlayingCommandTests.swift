@@ -360,6 +360,20 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertEqual(rig.player.currentIndex, 1)
     }
 
+    func testTheRateCommandGoesThroughTheWrapper() async {
+        var policy: PolicyPlayer!
+        rig = NowPlayingRig(supportedRates: [1, 1.5]) {
+            policy = PolicyPlayer($0)
+            return policy
+        }
+        await opened()
+
+        XCTAssertEqual(rig.commands.press(.changePlaybackRate, .rate(1.5)), .success)
+
+        XCTAssertEqual(policy.savedRates, [1.5])
+        XCTAssertEqual(rig.player.rate, 1.5)
+    }
+
     func testSkipIntervalsArePerItem() async {
         let policy = policyRig()
         policy.itemIntervals = ["a": SkipIntervals(forward: 30, backward: 30)]
