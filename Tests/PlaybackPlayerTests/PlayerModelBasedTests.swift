@@ -35,16 +35,28 @@ final class PlayerModelBasedTests: XCTestCase {
 
     // media3 flushes a next it already read when a repeat change or an edit means another follows
     // (`MediaPeriodQueue.updateRepeatMode`, `updateQueuedPeriods`); the player follows what decode passed into.
+    // Each scope matches only the divergence of its own sequence, at its own step, so a fix or another mismatch fails.
     func testAChangeToWhatFollowsAfterDecodePassedTheJoinIsHonoured() {
-        XCTExpectFailure("Player plays the next decode already passed into after a late repeat change or insert")
-        let late: [[Operation]] = [
-            [.setItems(["a", "b"], startIndex: 0, startPosition: 0), .play, .advance(quarters: 12), .repeatMode(.one), .advance(quarters: 8)],
-            [.setItems(["a", "b"], startIndex: 0, startPosition: 0), .play, .advance(quarters: 12), .insert(["c"], at: 1), .advance(quarters: 8)],
-            // Seconds from the join again after the seek, yet the transport keeps b, of which it decoded some.
-            [.setItems(["a", "b"], startIndex: 0, startPosition: 0), .play, .advance(quarters: 12), .seek(0), .insert(["c"], at: 1), .advance(quarters: 20)],
-        ]
-        for operations in late {
-            XCTAssertNil(Self.run(operations, allowsLateChanges: true))
+        let repeatChange: [Operation] = [.setItems(["a", "b"], startIndex: 0, startPosition: 0), .play, .advance(quarters: 12), .repeatMode(.one), .advance(quarters: 8)]
+        let options = XCTExpectedFailure.Options()
+        options.issueMatcher = { $0.compactDescription.contains("after step 4, advance(2.0 s)") }
+        XCTExpectFailure("#159: a repeat change after decode passed the join", options: options) {
+            XCTAssertNil(Self.run(repeatChange, allowsLateChanges: true))
+        }
+
+        let insert: [Operation] = [.setItems(["a", "b"], startIndex: 0, startPosition: 0), .play, .advance(quarters: 12), .insert(["c"], at: 1), .advance(quarters: 8)]
+        let insertOptions = XCTExpectedFailure.Options()
+        insertOptions.issueMatcher = { $0.compactDescription.contains("after step 4, advance(2.0 s)") }
+        XCTExpectFailure("#159: an insert after decode passed the join", options: insertOptions) {
+            XCTAssertNil(Self.run(insert, allowsLateChanges: true))
+        }
+
+        // Seconds from the join again after the seek, yet the transport keeps b, of which it decoded some.
+        let seekBack: [Operation] = [.setItems(["a", "b"], startIndex: 0, startPosition: 0), .play, .advance(quarters: 12), .seek(0), .insert(["c"], at: 1), .advance(quarters: 20)]
+        let seekOptions = XCTExpectedFailure.Options()
+        seekOptions.issueMatcher = { $0.compactDescription.contains("after step 5, advance(5.0 s)") }
+        XCTExpectFailure("#159: a seek back after the next is armed keeps the next", options: seekOptions) {
+            XCTAssertNil(Self.run(seekBack, allowsLateChanges: true))
         }
     }
 
