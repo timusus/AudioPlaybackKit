@@ -656,7 +656,7 @@ public final class Player<Item: Hashable & Sendable> {
     }
 
     /// `setCurrent` of the entry at `index`, then the next armed after it.
-    private func load(_ index: Int, at seconds: TimeInterval) {
+    func load(_ index: Int, at seconds: TimeInterval) {
         let entry = entries[index]
         movePosition(to: max(seconds, 0))
         forgetSource()

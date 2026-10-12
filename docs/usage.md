@@ -320,6 +320,7 @@ player.rate = 1.5                                 // 0.25...4, pitch kept; pause
 player.volume = 0.5                               // 0...1, applied at once; a fade is a ramp from your timer
 player.setProcessors([silenceGate, voiceBoost])   // AudioProcessors, as for Transport
 player.stop()                                     // idle, session deactivated; play() starts again
+player.prepare()                                  // from idle: load the current item at position, paused
 ```
 
 `replaceItems` with a different current item behaves as `setItems`. `setItems` with an empty list is
@@ -404,7 +405,8 @@ seconds of an item, after decode has reached the next, the player still pauses a
 - **A failed item stops the player.** The state is `.idle` on that item with `error` set, `itemFailed`
   is sent, the audio session is released, and nothing skips ahead: your policy (skip up to N, show an
   alert) lives in one `itemFailed` handler, which calls `skipToNext()` if it wants to. `play()` retries
-  from `position`.
+  from `position`; `prepare()` loads the current item there without playing, as media3's `prepare()`
+  does, so a skip while paused shows the next item `.ready`.
 - **A next item that fails** while the current one plays does not interrupt it. It is reported once
   playback reaches it, after its `itemTransition`, and never if you removed it first.
 - **A session failure** (activation refused) sets `error.kind == .session` and leaves `playWhenReady` true, so

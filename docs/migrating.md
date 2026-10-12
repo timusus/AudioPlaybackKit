@@ -33,7 +33,7 @@ iOS directory (`mobile/ios` in `timusus/shuttle-podcasts`, `ios` in `timusus/shu
 | State | `PlaybackControllerState`, Shuttle2 `State` | `PlaybackState` plus `playWhenReady` and `suppression`; see the table below |
 | Speed, volume | `setPlaybackSpeed`, `sleepFadeGain` | `rate`, `volume` |
 | Pause at end of episode or track | Shuttle2 `setPauseAtEnd`, `onPausedAtEnd` | `pauseAtEndOfItem`, `PlayerEvent.playWhenReadyChanged(_, reason: .endOfItem)` |
-| Failed item | Podcasts: stops. Shuttle2: `onCurrentFailed` skips up to 15 | stops with `error`; `PlayerEvent.itemFailed` is the one handler, which calls `skipToNext()` for Shuttle2's policy |
+| Failed item | Podcasts: stops. Shuttle2: `onCurrentFailed` skips up to 15 | stops with `error`; `PlayerEvent.itemFailed` is the one handler, which calls `skipToNext()` for Shuttle2's policy, then `prepare()` if paused |
 | Interruptions, route loss, media-services reset | `AVAudioEngine` controller handlers (Podcasts), `AudioSessionController` (Shuttle2) | the player: see [the audio session](usage.md#the-audio-session) |
 | Now Playing, remote commands | `NowPlayingInfoManager` + `RemoteCommandHandler`, `NowPlayingController` + `PlaybackSystemCoordinator` | `NowPlayingSession` |
 | Skip-silence, Voice Boost, ReplayGain, EQ, limiter | processors in the engine graph | `AudioProcessor`s given to `setProcessors(_:)` |

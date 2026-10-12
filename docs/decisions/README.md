@@ -30,5 +30,6 @@ and is kept as history. The overview is in [architecture](../architecture.md).
 | [0022](0022-source-declared-seekability.md) | `ItemSource.isSeekable`; live is neither seekable nor of known duration; a seek not made as asked is reported as `seekAdjusted`. | Accepted (2026-10-12) |
 | [0026](0026-in-place-processing.md) | `AudioProcessor.process(_:)` rewrites each chunk in place; `BufferingAudioProcessor` keeps the queue shape for stages that drop or hold back frames. | Accepted (2026-10-12) |
 | [0023](0023-pause-at-end-stays-on-the-item.md) | `pauseAtEndOfItem` stays on the finished item at its end, as media3; `play()` moves on. | Accepted (2026-10-12) |
+| [0024](0024-prepare.md) | `prepare()` loads the current item from idle, as media3; no auto-skip of a failed item. | Accepted (2026-10-12) |
 
 These decisions were first made in the Shuttle Podcasts app and moved here with the code.
