@@ -668,8 +668,10 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         perform(locked { () -> [Deferred] in
             guard let attempt = attemptLocked(task) else { return [] }
-            let code = error.map { ($0 as NSError).code }
-            return runLocked(machine.completed(attempt: attempt, errorCode: code, now: clock.now))
+            let nsError = error.map { $0 as NSError }
+            return runLocked(machine.completed(
+                attempt: attempt, errorDomain: nsError?.domain ?? NSURLErrorDomain, errorCode: nsError?.code, now: clock.now
+            ))
         })
     }
 

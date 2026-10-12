@@ -808,11 +808,24 @@ struct GrowingFileDownload {
         return takeEffects()
     }
 
+    /// URL errors no retry fixes: a refused certificate or TLS setup (-1200...-1206), ATS refusing
+    /// the scheme (-1022), a malformed or unsupported URL (-1000, -1002). Like media3, which never
+    /// retries a `CleartextNotPermittedException`.
+    private static func isPermanent(domain: String, code: Int) -> Bool {
+        guard domain == NSURLErrorDomain else { return false }
+        return (-1206 ... -1200).contains(code) || [-1022, -1000, -1002].contains(code)
+    }
+
     /// The request `attempt` ended: its body is whole when `errorCode` is nil.
-    mutating func completed(attempt: Int, errorCode: Int?, now: TimeInterval) -> [Effect] {
+    mutating func completed(
+        attempt: Int, errorDomain: String = NSURLErrorDomain, errorCode: Int?, now: TimeInterval
+    ) -> [Effect] {
         guard !cancelled, let tx = current, tx.attempt == attempt, !tx.ended else { return [] }
         if let errorCode {
-            end("error=\(errorCode)", retryable: true, now: now)
+            end(
+                "error=\(errorCode)", retryable: !Self.isPermanent(domain: errorDomain, code: errorCode),
+                now: now
+            )
             return takeEffects()
         }
         if tx.sniffPending {

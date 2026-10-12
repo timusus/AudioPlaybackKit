@@ -451,8 +451,8 @@ final class Harness {
     }
 
     /// The latest request's task ends: whole, or with a URL error code.
-    func end(error: Int? = nil) {
-        run(machine.completed(attempt: requests.last!.attempt, errorCode: error, now: now))
+    func end(error: Int? = nil, domain: String = NSURLErrorDomain) {
+        run(machine.completed(attempt: requests.last!.attempt, errorDomain: domain, errorCode: error, now: now))
     }
 
     func pathChanged() {
