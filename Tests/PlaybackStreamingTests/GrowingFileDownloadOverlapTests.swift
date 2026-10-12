@@ -136,6 +136,25 @@ struct GrowingFileDownloadOverlapTests {
         #expect(h.machine.file.isCached)
     }
 
+    @Test("a 200 to a hole's bounded request from byte 0 is a range ignored: covered bytes are compared, not overwritten")
+    func aWholeBodyToABoundedRequestFromZeroComparesCoveredBytes() throws {
+        let h = Harness()
+        try h.machine.seek(to: 600_000)
+        h.read()
+        h.respond(206, range: "bytes 600000-999999/1000000")
+        h.body(400_000)
+        h.end()
+
+        try h.machine.seek(to: 0)
+        h.read()
+        #expect(h.requests.last == h.request(2, from: 0, end: 665_536))
+        #expect(h.respond(200, length: 1_000_000))
+        #expect(h.machine.rangeIgnored)
+        #expect(h.machine.generation == 3, "a new generation, as for any range ignored")
+        #expect(h.machine.current?.end == nil)
+        #expect(h.machine.chunkParts(attempt: 2, count: 100_000) == [.init(range: 0..<100_000, compare: false)])
+    }
+
     @Test("a 200 to a request that joins the run at byte 0 compares that run and writes only past it")
     func aRangeIgnoredJoinComparesTheRunAtZero() throws {
         let h = Harness()

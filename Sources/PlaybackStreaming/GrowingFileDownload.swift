@@ -686,8 +686,9 @@ struct GrowingFileDownload {
             current?.end = nil
             current?.checkEnd = nil
             current?.bodyAt = 0
-            if tx.base > 0 {
-                // The host ignored the range: this body is the file from byte 0, and the read
+            if tx.base > 0 || tx.end != nil {
+                // The host ignored the range (a bounded one from 0 too: later covered bytes need
+                // comparing): this body is the file from byte 0, and the read
                 // waits for its position to arrive. Restarting would only get 200 again. A new
                 // base is a new generation, so a frontier never moves back within one.
                 if !rangeIgnored {
