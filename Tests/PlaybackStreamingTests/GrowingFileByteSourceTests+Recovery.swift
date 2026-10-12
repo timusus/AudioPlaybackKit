@@ -14,7 +14,7 @@ extension GrowingFileByteSourceTests {
         let body = makeBody(64 * 1024)
         let server = try startServer(body: body)
         server.closesAfterBodyBytes = 20_000
-        server.outageAfterClose = 3600
+        server.outageAfterClose = true
         let clock = ManualGrowingFileClock()
         let source = makeSource(server.url, clock: clock)
         XCTAssertEqual(try read(source, 10_000), body.prefix(10_000))
@@ -27,7 +27,7 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(source.totalLength, Int64(body.count), "the failure forgot the length")
         XCTAssertEqual(source.snapshot.totalLength, source.totalLength, "the snapshot and the reader disagree")
 
-        server.refuseRequests(for: 0)
+        server.refusesRequests = false
         let requests = server.requestHeads.count
         var buffer = [UInt8](repeating: 0, count: 16)
         XCTAssertThrowsError(try source.read(into: &buffer, maxLength: buffer.count), "a read after the failure, no seek")

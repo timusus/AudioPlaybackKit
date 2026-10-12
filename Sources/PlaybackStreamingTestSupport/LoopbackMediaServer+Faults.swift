@@ -97,10 +97,10 @@ extension LoopbackMediaServer {
         set { lock.lock(); _closesAfterBodyBytes = newValue; lock.unlock() }
     }
 
-    /// With ``closesAfterBodyBytes``: the moment that drop fires, ``refuseRequests(for:)`` this
-    /// long, so the drop is the start of an outage rather than one lost connection. Airplane mode
-    /// for a few seconds mid-file.
-    public var outageAfterClose: TimeInterval? {
+    /// With ``closesAfterBodyBytes``: the moment that drop fires, ``refusesRequests`` turns on,
+    /// so the drop is the start of an outage rather than one lost connection, until the test turns
+    /// it off. Airplane mode mid-file.
+    public var outageAfterClose: Bool {
         get { lock.lock(); defer { lock.unlock() }; return _outageAfterClose }
         set { lock.lock(); _outageAfterClose = newValue; lock.unlock() }
     }
@@ -121,11 +121,12 @@ extension LoopbackMediaServer {
         set { lock.lock(); _contentLengthLie = newValue; lock.unlock() }
     }
 
-    /// Drop every connection without a response for the next `seconds`: no network at all (the
-    /// airplane-mode blackout), as opposed to a host that answers with an error. Requests that
-    /// arrive after the window are served normally.
-    public func refuseRequests(for seconds: TimeInterval) {
-        lock.lock(); _refusesRequestsUntil = Date().addingTimeInterval(seconds); lock.unlock()
+    /// Drop every connection without a response while set: no network at all (the airplane-mode
+    /// blackout), as opposed to a host that answers with an error. A gate rather than a duration,
+    /// so the outage ends when the test says, not when a loaded machine's clock gets there.
+    public var refusesRequests: Bool {
+        get { lock.lock(); defer { lock.unlock() }; return _refusesRequests }
+        set { lock.lock(); _refusesRequests = newValue; lock.unlock() }
     }
 
     /// How long a request whose range starts at byte 0 is held before its response is written.
@@ -299,8 +300,8 @@ extension LoopbackMediaServer {
     /// serves a page about it instead of refusing.
     ///
     /// `firstChunkBytes`, when given, splits the body into two writes — the first this many bytes,
-    /// the rest in a second write once the first is processed — instead of one: a body whose sniff
-    /// cannot be settled by the first delegate chunk alone.
+    /// the rest held until ``releaseHeldBody(forRangeStartingAt:)`` with the request's range start —
+    /// instead of one: a body whose sniff cannot be settled by the first delegate chunk alone.
     public func answerWithPage(
         host: String, contentType: String = "text/html; charset=utf-8", body: Data, firstChunkBytes: Int? = nil
     ) {

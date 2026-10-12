@@ -66,11 +66,16 @@ extension GrowingFileByteSourceTests {
     func testNoNetworkForAMomentIsRetriedAndForLongerThanTheWindowFailsTheRead() throws {
         let body = makeBody(32 * 1024)
         let server = try startServer(body: body)
-        server.refuseRequests(for: 0.15)
-        XCTAssertEqual(try readToEnd(makeSource(server.url)), body)
+        server.refusesRequests = true
+        let brief = readAsync(makeSource(server.url), Int.max)
+        // The moment ends once a request has been refused, not after a duration a loaded machine may outrun.
+        XCTAssertTrue(waitUntil { !server.requestHeads.isEmpty }, "no request met the outage")
+        server.refusesRequests = false
+        XCTAssertTrue(brief.finished(within: 20), "the read hung")
+        XCTAssertEqual(try brief.result.get(), body)
 
         let longer = try startServer(body: body)
-        longer.refuseRequests(for: 3600)
+        longer.refusesRequests = true
         let clock = ManualGrowingFileClock()
         let source = makeSource(longer.url, clock: clock)
         let pending = readAsync(source, 1)
@@ -149,7 +154,7 @@ extension GrowingFileByteSourceTests {
         let body = makeBody(64 * 1024)
         let server = try startServer(body: body)
         server.closesAfterBodyBytes = 20_000
-        server.outageAfterClose = 3600
+        server.outageAfterClose = true
         let clock = ManualGrowingFileClock()
         let source = makeSource(server.url, clock: clock)
         XCTAssertEqual(try read(source, 10_000), body.prefix(10_000))
@@ -164,7 +169,7 @@ extension GrowingFileByteSourceTests {
             "the outage was asked about more often than the attempts a host's refusal gets"
         )
 
-        server.refuseRequests(for: 0)
+        server.refusesRequests = false
         XCTAssertTrue(clock.drive(source) { rest.finished(within: 0) }, "the read never came back")
         XCTAssertEqual(try rest.result.get(), body.suffix(from: 10_000), "the outage failed the read")
         // The resume's 64 KiB overlap before the frontier reaches back to the file's start.

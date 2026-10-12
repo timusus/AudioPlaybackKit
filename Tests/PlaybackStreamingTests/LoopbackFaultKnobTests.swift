@@ -112,13 +112,12 @@ final class LoopbackFaultKnobTests: XCTestCase {
         XCTAssertEqual(origin.servedBytes, Int64(2 * (body.count - 1000)))
     }
 
-    func testRefuseRequestsDropsEveryConnectionForTheWindow() async throws {
+    func testRefusesRequestsDropsEveryConnectionUntilTurnedOff() async throws {
         let (origin, body) = try start(bodyBytes: 8 * 1024)
-        origin.refuseRequests(for: 0.5)
+        origin.refusesRequests = true
         let refused = await fetch(origin.url)
         XCTAssertNil(refused.data, "a request inside the blackout was answered")
-        // Kept: the blackout is a real-time window on the server's own clock, and it ending is the behaviour.
-        try await Task.sleep(nanoseconds: 600_000_000)
+        origin.refusesRequests = false
         let served = await fetch(origin.url)
         XCTAssertEqual(served.data, body)
     }

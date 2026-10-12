@@ -25,7 +25,7 @@ extension LoopbackMediaServer {
 
     private func respond(to head: String, on connection: NWConnection) {
         lock.lock()
-        let refusing = _refusesRequestsUntil.map { Date() < $0 } ?? false
+        let refusing = _refusesRequests
         // A refused request is logged in `requestHeads` only, not `requestedRanges`: no range is
         // served, and `_bodies` is indexed by `_requestedRanges.count`, so counting a refusal
         // would skip a body in the sequence.
@@ -101,7 +101,7 @@ extension LoopbackMediaServer {
         }
 
         if let page, Self.parseHost(head) == page.host {
-            answerPage(page, on: connection)
+            answerPage(page, rangeStart: range.lowerBound, on: connection)
             return
         }
 
@@ -175,22 +175,17 @@ extension LoopbackMediaServer {
         )
     }
 
-    private func answerPage(_ page: (host: String, contentType: String, body: Data, firstChunkBytes: Int?), on connection: NWConnection) {
-        let header = Data("HTTP/1.1 200 OK\r\nContent-Type: \(page.contentType)\r\nContent-Length: \(page.body.count)\r\nConnection: close\r\n\r\n".utf8)
+    private func answerPage(
+        _ page: (host: String, contentType: String, body: Data, firstChunkBytes: Int?), rangeStart: Int64, on connection: NWConnection
+    ) {
+        let header = "HTTP/1.1 200 OK\r\nContent-Type: \(page.contentType)\r\nContent-Length: \(page.body.count)\r\nConnection: close\r\n\r\n"
         if let firstChunkBytes = page.firstChunkBytes, firstChunkBytes < page.body.count {
-            var first = header
-            first.append(page.body.prefix(firstChunkBytes))
-            let rest = Data(page.body.dropFirst(firstChunkBytes))
-            connection.send(content: first, completion: .contentProcessed { [queue] _ in
-                // A gap wide enough that the two writes land as separate reads on the client
-                // instead of coalescing into one over a loopback connection this fast.
-                queue.asyncAfter(deadline: .now() + 0.05) {
-                    connection.send(content: rest, completion: .contentProcessed { _ in connection.cancel() })
-                }
-            })
+            // Held, not sent after a gap: only a release the client cannot have coalesced with the
+            // first write keeps the two as separate reads, however loaded the machine.
+            sendHeldBody(header: header, slice: page.body, heldAfter: firstChunkBytes, rangeStart: rangeStart, on: connection)
             return
         }
-        var payload = header
+        var payload = Data(header.utf8)
         payload.append(page.body)
         connection.send(content: payload, completion: .contentProcessed { _ in connection.cancel() })
     }
@@ -230,10 +225,10 @@ extension LoopbackMediaServer {
         // closed (a drop, a lie, or simply the end). The smallest bound wins.
         var limit = slice.count
         var holdsOpen = false
-        var outageOnClose: TimeInterval?
+        var outageOnClose = false
         if let stallAfter, stallAfter < limit { limit = stallAfter; holdsOpen = true }
         if let closeAfter, closeAfter < limit { limit = closeAfter; holdsOpen = false; outageOnClose = outage }
-        if let lie, slice.count - lie < limit { limit = max(slice.count - lie, 0); holdsOpen = false; outageOnClose = nil }
+        if let lie, slice.count - lie < limit { limit = max(slice.count - lie, 0); holdsOpen = false; outageOnClose = false }
         // A chunked body cut short (a stall, a drop, a lie) never sends its last-chunk, as a real one doesn't.
         let written = chunks ? Self.chunked(slice.prefix(limit), terminated: limit == slice.count) : Data(slice.prefix(limit))
 
@@ -243,11 +238,12 @@ extension LoopbackMediaServer {
         // A body that ends short is closed a beat late. URLSession on macOS throws away the body
         // it has buffered when the connection ends before the delegate has answered the response
         // (the client's `didReceive response` completion), and on loopback that answer is not
-        // instant. Real networks leave that time; this server has to.
+        // instant. Real networks leave that time; this server has to. It stays a delay: nothing on
+        // the wire tells the server the client has answered.
         let endsShort = limit < slice.count
         let finish = { [weak self, queue] in
             guard !holdsOpen else { return }
-            if let outageOnClose { self?.refuseRequests(for: outageOnClose) }
+            if outageOnClose { self?.refusesRequests = true }
             if endsShort {
                 queue.asyncAfter(deadline: .now() + Self.shortBodyCloseDelay) {
                     if resets { connection.forceCancel() } else { connection.cancel() }

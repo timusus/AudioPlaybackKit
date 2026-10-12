@@ -21,7 +21,7 @@ extension GrowingFileByteSourceTests {
         let server = try startTranscode(body: body)
         server.closesAfterBodyBytes = 20_000
         server.resetsDroppedConnections = true
-        server.outageAfterClose = 3600
+        server.outageAfterClose = true
         let clock = ManualGrowingFileClock()
         let source = makeSource(server.url, clock: clock)
         XCTAssertEqual(try read(source, 10_000), body.prefix(10_000))

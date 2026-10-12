@@ -42,10 +42,10 @@ public final class LoopbackMediaServer: @unchecked Sendable {
     var _bytesPerSecond: Int?
     var _burstPattern: BurstPattern?
     var _closesAfterBodyBytes: Int?
-    var _outageAfterClose: TimeInterval?
+    var _outageAfterClose = false
     var _resetsDroppedConnections = false
     var _contentLengthLie: Int?
-    var _refusesRequestsUntil: Date?
+    var _refusesRequests = false
     var _answers416AtOrAfterEnd = false
     var _gzipsBody = false
     var _lowercasesHeaders = false

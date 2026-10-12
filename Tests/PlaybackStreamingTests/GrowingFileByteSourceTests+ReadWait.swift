@@ -52,7 +52,7 @@ extension GrowingFileByteSourceTests {
     func testAFailureEndsTheWaitAndItsRetriesKeepItsStart() throws {
         let parked = try parkAtAHeldFrontier()
         let parkedAt = parked.clock.now
-        parked.server.refuseRequests(for: 3600)
+        parked.server.refusesRequests = true
         XCTAssertTrue(parked.server.dropHeldBody(forRangeStartingAt: 0))
         XCTAssertTrue(parked.clock.drive(parked.source) {
             if let since = parked.source.snapshot.readWaitingSince { XCTAssertEqual(since, parkedAt, "a retry restarted the wait") }
