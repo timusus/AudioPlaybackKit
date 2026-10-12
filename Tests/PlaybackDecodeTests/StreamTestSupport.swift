@@ -485,20 +485,25 @@ enum GeneratedFixture {
         }
         #if os(macOS)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        /* Parallel test processes share this directory: encode to a private file and rename it into
+         * place, so a reader only ever sees a complete fixture. */
+        let partial = directory.appendingPathComponent(".\(UUID().uuidString).\(name)")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: ffmpeg)
         process.arguments = [
             "-y", "-loglevel", "error",
             "-f", "lavfi", "-i", source,
-            "-c:a", "libmp3lame",
-        ] + encoding + [url.path]
+            "-c:a", "libmp3lame", "-f", "mp3",
+        ] + encoding + [partial.path]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
         process.waitUntilExit()
-        guard process.terminationStatus == 0, FileManager.default.fileExists(atPath: url.path) else {
+        guard process.terminationStatus == 0 else {
+            try? FileManager.default.removeItem(at: partial)
             throw XCTSkip("ffmpeg could not build the fixture (status \(process.terminationStatus))")
         }
+        try publish(partial, as: url)
         return url
         #else
         throw XCTSkip("the fixture is generated with a host ffmpeg, which an iOS device or simulator lacks")
@@ -521,7 +526,19 @@ enum GeneratedFixture {
         var tag = Data([0x49, 0x44, 0x33, 0x03, 0x00, 0x00])
         for shift in [21, 14, 7, 0] { tag.append(UInt8((payload >> shift) & 0x7F)) }
         tag.append(Data(count: payload))
-        try (tag + source).write(to: url)
+        let partial = directory.appendingPathComponent(".\(UUID().uuidString).tone-behind-id3")
+        try (tag + source).write(to: partial)
+        try publish(partial, as: url)
         return url
+    }
+
+    /// Same-volume rename is atomic; if another process published first, its identical bytes win.
+    private static func publish(_ partial: URL, as url: URL) throws {
+        defer { try? FileManager.default.removeItem(at: partial) }
+        if rename(partial.path, url.path) != 0 {
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                throw CocoaError(.fileWriteUnknown)
+            }
+        }
     }
 }
