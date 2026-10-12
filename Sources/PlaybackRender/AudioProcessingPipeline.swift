@@ -155,7 +155,10 @@ final class AudioProcessingPipeline {
     private func accept(_ chunk: consuming TaggedChunk, into stage: Stage) {
         guard let buffering = stage.buffering else {
             guard !chunk.samples.isEmpty || !chunk.tags.isEmpty else { return }
-            chunk.samples.withUnsafeMutableBufferPointer { stage.processor.process($0) }
+            // A zero-frame tag (a chunk dropped whole upstream) carries no samples; lend no empty buffer.
+            if !chunk.samples.isEmpty {
+                chunk.samples.withUnsafeMutableBufferPointer { stage.processor.process($0) }
+            }
             stage.processed.append(chunk)
             return
         }

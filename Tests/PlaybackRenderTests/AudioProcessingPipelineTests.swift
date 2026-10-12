@@ -181,6 +181,17 @@ final class AudioProcessingPipelineTests: XCTestCase {
         XCTAssertEqual(pipeline.getOutput()?.tags, [tag(1, 24, 2)])
     }
 
+    func testAnInPlaceStageIsNeverLentAnEmptyBuffer() throws {
+        let gain = InPlaceGainProcessor()
+        let pipeline = try started([DropRangesProcessor([4..<8]), gain], format: mono)
+        pipeline.queueInput(chunk([0, 1, 2, 3], format: mono, tags: [tag(0, 0, 4)]))
+        _ = pipeline.getOutput()
+        pipeline.queueInput(chunk([4, 5, 6, 7], format: mono, tags: [tag(1, 20, 4)]))
+        XCTAssertEqual(pipeline.getOutput()?.tags, [tag(1, 24, 0)])
+        XCTAssertEqual(gain.buffers.count, 1)
+        XCTAssertFalse(gain.buffers.contains(nil))
+    }
+
     func testDroppingAcrossAnItemJoinKeepsBothItems() throws {
         let pipeline = try started([DropRangesProcessor([4..<8])], format: mono)
         pipeline.queueInput(chunk((0..<12).map(Float.init), format: mono, tags: [tag(0, 50, 6), tag(1, 0, 6)]))
