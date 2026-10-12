@@ -20,8 +20,8 @@ private let downloadLog = Logger(subsystem: "com.simplecityapps.AudioPlaybackKit
 /// write with `ENOSPC` at the byte it chooses.
 public final class GrowingFileStore {
 
-    /// The default complete-file cache ceiling, as the removed `CachedRunStore` had. A store takes its
-    /// own with `init(directory:budgetBytes:)`; each store evicts only the files in its own directory.
+    /// The default complete-file cache ceiling. A store takes its own with
+    /// `init(directory:budgetBytes:)`; each store evicts only the files in its own directory.
     public static let budgetBytes: Int64 = 1024 * 1024 * 1024
     /// Free space a transaction leaves beyond its own bytes before the cache is evicted to make room.
     static let headroomBytes: Int64 = 200 * 1024 * 1024

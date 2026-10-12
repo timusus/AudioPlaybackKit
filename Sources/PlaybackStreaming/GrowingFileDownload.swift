@@ -364,8 +364,6 @@ struct GrowingFileDownload {
         return unclaimedSeek?.generation
     }
 
-    /// Cancels the task; its bytes stay in the session's file. `discardingFile` deletes the file too,
-    /// unless it is the cache's now.
     /// A position past the resource's end, which no retry brings (media3's
     /// `ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE` is fatal). The file's bytes, all before that end, stay.
     private mutating func failOutOfRange(_ reason: String) {
@@ -376,6 +374,8 @@ struct GrowingFileDownload {
         effects.append(.wake)
     }
 
+    /// Cancels the task; its bytes stay in the session's file. `discardingFile` deletes the file too,
+    /// unless it is the cache's now.
     private mutating func retireCurrent(discardingFile: Bool = false) {
         current?.ended = true
         let discard = discardingFile && file.exists && !file.isCached

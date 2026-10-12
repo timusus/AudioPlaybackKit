@@ -14,7 +14,8 @@ public struct GrowingFileSnapshot: Equatable, Sendable {
     public var base: Int64
     /// One past the last byte of that range: on disk and readable.
     public var frontier: Int64
-    /// From `Content-Range` (or `Content-Length + base`); nil while unknown.
+    /// From `Content-Range` (or `Content-Length` plus where the body starts, which is up to 64 KiB
+    /// before `base`); nil while unknown.
     public var totalLength: Int64?
     /// The reader's range on disk reaches the total: nothing up to the end is still owed.
     public var isComplete: Bool
@@ -67,8 +68,8 @@ public protocol GrowingFileSnapshotSource: AnyObject {
 /// constructed the source, which may log them as it likes. Every transaction is a fresh body, so
 /// a continuation flag would always be false and is not carried.
 public enum GrowingFileEvent: Equatable, Sendable {
-    /// A transaction's response was accepted. `base` is where its bytes start: 0 when the host
-    /// ignored the `Range` and answered `200`.
+    /// A transaction's response was accepted. `base` is where its new bytes start: when the host
+    /// ignored the `Range` and answered `200`, the end of the run on disk at byte 0, else the one asked for.
     /// `seekGeneration` is nil unless the seek of that generation opened it; see
     /// ``GrowingFileSnapshot/seekGeneration``.
     case transaction(base: Int64, generation: Int, seekGeneration: Int?, httpStatus: Int)

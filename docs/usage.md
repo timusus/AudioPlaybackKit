@@ -110,8 +110,9 @@ while let chunk = decoder.nextChunk() { /* schedule it */ }
 - **Self-signed servers.** Pass `connectionPolicy: GrowingFileConnectionPolicy(trustedLeafSHA256: [...])`
   with the fingerprint the user trusted. It is an exception, not a pin: the system evaluates first,
   and only a certificate it refuses is accepted by fingerprint. Otherwise the read fails with
-  `transport("untrusted_certificate")`, unretried.
-- **Cache.** A download that completes from byte 0 is kept in a `GrowingFileStore` (default
+  `transport("untrusted_certificate")`, unretried in every case. Other certificate, TLS, ATS and
+  bad-URL errors fail unretried too.
+- **Cache.** A download whose transactions together cover `[0, total)` is kept in a `GrowingFileStore` (default
   `.shared`, 1 GiB, least recently played out). Before streaming, ask
   `store.completedFile(for: url)` and play that with `FileByteReader`. If the URL carries a
   per-session token, pass `cacheKey:` (the URL without it) to the source and to `completedFile(for:)`. Call `sweepPartials()` at launch,

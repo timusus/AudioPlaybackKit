@@ -6,8 +6,9 @@ import PlaybackDecode
 /// no redirect cache.
 ///
 /// - A transaction is `GET` with `Range: bytes=<base>-` and the caller's auth headers (on every hop
-///   too), bounded (`bytes=<base>-<end>`) when the file already holds a range after `base`, so
-///   nothing on disk is fetched again. Each body chunk is written at its resource offset and the
+///   too), bounded (`bytes=<base>-<end>`) when the file already holds a range after `base`. A
+///   request starts up to 64 KiB before `base` and a bounded one ends up to 64 KiB past `end`, so
+///   the bytes at each join are compared (ADR-0016); no more of the disk is fetched again. Each body chunk is written at its resource offset and the
 ///   frontier advances. A read inside a range on disk needs no transaction. A `200` to a ranged
 ///   request re-declares the transaction as starting at byte 0, under a new generation, and the
 ///   read waits for its position. Once `[0, total)` is on disk, whichever transactions wrote it,
@@ -21,9 +22,9 @@ import PlaybackDecode
 ///   nothing answers in time (``requestTimeoutSeconds`` for a transaction's first, the shorter
 ///   ``retryRequestTimeoutSeconds`` for a retry, neither past the link window's end) is ended as
 ///   one nothing answered, so a dead link fails about 30 s after it went quiet. A retry whose
-///   transaction holds the decoder's position resumes it: `Range: bytes=<frontier>-` (with `If-Range`
-///   when the host gave a strong ETag), appended to the same file under the same generation, so
-///   nothing already on disk is fetched again. A resume the host answers with anything but a `206`
+///   transaction holds the decoder's position resumes it: `Range: bytes=<frontier - 64 KiB>-` (with
+///   `If-Range` when the host gave a strong ETag), appended to the same file under the same
+///   generation; only the 64 KiB overlap is fetched again, to be compared. A resume the host answers with anything but a `206`
 ///   from the frontier with the same total (a `200`, or a body the server has changed between
 ///   requests) deletes the file for a restart at the decoder's position; a retry whose
 ///   transaction does not hold that position restarts there, keeping the file.
@@ -76,13 +77,11 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     /// How long a body may go without a byte, once its response has arrived, before the source
     /// ends the transaction itself (on the clock). A connection that falls silent (a dead Wi-Fi, a
     /// host that stops sending without closing) is then an ordinary failure that
-    /// ``GrowingFileDownload/Retry`` decides on. This is the player's only network recovery; with
-    /// URLSession's default 60 s a silent link held the read that long. A constant consumers may
-    /// read, in seconds.
+    /// ``GrowingFileDownload/Retry`` decides on, far sooner than URLSession's 60 s default.
+    /// A constant consumers may read, in seconds.
     public static let idleTimeoutSeconds: TimeInterval = 6
     /// How long a transaction's first request waits for its response, on the clock. Generous,
-    /// so a cold origin or a long chain of redirects (5.3 s to the first byte on a real host) is
-    /// waited for rather than failed; the body's silence is ``idleTimeoutSeconds``'s alone.
+    /// so a cold origin or a long chain of redirects is waited for rather than failed; the body's silence is ``idleTimeoutSeconds``'s alone.
     static let requestTimeoutSeconds: TimeInterval = 20
     /// How long a retry or resume waits for its response. Short: the host was just talking to
     /// this source or the link just went quiet, the request goes to the chain's remembered end
