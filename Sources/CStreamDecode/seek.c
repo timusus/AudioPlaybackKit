@@ -34,6 +34,7 @@ static void after_seek_reset(StreamDecoder *d) {
     d->has_last_pkt = 0;
     d->has_first_pkt = 0;
     d->decode_errors = 0;
+    d->decode_error_bytes = 0;
     d->flushing = 0;
     d->reopening = 0;
     d->ended = 0;

@@ -59,7 +59,8 @@ struct StreamDecoder {
     int         pending_offset;   /* frames already handed out */
 
     int64_t     last_frame_pts;   /* best_effort_timestamp of the most recent decoded frame */
-    int         decode_errors;    /* consecutive `avcodec_receive_frame` errors, see `sd_pump` */
+    int         decode_errors;    /* consecutive decode errors since the last good frame, see `sd_pump` */
+    int64_t     decode_error_bytes;   /* bytes of the packets the codec rejected in that run */
     int64_t     end_pts;          /* MP4: where the edit list ends the audio (stream time base), else NOPTS */
     int         flushing;         /* a NULL packet has been sent to the decoder */
     int         reopening;        /* draining the codec to reopen it for the held packet's new parameters */

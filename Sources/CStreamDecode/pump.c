@@ -24,6 +24,9 @@ static int codec_parameters_changed(const StreamDecoder *d) {
 /* About 0.8 s of MP3 or 0.7 s of AAC: more than any real burst of damage, little enough that a
  * stream of nothing but garbage gives up promptly. */
 #define MAX_CONSECUTIVE_DECODE_ERRORS 32
+/* The same run counted in bytes, since the MP3 parser glues garbage into a few large packets.
+ * 64 KiB is how far mp3dec searches for a first frame (media3's Mp3Extractor: 128 KiB). */
+#define MAX_CONSECUTIVE_DECODE_ERROR_BYTES (64 * 1024)
 
 /* What the `sd_pump` helpers return for "nothing to report yet, go round again"; every real status
  * is >= 0. */
@@ -38,6 +41,7 @@ enum { PUMP_AGAIN = -1 };
  */
 static int pump_decoded_frame(StreamDecoder *d, int64_t *skip) {
     d->decode_errors = 0;
+    d->decode_error_bytes = 0;
     sd_aac_frame_decoded(d);
     if (is_mpeg_audio(d->dec->codec_id) && d->dec->sample_rate > 0) {
         /* FFmpeg's MPEG audio decoder takes the frame's buffer, and with it the frame's
@@ -151,11 +155,14 @@ static int pump_finish(StreamDecoder *d) {
 
 /* A frame the codec cannot decode is a glitch, not the end of the recording: skip it
  * like a rejected packet. Out of memory is not the stream's fault, and a run of
- * MAX_CONSECUTIVE_DECODE_ERRORS failures with no good frame between is garbage, not
- * damage, so that ends with an error rather than spinning to the end of the file. */
-static int pump_decode_error(StreamDecoder *d, int rc) {
+ * MAX_CONSECUTIVE_DECODE_ERRORS failures (or _BYTES of rejected packets) with no good frame
+ * between is garbage, not damage, so that ends with an error rather than reporting the end of
+ * the file. `bytes` is the rejected packet's size, 0 for a frame receive_frame failed. */
+static int pump_decode_error(StreamDecoder *d, int rc, int bytes) {
     if (rc == AVERROR(ENOMEM)) return STREAM_DECODE_ERR_ALLOC;
-    if (++d->decode_errors > MAX_CONSECUTIVE_DECODE_ERRORS) return STREAM_DECODE_ERR_DECODER;
+    d->decode_error_bytes += bytes;
+    if (++d->decode_errors > MAX_CONSECUTIVE_DECODE_ERRORS
+        || d->decode_error_bytes > MAX_CONSECUTIVE_DECODE_ERROR_BYTES) return STREAM_DECODE_ERR_DECODER;
     return PUMP_AGAIN;
 }
 
@@ -209,11 +216,12 @@ static int pump_feed_packet(StreamDecoder *d) {
     d->has_last_pkt = d->pkt->pos >= 0 && d->pkt->dts != AV_NOPTS_VALUE;
     d->has_first_pkt = 0;
     if (d->seek_fmt->packet_fed) d->seek_fmt->packet_fed(d, d->pkt);
+    int size = d->pkt->size;
     int sent = avcodec_send_packet(d->dec, d->pkt);
     av_packet_unref(d->pkt);
-    /* A packet the decoder rejects is a corrupt frame, not the end of the stream: skip it and
-     * keep going, which is what every player does with a bad MP3 frame. */
-    (void)sent;
+    /* Most decoders reject a corrupt frame here rather than from receive_frame, so it counts
+     * toward the same run of errors. */
+    if (sent < 0 && sent != AVERROR(EAGAIN)) return pump_decode_error(d, sent, size);
     return PUMP_AGAIN;
 }
 
@@ -240,7 +248,7 @@ int sd_pump(StreamDecoder *d) {
         if (rc == 0) status = pump_decoded_frame(d, &skip);
         else if (rc == AVERROR_EOF && d->reopening) status = pump_reopen_codec(d);
         else if (rc == AVERROR_EOF) status = pump_finish(d);
-        else if (rc != AVERROR(EAGAIN)) status = pump_decode_error(d, rc);
+        else if (rc != AVERROR(EAGAIN)) status = pump_decode_error(d, rc, 0);
         /* EAGAIN after a NULL packet cannot happen, but treat it as the end rather than
          * looping: an unbounded loop here is a hung player. */
         else if (d->flushing) status = pump_finish(d);
