@@ -55,6 +55,8 @@ final class TransportFailureTests: XCTestCase {
         timer.sync()
         executor.runUntilIdle()
         timer.fire()
+        // A dropped next item's flush is queued from inside the pump; wait for it, or it races the test's reads.
+        timer.sync()
     }
 
     private func run(for seconds: TimeInterval) {
