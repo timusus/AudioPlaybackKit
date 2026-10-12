@@ -60,6 +60,9 @@ public enum AudioProcessingError: Error, Equatable {
 ///
 /// Every flush is followed by frames of one item only, from `metadata.mediaStartFrame` on: the
 /// chain is drained and flushed at every item change, gapless joins included, and after a seek.
+/// Every seek, within the item or not, flushes each stage with the landed frame before the first
+/// frame after it, and nothing from before the seek is processed or heard after that flush, as
+/// media3's `AudioSink.flush()` on a position reset.
 ///
 /// The transport calls every method on its own queue, so state the app also changes (a toggle, a
 /// gain, EQ bands) needs the processor's own lock; hence `Sendable`. Such a change applies live, as

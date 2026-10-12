@@ -78,6 +78,36 @@ final class TransportStreamMetadataTests: XCTestCase {
         XCTAssertEqual(Array(processor.events.dropFirst(before)), [flush("b", 8)] + inputs(4))
     }
 
+    func testEverySeekWithinTheItemFlushesAtTheLandedFrameBeforeItsFirstChunk() {
+        transport.setProcessors([processor])
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        pump()
+        run(for: 1)
+
+        for (seconds, frame) in [(0.5, Int64(4)), (2.5, 20), (2.5, 20)] {
+            let before = processor.events.count
+            transport.seek(item: "a", toSeconds: seconds)
+            pump()
+
+            XCTAssertEqual(Array(processor.events.dropFirst(before).prefix(2)), [flush("a", frame), .input(frames: 2)])
+        }
+    }
+
+    func testASeekDropsWhatAHoldingProcessorHeldBeforeIt() {
+        transport.setProcessors([DelayProcessor(frames: 3)])
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        pump()
+        run(for: 1)
+        let before = output.enqueues.count
+
+        transport.seek(item: "a", toSeconds: 0.5)
+        pump()
+
+        XCTAssertEqual(output.enqueues.dropFirst(before).first?.samples.first, 4)
+    }
+
     func testAGaplessJoinKeepsTheAudioAHoldingProcessorHeldBack() {
         transport.setProcessors([DelayProcessor(frames: 3)])
         transport.setCurrent(item: "a", source: a)
