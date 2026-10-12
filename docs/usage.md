@@ -106,6 +106,7 @@ while let chunk = decoder.nextChunk() { /* schedule it */ }
 - **Auth headers stay on the origin.** A redirect to another origin (a CDN) and its later restarts carry
   none of them.
 - **Extra headers.** `GrowingFileConnectionPolicy.headers` adds request headers for the origin, with the same redirect rule as `authHeaders`.
+- **Mutual TLS.** Pass `clientCredential: { space in ... }` to answer the origin's client-certificate challenge with an identity `URLCredential`; nil keeps the system's handling, and no other origin is asked.
 - **Self-signed servers.** Pass `connectionPolicy: GrowingFileConnectionPolicy(trustedLeafSHA256: [...])`
   with the fingerprint the user trusted. It is an exception, not a pin: the system evaluates first,
   and only a certificate it refuses is accepted by fingerprint. Otherwise the read fails with

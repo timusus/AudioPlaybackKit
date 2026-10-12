@@ -135,6 +135,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     private let cacheKey: URL
     private let authHeaders: [String: String]
     private let policy: GrowingFileConnectionPolicy?
+    private let clientCredential: (@Sendable (URLProtectionSpace) -> URLCredential?)?
     private let store: GrowingFileStore
     private let session: URLSession
     private let onEvent: ((GrowingFileEvent) -> Void)?
@@ -179,6 +180,9 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     ///   - connectionPolicy: extra headers and the leaf certificates the user trusted for `url`'s origin; nil
     ///     (the default) is the system's trust and no extra headers. Like `authHeaders`, its headers
     ///     are sent only to that origin, never to another one a redirect lands on.
+    ///   - clientCredential: answers a client-certificate challenge (mutual TLS) from `url`'s origin with an
+    ///     identity credential; nil (the default), or a nil result, leaves the system's handling. Never asked
+    ///     for another origin a redirect lands on.
     ///   - readAhead: how far the download may run ahead of the decoder while the network path is
     ///     expensive or constrained (ADR-0013); nil (the default) downloads the whole file on any path.
     ///   - onEvent: the `transaction`/`download` events.
@@ -187,6 +191,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         authHeaders: [String: String],
         cacheKey: URL? = nil,
         connectionPolicy: GrowingFileConnectionPolicy? = nil,
+        clientCredential: (@Sendable (URLProtectionSpace) -> URLCredential?)? = nil,
         readAhead: GrowingFileReadAhead? = nil,
         store: GrowingFileStore = .shared,
         session: URLSession = GrowingFileByteSource.sharedSession,
@@ -194,7 +199,8 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     ) {
         self.init(
             url: url, authHeaders: authHeaders, cacheKey: cacheKey, connectionPolicy: connectionPolicy,
-            readAhead: readAhead, store: store, session: session, clock: SystemGrowingFileClock.shared, onEvent: onEvent
+            clientCredential: clientCredential, readAhead: readAhead, store: store, session: session,
+            clock: SystemGrowingFileClock.shared, onEvent: onEvent
         )
     }
 
@@ -207,6 +213,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         authHeaders: [String: String],
         cacheKey: URL? = nil,
         connectionPolicy: GrowingFileConnectionPolicy? = nil,
+        clientCredential: (@Sendable (URLProtectionSpace) -> URLCredential?)? = nil,
         readAhead: GrowingFileReadAhead? = nil,
         store: GrowingFileStore = .shared,
         session: URLSession = GrowingFileByteSource.sharedSession,
@@ -219,6 +226,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         self.cacheKey = cacheKey ?? url
         self.authHeaders = authHeaders
         self.policy = connectionPolicy
+        self.clientCredential = clientCredential
         self.store = store
         self.session = session
         self.clock = clock
@@ -558,6 +566,15 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         // As Shuttle2 does: the system's evaluation first, and only a chain it refuses is checked
         // against the leaves the user trusted, for the original origin only.
         let space = challenge.protectionSpace
+        if space.authenticationMethod == NSURLAuthenticationMethodClientCertificate {
+            // The identity goes to the original origin only, never to a CDN a redirect lands on.
+            if let credential = isOrigin(space) ? clientCredential?(space) : nil {
+                completionHandler(.useCredential, credential)
+            } else {
+                completionHandler(.performDefaultHandling, nil)
+            }
+            return
+        }
         guard space.authenticationMethod == NSURLAuthenticationMethodServerTrust,
               let trust = space.serverTrust, let policy, !policy.trustedLeafSHA256.isEmpty,
               isOrigin(space)
