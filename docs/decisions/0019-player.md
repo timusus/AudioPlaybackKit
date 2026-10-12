@@ -222,8 +222,10 @@ later or earlier item that the transport no longer holds is a `setCurrent` of th
 live item ignores seeks (`isLive`). Stopped or failed, a seek only moves the index and position and the
 state stays `.idle` until `play()`, as media3 waits for `prepare`. `position` shows the target at once;
 transport events sent before the transport answers the call with `.sought` are held (media3's
-`pendingOperationAcks`). An applied call drops them but the last status, which a restart changes only
-by reporting a new one, so `state` always comes from the transport; a seek the transport ignored,
+`pendingOperationAcks`). Meanwhile `state` is `.buffering`, as media3 masks a seek or
+`setMediaItems` as `STATE_BUFFERING`, so it never describes where playback was before the call (#145).
+An applied call drops the held events and leaves the status `.buffering`, as a restart buffers and reports
+only a change from there, so `state` again comes from the transport; a seek the transport ignored,
 because a crossing passed its item, drops nothing, so that crossing still advances the index. The
 first position after the answer sends `seekLanded`. `seek(by:)` adds to a
 target not yet heard, so rapid presses add up. An `ItemSource.seek` that throws (a forward-only transcode) arrives

@@ -68,6 +68,42 @@ final class PlayerCoreTests: XCTestCase {
         XCTAssertEqual(player.state, .ready)
     }
 
+    // #145: the old `.ended` lingered after `setItems`, so a `play()` read it and restarted the new item from 0.
+    func testALoadAfterAnEndBuffersAtOnceAndPlaysFromItsStartPosition() {
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 11)
+        XCTAssertEqual(player.state, .ended)
+        player.pause()
+        rig.settle()
+        let written = rig.output.enqueues.count
+
+        player.setItems(["b"], startPosition: 3)
+        XCTAssertEqual(player.state, .buffering)
+        player.play()
+        rig.pump()
+        XCTAssertEqual(rig.firstSampleWritten(skipping: written), 1024)
+        XCTAssertEqual(player.state, .ready)
+    }
+
+    // media3 masks a seek or transition as STATE_BUFFERING until the transport acknowledges it.
+    func testASeekOrSkipBuffersAtOnceUntilItsAudio() {
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 1)
+        XCTAssertEqual(player.state, .ready)
+
+        player.seek(to: 5)
+        XCTAssertEqual(player.state, .buffering)
+        rig.pump()
+        XCTAssertEqual(player.state, .ready)
+
+        player.skipToNext()
+        XCTAssertEqual(player.state, .buffering)
+        rig.pump()
+        XCTAssertEqual(player.state, .ready)
+    }
+
     // #134: on the phone each transport event can land in its own drain, and a resume flickered
     // `isPlaying` true, false, true, with the lock screen's rate following it.
     func testAResumeWithAudioQueuedKeepsIsPlayingThroughEveryEvent() {

@@ -364,12 +364,11 @@ public final class Player<Item: Hashable & Sendable> {
         for event in inbox.drain() {
             if case let .sought(_, _, applied) = event {
                 unansweredCalls -= 1
-                // An applied call restarted from a new place, so what was heard before it is moot.
-                // The last status is kept, as the restart reports one only if it changed. It is never
-                // `.ended`: the restart always reports a status that replaces an end, so none is skipped.
+                // An applied call restarted from a new place, so what was heard before it is moot; a
+                // restart buffers, and reports a status after only if that changed.
                 // An ignored seek changed nothing, so everything before it stands (a crossing above all).
                 if applied {
-                    for case let .status(status) in held { transportStatus = status }
+                    transportStatus = .buffering
                     held = []
                 }
                 if unansweredCalls == 0 {
@@ -562,6 +561,7 @@ public final class Player<Item: Hashable & Sendable> {
         atEnd = false
         unansweredCalls += 1
         transport.seek(item: key, toSeconds: seconds)
+        refreshState()
     }
 
     /// A gapless join reached the speaker. It is usually into the armed next, but may be into one
@@ -655,6 +655,7 @@ public final class Player<Item: Hashable & Sendable> {
         transport.setCurrent(item: key, source: source, startSeconds: position)
         loadedKey = key
         error = nil
+        refreshState()
         // During an interruption a seek or skip is applied paused.
         if intent && sessionActive { transport.play() }
         armNext()
@@ -742,6 +743,10 @@ public final class Player<Item: Hashable & Sendable> {
             .idle
         } else if loadedKey == nil {
             unloadedState
+        } else if unansweredCalls > 0 {
+            // media3 masks a load or seek as STATE_BUFFERING until it is acknowledged, so the state
+            // never describes where playback was before the call.
+            .buffering
         } else {
             switch transportStatus {
             case .paused, .playing: .ready
