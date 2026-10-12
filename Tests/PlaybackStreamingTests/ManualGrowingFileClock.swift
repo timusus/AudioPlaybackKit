@@ -1,5 +1,6 @@
 import Foundation
 @testable import PlaybackStreaming
+import PlaybackStreamingTestSupport
 
 /// A ``GrowingFileClock`` that moves only when a test says so. Scheduled work runs on the
 /// advancing thread, in time order, each at its own time; work it schedules that falls due inside
@@ -21,6 +22,7 @@ final class ManualGrowingFileClock: GrowingFileClock, @unchecked Sendable {
             scheduled += 1
             pending.append((current + seconds, scheduled, work))
         }
+        ChangeSignal.shared.notify()
     }
 
     func advance(by seconds: TimeInterval) {

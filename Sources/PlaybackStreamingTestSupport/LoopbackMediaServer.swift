@@ -18,9 +18,10 @@ public final class LoopbackMediaServer: @unchecked Sendable {
     private let listener: NWListener
     let queue = DispatchQueue(label: "loopback-media-server")
     let lock = NSLock()
-    var _requestedRanges: [Int64] = []
-    var _requestHeads: [String] = []
-    var _servedBytes: Int64 = 0
+    // Each wakes a test waiting on ``ChangeSignal``.
+    var _requestedRanges: [Int64] = [] { didSet { ChangeSignal.shared.notify() } }
+    var _requestHeads: [String] = [] { didSet { ChangeSignal.shared.notify() } }
+    var _servedBytes: Int64 = 0 { didSet { ChangeSignal.shared.notify() } }
     var _respondsWholeBodyIgnoringRange = false
     var _omitsContentLength = false
     var _failingRequests = 0

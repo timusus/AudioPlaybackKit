@@ -32,9 +32,11 @@ extension LoopbackMediaServer {
         }
         let end = min(offset + sliceBytes, body.count)
         let chunk = body.subdata(in: offset..<end)
+        // Counted before the send, like the undripped paths: the client may hold the slice before
+        // its completion runs, and a count that lags would undercount what it can have received.
+        lock.lock(); _servedBytes += Int64(chunk.count); lock.unlock()
         connection.send(content: chunk, completion: .contentProcessed { [weak self] error in
             guard error == nil, let self else { return }
-            self.lock.lock(); self._servedBytes += Int64(chunk.count); self.lock.unlock()
             var next = pacing
             next.pausedSeconds = nextPaused
             let paced = pacing.bytesPerSecond.map { Double(end) / Double($0) } ?? 0

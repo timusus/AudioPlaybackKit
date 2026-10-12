@@ -160,6 +160,14 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     /// still meanwhile, so no response or idle timer fires while loopback is still answering.
     var awaitsNetworkForTest: Bool { locked { machine.current.map { !$0.ended } ?? false } }
 
+    /// Called under `condition` after the machine changes state or a read parks, so a test awaits a
+    /// change instead of polling. It must only signal, never call back in.
+    var onChangeForTest: (() -> Void)? {
+        get { locked { changeHook } }
+        set { locked { changeHook = newValue } }
+    }
+    private var changeHook: (() -> Void)?
+
     /// - Parameters:
     ///   - authHeaders: resolved by the caller before construction; values are never logged.
     ///   - cacheKey: names the resource in the store's completed-file cache, for a `url` that carries a
@@ -321,6 +329,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
                     isRecheck = true
                     continue
                 }
+                changeHook?()
                 condition.wait()
             case .again:
                 continue
@@ -377,6 +386,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     /// Does `effects` in order, under `condition`; what must wait until it is released comes back.
     private func runLocked(_ effects: [GrowingFileDownload.Effect]) -> [Deferred] {
         var deferred: [Deferred] = []
+        defer { changeHook?() }
         for effect in effects {
             switch effect {
             case .retire(let discardFile):

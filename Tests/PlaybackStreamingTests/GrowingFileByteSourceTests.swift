@@ -32,7 +32,10 @@ final class GrowingFileByteSourceTests: XCTestCase {
         private let lock = NSLock()
         private var _events: [GrowingFileEvent] = []
         var events: [GrowingFileEvent] { lock.lock(); defer { lock.unlock() }; return _events }
-        func append(_ event: GrowingFileEvent) { lock.lock(); _events.append(event); lock.unlock() }
+        func append(_ event: GrowingFileEvent) {
+            lock.lock(); _events.append(event); lock.unlock()
+            ChangeSignal.shared.notify()
+        }
         var transactions: [GrowingFileEvent] {
             events.filter { if case .transaction = $0 { return true } else { return false } }
         }
@@ -74,6 +77,7 @@ final class GrowingFileByteSourceTests: XCTestCase {
             readAhead: readAhead, store: store ?? makeStore(), session: session,
             clock: clock, pathMonitor: pathMonitor, unknownLengthWindow: unknownLengthWindow, onEvent: { recorder.append($0) }
         )
+        source.onChangeForTest = { ChangeSignal.shared.notify() }
         sources.append(source)
         return source
     }
@@ -128,17 +132,6 @@ final class GrowingFileByteSourceTests: XCTestCase {
 
     func readAsync(_ source: GrowingFileByteSource, _ count: Int) -> PendingRead {
         PendingRead { try self.read(source, count) }
-    }
-
-    /// Generous by default: a condition that holds returns at once, and the machine may be loaded.
-    func waitUntil(_ timeout: TimeInterval = 20, _ condition: () -> Bool) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if condition() { return true }
-            // Kept: URLSession and the loopback server raise no signal for these states.
-            Thread.sleep(forTimeInterval: 0.01)
-        }
-        return condition()
     }
 
     func partials() -> [String] {

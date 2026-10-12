@@ -15,16 +15,6 @@ final class LoopbackFaultKnobTests: XCTestCase {
         super.tearDown()
     }
 
-    /// Generous by default: a condition that holds returns at once, and the machine may be loaded.
-    private func waitUntil(_ timeout: TimeInterval = 20, _ condition: () -> Bool) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if condition() { return true }
-            Thread.sleep(forTimeInterval: 0.01)
-        }
-        return condition()
-    }
-
     private func start(bodyBytes: Int) throws -> (LoopbackMediaServer, Data) {
         let body = Data((0..<bodyBytes).map { UInt8(truncatingIfNeeded: $0 &* 31 &+ 7) })
         let started = try LoopbackMediaServer(body: body, mimeType: "audio/mpeg")

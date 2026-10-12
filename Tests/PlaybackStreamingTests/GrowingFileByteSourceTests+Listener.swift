@@ -27,6 +27,7 @@ private final class RecordingListener: GrowingFileListener, @unchecked Sendable 
         // A host reads the file back in the callback; a later promotion renames it.
         let bytes = snapshot.fileURL.flatMap { try? Data(contentsOf: $0) }
         lock.withLock { _received.append((event, snapshot, bytes)) }
+        ChangeSignal.shared.notify()
     }
 }
 
