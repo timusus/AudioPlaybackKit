@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#
+# Worker test gate: `swift test` without the ~7 min PlaybackDecodeConformanceTests, parallel like land-verify.
+# Extra args pass through (--filter X); --with-conformance keeps the conformance bundle. Full output goes to
+# .build/test-fast.log and only the verdict is printed, so read the log instead of piping through tail/head.
+set -uo pipefail
+
+cd "$(dirname "$0")/.." || exit 2
+
+args=(--skip PlaybackDecodeConformanceTests)
+passthrough=()
+for arg in "$@"; do
+    if [[ "$arg" == --with-conformance ]]; then
+        args=()
+    else
+        passthrough+=("$arg")
+    fi
+done
+
+mkdir -p .build
+log=.build/test-fast.log
+echo "test-fast: log $PWD/$log"
+
+start=$SECONDS
+swift test --parallel --num-workers 4 ${args[@]+"${args[@]}"} ${passthrough[@]+"${passthrough[@]}"} >"$log" 2>&1
+status=$?
+
+plain=$(sed $'s/\x1b\\[[0-9;]*m//g' "$log")
+echo "test-fast: exit $status in $((SECONDS - start)) s"
+# --parallel prints no "Executed N tests" totals, only `[n/m] Testing Module.Class/test` as each test starts.
+started=$(grep -cE '^\[[0-9]+/[0-9]+\] Testing ' <<<"$plain")
+echo "XCTest: $started tests started"
+# Without --parallel (e.g. a pass-through --no-parallel) each bundle does print its totals.
+grep -E "^ *Executed [0-9]+ tests?, with" <<<"$plain" | sort -u | sed 's/^ */XCTest: /'
+failed=$({
+    sed -nE "s|^Test Case '-\[([^ ]+) ([^]]+)\]' failed.*|\1/\2|p" <<<"$plain"
+    sed -nE 's|^.*: error: -\[([^ ]+) ([^]]+)\] : .*|\1/\2|p' <<<"$plain"
+    sed -nE 's|^.*✘ Test (.+) failed after .*|\1|p' <<<"$plain"
+} | sort -u)
+if [[ -n "$failed" ]]; then
+    echo "failing tests:"
+    sed 's/^/  /' <<<"$failed"
+fi
+grep -E "(✔|✘) Test run with" <<<"$plain" | sed 's/^/swift-testing: /'
+grep -E "error: " <<<"$plain" | grep -vE ": error: -\[" | sort -u | head -n 10 | sed 's/^/error: /'
+if [[ "$status" -ne 0 && -z "$failed" ]]; then
+    echo "no failing test named; last log lines:"
+    tail -n 8 "$log" | sed 's/^/  | /'
+fi
+exit "$status"
