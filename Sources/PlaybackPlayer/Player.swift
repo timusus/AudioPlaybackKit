@@ -814,12 +814,12 @@ public final class Player<Item: Hashable & Sendable> {
 
     /// Called whenever an input changes; sends only on a change, so each start has one end.
     private func updateRebuffering() {
-        let now = state == .buffering && intent && suppression == .none && !awaitingFirstAudio
+        let index = currentIndex
+        let now = index != nil && state == .buffering && intent && suppression == .none && !awaitingFirstAudio
         guard now != rebuffering else { return }
         rebuffering = now
-        // `.buffering` always has a current item.
-        guard now, let currentIndex else { return send(.bufferingEnded) }
-        send(.bufferingStarted(index: currentIndex, position: position))
+        guard now, let index else { return send(.bufferingEnded) }
+        send(.bufferingStarted(index: index, position: position))
     }
 
     private func send(_ event: PlayerEvent<Item>) {
