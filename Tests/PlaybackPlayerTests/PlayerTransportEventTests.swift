@@ -273,31 +273,31 @@ final class PlayerTransportEventTests: XCTestCase {
         XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 1, reason: .auto)])
     }
 
-    // A recovery restarts paused whatever the app intends; a seek after it must not show buffering.
+    // A recovery restarts paused whatever the app intends; a seek after it lands ready, never playing.
     func testASeekAfterARecoveryKeepsTheTransportsPausedStatus() {
         player.setItems(["a"])
         player.play()
         rig.run(for: 1)
         rig.output.injectFailure()
         rig.pump()
+        rig.pump()
         XCTAssertEqual(player.state, .ready)
 
         player.seek(to: 5)
-        rig.settle()
-        XCTAssertEqual(player.state, .ready)
         rig.run(for: 1)
         XCTAssertEqual(player.state, .ready)
         XCTAssertEqual(rig.output.rate, 0, "still paused")
     }
 
-    func testASeekWhilePausedStaysReady() {
+    // media3 masks a seek as STATE_BUFFERING whatever playWhenReady is, until its audio is ready (#151).
+    func testASeekWhilePausedBuffersUntilItsAudioIsWritten() {
         player.setItems(["a"])
         rig.run(for: 1)
         XCTAssertEqual(player.state, .ready)
 
         player.seek(to: 5)
         rig.settle()
-        XCTAssertEqual(player.state, .ready)
+        XCTAssertEqual(player.state, .buffering)
         rig.pump()
         XCTAssertEqual(player.state, .ready)
     }

@@ -346,6 +346,31 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(crossed, [0, 1, 2])
     }
 
+    // #151: media3 reports STATE_BUFFERING until the first frames, whatever playWhenReady is.
+    func testAPausedRestartBuffersUntilAudioIsWritten() {
+        makeFeeder([item(0, 40)])
+        upstream.available = 0
+        feeder.seek(to: SeekTarget(pos(0, 8)))
+        feeder.pump()
+        XCTAssertEqual(statuses, [.buffering])
+
+        upstream.available = nil
+        feeder.pump()
+        XCTAssertEqual(statuses, [.buffering, .paused])
+    }
+
+    func testAPauseWhileBufferingStaysBuffering() {
+        makeFeeder([item(0, 40)])
+        upstream.available = 0
+        feeder.play()
+        feeder.pause()
+        XCTAssertEqual(statuses, [.buffering])
+
+        upstream.available = nil
+        feeder.pump()
+        XCTAssertEqual(statuses, [.buffering, .paused])
+    }
+
     func testARejectedFormatSurfacesAnErrorAndDoesNotSpin() {
         makeFeeder([item(0, 4), item(1, 8, stereo)])
         output.reject(stereo)
@@ -372,7 +397,8 @@ final class FeederTests: XCTestCase {
 
         XCTAssertEqual(output.rebuilds, 1)
         XCTAssertEqual(upstream.resupplies, [pos(0, 4)])
-        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+        // The restart buffers until its audio is written (#151).
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .paused])
         XCTAssertEqual(output.rate, 0)
         XCTAssertTrue(failures.isEmpty)
 
@@ -382,7 +408,7 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(heard, ramp(0, 0..<40))
         XCTAssertEqual(positions.map(\.mediaFrame), positions.map(\.mediaFrame).sorted())
         XCTAssertEqual(positions.last, pos(0, 40))
-        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .playing, .ended])
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .paused, .playing, .ended])
     }
 
     func testAFailedEnqueueTakesTheSameRecoveryPath() {
@@ -396,7 +422,7 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(output.rebuilds, 1)
         // The failed renderer went silent at 1 s; the clock it ran on is all there is to resume from.
         XCTAssertEqual(upstream.resupplies, [pos(0, 5)])
-        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .paused])
         XCTAssertTrue(failures.isEmpty)
 
         feeder.play()
@@ -415,7 +441,7 @@ final class FeederTests: XCTestCase {
 
         XCTAssertEqual(output.rebuilds, 1)
         XCTAssertEqual(upstream.resupplies, [pos(0, 4)])
-        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .buffering, .paused])
 
         feeder.play()
         run(for: 10)
@@ -455,7 +481,7 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(output.rebuilds, 2)
         XCTAssertTrue(failures.isEmpty)
         XCTAssertEqual(upstream.resupplies, [pos(0, 4), pos(0, 4)])
-        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .paused, .buffering, .paused])
         XCTAssertEqual(output.rate, 0)
 
         feeder.play()
@@ -506,7 +532,7 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(output.rebuilds, 2)
         XCTAssertTrue(failures.isEmpty)
         XCTAssertEqual(upstream.resupplies, [pos(0, 4), pos(0, 8)])
-        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .playing, .paused])
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .paused, .playing, .buffering, .paused])
     }
 
     func testARebuildThatThrowsSurfacesTheError() {
@@ -535,7 +561,7 @@ final class FeederTests: XCTestCase {
 
         XCTAssertEqual(output.rebuilds, 1)
         XCTAssertEqual(upstream.resupplies, [pos(0, 4)])
-        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .paused])
     }
 
     func testAFailureRacingASeekLandsPausedAtTheSeekTarget() {

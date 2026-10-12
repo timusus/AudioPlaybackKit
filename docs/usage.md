@@ -342,8 +342,8 @@ struct NowPlayingBar: View {
 }
 ```
 
-- **`state`** is `.idle` (nothing prepared, or stopped on an error), `.buffering` (play intent with decode
-  behind, or an item opening), `.ready` or `.ended` (the last item finished; `play()` restarts at 0).
+- **`state`** is `.idle` (nothing prepared, or stopped on an error), `.buffering` (waiting for audio: a load or
+  seek not yet decoded, or decode behind; paused or not, as media3), `.ready` or `.ended` (the last item finished; `play()` restarts at 0).
   `isPlaying` is `state == .ready && playWhenReady && suppression == .none`. Show a play button from
   `playWhenReady`, not from `isPlaying`, or the button flickers while buffering.
 - **`position`** is what is heard, in seconds of the current item's media time, written on every pump

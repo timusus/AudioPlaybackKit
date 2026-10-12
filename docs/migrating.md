@@ -44,7 +44,7 @@ State mapping, for both apps' adapters:
 | App state | `Player` |
 |---|---|
 | idle | `.idle` and `error == nil` |
-| loading, buffering | `.buffering` (an item opening, or decode behind the clock) |
+| loading, buffering | `.buffering` (a load or seek not yet decoded, paused or not, or decode behind the clock) |
 | playing | `isPlaying` |
 | paused | `.ready` and not `playWhenReady`; also `suppression == .interruption` when the system paused it |
 | ended | `.ended` |

@@ -40,7 +40,7 @@ final class PlayerCoreTests: XCTestCase {
         XCTAssertEqual(player.state, .idle)
         player.setItems(["a"])
         rig.settle()
-        XCTAssertEqual(player.state, .ready, "paused with an item")
+        XCTAssertEqual(player.state, .buffering, "paused, nothing decoded yet")
 
         player.play()
         rig.settle()
@@ -55,6 +55,17 @@ final class PlayerCoreTests: XCTestCase {
         player.play()
         rig.run(for: 11)
         XCTAssertEqual(player.state, .ended)
+    }
+
+    // #151: Shuttle2 shows "Loading" off `.buffering`; a paused cold start read ready with nothing decoded.
+    func testAPausedLoadBuffersUntilItsFirstAudio() {
+        player.setItems(["a"])
+        rig.settle()
+        XCTAssertEqual(player.state, .buffering)
+        XCTAssertFalse(player.playWhenReady)
+
+        rig.pump()
+        XCTAssertEqual(player.state, .ready)
     }
 
     // #134: on the phone each transport event can land in its own drain, and a resume flickered

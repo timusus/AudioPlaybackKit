@@ -6,8 +6,8 @@ import PlaybackRender
 public typealias ItemSourceFactory<Item> = @MainActor (Item) throws -> any ItemSource
 
 /// media3 `Player.State`: `.idle` has nothing prepared or stopped on an error; `.buffering` is
-/// `playWhenReady` with decode behind the clock, or an item opening; `.ready` can play at once;
-/// `.ended` is the end of the last item.
+/// waiting for audio (a load or seek not yet decoded, or decode behind the clock) whatever
+/// `playWhenReady` is; `.ready` can play at once; `.ended` is the end of the last item.
 public enum PlaybackState: Sendable {
     case idle, buffering, ready, ended
 }

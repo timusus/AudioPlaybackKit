@@ -2,7 +2,8 @@ import AVFoundation
 
 public enum TransportStatus: Equatable, Sendable {
     case paused
-    /// Asked to play, waiting for decode to get ahead of the clock.
+    /// Waiting for decode: after a `setCurrent`, `seek` or recovery until its first audio is written,
+    /// playing or paused, or asked to play with decode behind the clock.
     case buffering
     case playing
     /// Everything set has been heard. Not final: a later `setNext` plays on from here.
@@ -271,7 +272,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
             return
         }
         failed = true
-        feeder.pause()
+        feeder.halt()
     }
 }
 

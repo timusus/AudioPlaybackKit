@@ -112,7 +112,8 @@ final class Feeder {
             output.setRate(0, at: nil)
             outputRunning = false
         }
-        if status != .ended { setStatus(.paused) }
+        // Waiting for audio stays buffering: media3 reports STATE_BUFFERING whatever playWhenReady is.
+        if status == .playing { setStatus(.paused) }
     }
 
     /// Speed. The map needs no checkpoint: the output plays media time at any rate.
@@ -172,10 +173,14 @@ final class Feeder {
 
         fill()
 
-        if playWhenReady, !outputRunning, status == .buffering || status == .paused, canStart {
-            output.setRate(rate, at: nil)
-            outputRunning = true
-            setStatus(.playing)
+        if !outputRunning, status == .buffering || status == .paused, canStart {
+            if playWhenReady {
+                output.setRate(rate, at: nil)
+                outputRunning = true
+                setStatus(.playing)
+            } else {
+                setStatus(.paused)
+            }
         }
 
         report()
@@ -218,7 +223,7 @@ final class Feeder {
         restartTarget = position
         // With no position nothing was consumed, so upstream's next chunk is still the right one.
         if let position { upstream.resupply(from: position) }
-        setStatus(status ?? (playWhenReady ? .buffering : .paused))
+        setStatus(status ?? .buffering)
     }
 
     /// A failed renderer, or a media-services reset (`error` nil): rebuild the output and restart
@@ -242,10 +247,16 @@ final class Feeder {
     }
 
     /// Pauses and pulls nothing more until the next restart, which re-arms one recovery.
-    private func fail(_ error: any Error) {
+    func halt() {
         failed = true
         recovering = false
         pause()
+        // No audio is coming, so it is not waiting for any.
+        if status == .buffering { setStatus(.paused) }
+    }
+
+    private func fail(_ error: any Error) {
+        halt()
         onEvent(.failed(error))
     }
 
@@ -261,7 +272,7 @@ final class Feeder {
             }
             if upstreamEnded {
                 upstreamEnded = false
-                if status == .ended { setStatus(playWhenReady ? .buffering : .paused) }
+                if status == .ended { setStatus(.buffering) }
             }
             guard case let .chunk(chunk) = supply else { return }
             write(chunk)

@@ -687,7 +687,9 @@ final class TransportTests: XCTestCase {
         output.injectFailure()
         pump()
         XCTAssertEqual(output.rebuilds, 1)
-        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering], "paused, waiting for the restart's decode (#151)")
+        pump()
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .paused])
         XCTAssertEqual(failedItems, [])
         XCTAssertEqual(recoveries, 1, "a caller learns the transport dropped play on its own")
 
@@ -697,7 +699,7 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(output.volume, 0.5)
         run(for: 1.5)
         XCTAssertEqual(heard, allOfA)
-        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .buffering, .playing, .ended])
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .paused, .playing, .ended])
     }
 
     func testAMediaServicesResetIsReportedAsARecoveryWhilePlayingOrPaused() {
@@ -709,6 +711,7 @@ final class TransportTests: XCTestCase {
         output.injectReset()
         pump()
         XCTAssertEqual(recoveries, 1)
+        pump()
         XCTAssertEqual(statuses.last, .paused)
 
         output.injectReset()
