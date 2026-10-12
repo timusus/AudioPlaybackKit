@@ -191,6 +191,47 @@ final class NowPlayingInfoTests: XCTestCase {
         XCTAssertEqual(rate, 1)
     }
 
+    // The output starts late, so any refresh during the hold (here a wrapper's command set changing)
+    // would find the system's extrapolation ahead of the held position and rewrite.
+    func testAHeldPositionWritesNothingUntilItMoves() async {
+        var policy: PolicyPlayer!
+        rig = NowPlayingRig {
+            policy = PolicyPlayer($0)
+            return policy
+        }
+        await playing()
+        rig.player.pause()
+        await rig.settle()
+        rig.player.play()
+        await rig.settle()
+        let writes = rig.info.writes
+
+        for tick in 0..<5 {
+            rig.wall += 0.1
+            policy.removed = tick.isMultiple(of: 2) ? .seekToNext : []
+            await rig.settle()
+        }
+
+        XCTAssertEqual(rig.player.position, 2)
+        XCTAssertEqual(rig.info.writes, writes)
+
+        rig.wall += 0.5
+        await rig.run(for: 1)
+
+        XCTAssertEqual(rig.info.writes, writes + 1)
+        XCTAssertEqual(elapsed, 3)
+    }
+
+    func testADriftUnderTheThresholdWritesNothing() async {
+        await playing()
+        let writes = rig.info.writes
+
+        rig.wall += 0.04
+        await rig.run(for: 1)
+
+        XCTAssertEqual(rig.info.writes, writes)
+    }
+
     func testARateChangeWritesTheRateAndDefaultRate() async {
         await playing()
 

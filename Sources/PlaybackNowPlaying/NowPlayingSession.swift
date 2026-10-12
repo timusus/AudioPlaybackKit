@@ -50,6 +50,8 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     private var shownIntervals: SkipIntervals??
     private var current: (item: Item, metadata: NowPlayingMetadata, artwork: MPMediaItemArtwork?)?
     private var published: Published?
+    /// The player's position at the previous refresh, to tell a held position from a moving one.
+    private var lastRead: TimeInterval?
     /// Tells one artwork load from another for the same item, so only the latest publishes.
     private var artworkLoads = 0
 
@@ -66,11 +68,13 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         var position: TimeInterval
         var at: TimeInterval
 
-        func sameShown(as other: Published) -> Bool {
+        /// A held position (`other.position` as last read) is not drift: the output has not started yet,
+        /// and the write that follows its first move corrects the system's extrapolation once.
+        func sameShown(as other: Published, held: Bool) -> Bool {
             item == other.item && rate == other.rate && defaultRate == other.defaultRate
                 && duration == other.duration && isLive == other.isLive && state == other.state
                 && discontinuity == other.discontinuity
-                && abs(position + rate * (other.at - at) - other.position) <= maxDrift
+                && (held || abs(position + rate * (other.at - at) - other.position) <= maxDrift)
         }
     }
 
@@ -144,6 +148,7 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
             artworkLoad?.cancel()
             current = nil
             published = nil
+            lastRead = nil
             guard infoCenter.playbackState != .stopped || infoCenter.nowPlayingInfo != nil else { return }
             infoCenter.nowPlayingInfo = nil
             infoCenter.playbackState = .stopped
@@ -151,7 +156,9 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         }
         if current?.item != item { load(item) }
         let next = snapshot(of: item)
-        if published.map({ !$0.sameShown(as: next) }) ?? true { publish(next) }
+        let held = lastRead == next.position
+        lastRead = next.position
+        if published.map({ !$0.sameShown(as: next, held: held) }) ?? true { publish(next) }
     }
 
     private func load(_ item: Item) {
