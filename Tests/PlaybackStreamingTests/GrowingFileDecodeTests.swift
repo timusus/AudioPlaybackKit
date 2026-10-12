@@ -8,20 +8,22 @@ import PlaybackStreamingTestSupport
 /// contract's decode-equality cases for this source).
 final class GrowingFileDecodeTests: XCTestCase {
 
-    static let testSession = GrowingFileByteSource.makeSession(configuration: .ephemeral)
-
     private var directory: URL!
+    // Per test: a shared session carries its connection pool and late callbacks into the next test.
+    private var session: URLSession!
     private var server: LoopbackMediaServer?
     private var source: GrowingFileByteSource?
 
     override func setUp() {
         super.setUp()
         directory = FileManager.default.temporaryDirectory.appendingPathComponent("growing-decode-\(UUID().uuidString)")
+        session = GrowingFileByteSource.makeSession(configuration: .ephemeral)
     }
 
     override func tearDown() {
         source?.cancel()
         server?.stop()
+        session.invalidateAndCancel()
         try? FileManager.default.removeItem(at: directory)
         super.tearDown()
     }
@@ -54,7 +56,9 @@ final class GrowingFileDecodeTests: XCTestCase {
         self.server = server
         configure(server)
         let source = GrowingFileByteSource(
-            url: server.url, authHeaders: [:], store: GrowingFileStore(directory: directory), session: Self.testSession
+            url: server.url, authHeaders: [:], store: GrowingFileStore(directory: directory), session: session,
+            // A fed-by-nobody monitor: the host's real path changes would reopen the transaction.
+            clock: SystemGrowingFileClock.shared, pathMonitor: GrowingFilePathMonitor()
         )
         self.source = source
         let actual = try decodeAll(source, probing: source) { afterOpen(server) }

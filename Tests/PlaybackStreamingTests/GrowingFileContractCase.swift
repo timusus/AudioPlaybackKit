@@ -13,8 +13,6 @@ import PlaybackDecode
 /// the helpers below. This class has no test methods of its own.
 class GrowingFileContractCase: XCTestCase {
 
-    static let session = GrowingFileByteSource.makeSession(configuration: .ephemeral)
-
     /// One way of serving the body.
     struct Resource {
         let name: String
@@ -69,17 +67,21 @@ class GrowingFileContractCase: XCTestCase {
     static let bodySize = 40_000
 
     var directory: URL!
+    // Per test: a shared session carries its connection pool and late callbacks into the next test.
+    var session: URLSession!
     var servers: [LoopbackMediaServer] = []
     var sources: [GrowingFileByteSource] = []
 
     override func setUp() {
         super.setUp()
         directory = FileManager.default.temporaryDirectory.appendingPathComponent("growing-contract-\(UUID().uuidString)")
+        session = GrowingFileByteSource.makeSession(configuration: .ephemeral)
     }
 
     override func tearDown() {
         sources.forEach { $0.cancel() }
         servers.forEach { $0.stop() }
+        session.invalidateAndCancel()
         try? FileManager.default.removeItem(at: directory)
         super.tearDown()
     }
@@ -119,7 +121,8 @@ class GrowingFileContractCase: XCTestCase {
     ) -> GrowingFileByteSource {
         let source = GrowingFileByteSource(
             url: url, authHeaders: authHeaders, store: GrowingFileStore(directory: directory),
-            session: Self.session, clock: clock
+            // A fed-by-nobody monitor: the host's real path changes would reopen the transaction.
+            session: session, clock: clock, pathMonitor: GrowingFilePathMonitor()
         )
         sources.append(source)
         return source
