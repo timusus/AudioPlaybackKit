@@ -80,7 +80,8 @@ echo "release.sh: swift test"
 swift test
 
 # The byte source runs on iOS URLSession in the apps, so its tests also run on a simulator,
-# picked by UDID (IOS_SIM_UDID, else the first available iPhone).
+# picked by UDID (IOS_SIM_UDID, else the first available iPhone). Give it a simulator no other
+# run uses: a parallel-testing xcodebuild clones its device, shutting it down mid-suite.
 udid="${IOS_SIM_UDID:-$(xcrun simctl list devices available | grep -E '^ +iPhone' | head -1 | grep -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}')}"
 if [[ -z "$udid" ]]; then
     echo "release.sh: no available iPhone simulator; set IOS_SIM_UDID" >&2
