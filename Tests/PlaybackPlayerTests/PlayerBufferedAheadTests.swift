@@ -27,6 +27,31 @@ final class PlayerBufferedAheadTests: XCTestCase {
         XCTAssertEqual(player.bufferedAhead, 2, accuracy: 1e-9)
     }
 
+    func testPausingDoesNotChangeWhatIsBuffered() {
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 3)
+        player.pause()
+        rig.run(for: 1)
+
+        XCTAssertEqual(player.bufferedAhead, 2, accuracy: 1e-9)
+        rig.run(for: 5)
+        XCTAssertEqual(player.bufferedAhead, 2, accuracy: 1e-9)
+    }
+
+    func testASeekDiscardsWhatWasBufferedAndRefillsFromTheLandedPosition() {
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 3)
+        XCTAssertEqual(player.bufferedAhead, 2, accuracy: 1e-9)
+
+        // Two seconds were queued before the seek; only the 0.5 s left after 9.5 s may count.
+        player.seek(to: 9.5)
+        rig.run(for: 0.1)
+
+        XCTAssertEqual(player.bufferedAhead, 0.5, accuracy: 0.25)
+    }
+
     func testOnlyWhatIsLeftIsBufferedNearTheListsEnd() {
         player.setItems(["a"])
         player.play()

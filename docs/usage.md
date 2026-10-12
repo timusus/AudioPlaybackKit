@@ -322,6 +322,7 @@ player.seek(to: 90)                               // within the current item
 player.seek(by: -15)                              // clamped to the item
 player.seek(to: 10, itemAt: 0)                    // across items
 player.rate = 1.5                                 // 0.25...4, pitch kept; pause is not rate 0
+player.bufferedAhead                              // seconds of PCM written past the playhead; about 2 while decode keeps up
 player.volume = 0.5                               // 0...1, applied at once; a fade is a ramp from your timer
 player.setProcessors([silenceGate, voiceBoost])   // AudioProcessors, as for Transport
 player.stop()                                     // idle, session deactivated; play() starts again
