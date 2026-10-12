@@ -326,7 +326,11 @@ final class Sequencer: @unchecked Sendable {
                 lock.withLock { entry.isSeekable = isSeekable }
             }
             let sampleRate = entry.format!.sampleRate
-            let landed = try cursor.seekTo.map { try entry.source.seek(toFrame: $0.frame(at: sampleRate)) }
+            // A seek can reach a source not yet known to be unseekable; it plays on and counts from 0
+            // rather than failing the item (ADR-0022).
+            let landed = try cursor.seekTo.map {
+                entry.source.isSeekable ? try entry.source.seek(toFrame: $0.frame(at: sampleRate)) : 0
+            }
             return (landed, try entry.source.nextChunk())
         }
 

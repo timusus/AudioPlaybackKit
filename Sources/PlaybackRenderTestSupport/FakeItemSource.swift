@@ -2,8 +2,10 @@ import Foundation
 import PlaybackRender
 
 /// An item whose sample at frame f, channel c is `base + f * channels + c`, so any slice says where
-/// it came from. Seeks are exact.
+/// it came from. Seeks are exact; an unseekable one throws on any that would move it.
 public final class FakeItemSource: ItemSource, @unchecked Sendable {
+    public struct Unseekable: Error {}
+
     public let format: PCMFormat
     private let frameCount: Int64
     private let chunkFrames: Int64
@@ -39,6 +41,8 @@ public final class FakeItemSource: ItemSource, @unchecked Sendable {
     public func open() throws -> PCMFormat { format }
 
     public func seek(toFrame frame: Int64) throws -> Int64 {
+        // As FFmpeg's source throws `unseekable` for a forward-only reader.
+        guard isSeekable || frame == position else { throw Unseekable() }
         position = min(frame, frameCount)
         return position
     }

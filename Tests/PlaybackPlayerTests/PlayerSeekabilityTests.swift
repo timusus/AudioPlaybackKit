@@ -57,6 +57,35 @@ final class PlayerSeekabilityTests: XCTestCase {
         XCTAssertEqual(PlayerRig.kinds(events).filter { $0 == .itemFailed || $0 == .seekLanded }, [])
     }
 
+    // Not yet known to be live, so the seek reaches the source; it starts from 0 instead of failing.
+    func testALiveItemLoadedAtAPositionStartsFromItsBeginning() async {
+        rig.factory.live = ["a"]
+        player.setItems(["a"], startPosition: 5)
+        rig.pump()
+
+        XCTAssertEqual(rig.firstSampleWritten(skipping: 0), 0)
+        XCTAssertEqual(player.position, 0)
+        XCTAssertNil(player.error)
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.seeksAdjusted(events), [.init(index: 0, requested: 5, position: 0)])
+        XCTAssertEqual(PlayerRig.kinds(events).filter { $0 == .itemFailed }, [])
+    }
+
+    func testASeekBeforeALiveItemOpensStartsItFromItsBeginning() async {
+        rig.factory.live = ["a"]
+        player.setItems(["a"])
+        player.seek(to: 3)
+        rig.pump()
+
+        XCTAssertEqual(rig.firstSampleWritten(skipping: 0), 0)
+        XCTAssertEqual(player.position, 0)
+        XCTAssertNil(player.error)
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.seeksLanded(events), [.init(index: 0, position: 0)])
+        XCTAssertEqual(PlayerRig.seeksAdjusted(events), [.init(index: 0, requested: 3, position: 0)])
+        XCTAssertEqual(PlayerRig.kinds(events).filter { $0 == .itemFailed }, [])
+    }
+
     func testAnUnseekableItemOfKnownLengthIsNotLiveButRefusesSeeks() async {
         rig.factory.unseekable = ["a"]
         playing()

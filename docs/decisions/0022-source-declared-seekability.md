@@ -29,7 +29,10 @@ reports it:
 - at the call, for a target clamped to `0...duration`;
 - at the call, for a seek refused by an item known to be unseekable, which stays where it is;
 - after `seekLanded`, when the source lands more than 1 ms from the target. This also moves
-  `discontinuityCount`.
+  `discontinuityCount`. A load at a start position is checked the same way, without `seekLanded`.
+
+A seek or start position can reach a source before it opens, when the player cannot yet know it is
+unseekable. `Sequencer` then skips the seek and the item plays from its beginning, reported as above.
 
 ## Alternatives rejected
 
@@ -44,8 +47,6 @@ reports it:
 
 ## Consequences
 
-- A seek made before a live item opens still reaches its source, which throws `unseekable` and fails
-  the item. The player cannot know before the open; skipping the seek belongs in `Sequencer`.
 - A seek during the open of a seekable item of unknown length is not clamped at its end; the source
   decides where it lands, and an adjustment is reported if it differs.
 - `NowPlayingSession` shows such an item as not live, with the metadata's duration if any, and

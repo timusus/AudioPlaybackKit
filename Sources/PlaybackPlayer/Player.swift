@@ -76,6 +76,9 @@ public final class Player<Item: Hashable & Sendable> {
     @ObservationIgnored private var held: [TransportEvent<Int>] = []
     /// A seek within the current item whose audio has not been heard yet.
     @ObservationIgnored private var seekTarget: TimeInterval?
+    /// Where a load asked its item to start, until the item is heard: a source that cannot seek
+    /// lands elsewhere, which is an adjustment but no `seekLanded`.
+    @ObservationIgnored private var startTarget: TimeInterval?
     /// The transport heard the end of the list; nothing is armed until a seek or load restarts it.
     @ObservationIgnored private var atEnd = false
     /// The next that failed before it was heard, reported when playback reaches it (media3).
@@ -469,9 +472,10 @@ public final class Player<Item: Hashable & Sendable> {
             position = seconds
             self.duration = duration
             seekable = isSeekable
-            if let target = seekTarget {
+            if let target = seekTarget ?? startTarget {
+                if seekTarget != nil { send(.seekLanded(index: current, position: seconds)) }
                 seekTarget = nil
-                send(.seekLanded(index: current, position: seconds))
+                startTarget = nil
                 landed(at: seconds, seekingTo: target, index: current)
             }
         case let .status(status):
@@ -525,6 +529,7 @@ public final class Player<Item: Hashable & Sendable> {
         loadedKey = armedKey
         self.armedKey = nil
         seekTarget = nil
+        startTarget = nil
         movePosition(to: seconds)
         forgetSource()
         armNext()
@@ -566,6 +571,7 @@ public final class Player<Item: Hashable & Sendable> {
         loadedKey = key
         if key == armedKey { armedKey = nil }
         seekTarget = nil
+        startTarget = nil
         movePosition(to: 0)
         forgetSource()
         guard let index = index(of: entryID) else {
@@ -632,6 +638,7 @@ public final class Player<Item: Hashable & Sendable> {
         forgetSource()
         armedKey = nil
         seekTarget = nil
+        startTarget = position
         let source: any ItemSource
         do {
             source = try makeSource(entry.item)
@@ -658,6 +665,7 @@ public final class Player<Item: Hashable & Sendable> {
         loadedKey = nil
         armedKey = nil
         seekTarget = nil
+        startTarget = nil
         unloadedState = state
         nothingToPlay(state)
         refreshState()

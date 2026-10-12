@@ -60,7 +60,8 @@ public enum PlayerEvent<Item: Hashable & Sendable>: Sendable {
     case seekLanded(index: Int, position: TimeInterval)
     /// media3 `DISCONTINUITY_REASON_SEEK_ADJUSTMENT`: a seek went to `position` instead of `requested`.
     /// Sent at the call for a clamp to the item or a refusal by an unseekable item (which stays
-    /// where it is), and after `seekLanded` when the source lands elsewhere.
+    /// where it is), and after `seekLanded` when the source lands elsewhere. A load at a start
+    /// position is checked the same way, with no `seekLanded`.
     case seekAdjusted(index: Int, requested: TimeInterval, position: TimeInterval)
     /// A renderer failure or media-services reset was recovered; playback is paused at the same position.
     case recoveredPaused
