@@ -77,19 +77,21 @@ static int pending_reserve(StreamDecoder *d, int frames) {
     return 1;
 }
 
-/* Push `frame` (NULL flushes) through the resampler into `pending`. Returns 0 on allocation
- * failure, 1 otherwise; `pending_frames` says how much arrived. */
+/* Push `frame` (NULL flushes) through the resampler into `pending`. Returns a status;
+ * `pending_frames` says how much arrived. */
 int sd_convert_through_swr(StreamDecoder *d, AVFrame *frame) {
     int in_samples = frame ? frame->nb_samples : 0;
     int out_samples = swr_get_out_samples(d->swr, in_samples);
-    if (out_samples <= 0) return 1;
-    if (!pending_reserve(d, out_samples)) return 0;
+    if (out_samples <= 0) return STREAM_DECODE_OK;
+    if (!pending_reserve(d, out_samples)) return STREAM_DECODE_ERR_ALLOC;
 
     uint8_t *out = (uint8_t *)(d->pending + (size_t)d->pending_frames * d->out_channels);
     int converted = swr_convert(d->swr, &out, out_samples,
                                 frame ? (const uint8_t **)frame->extended_data : NULL, in_samples);
-    if (converted > 0) d->pending_frames += converted;
-    return 1;
+    /* Dropping the frame quietly would be a gap in the audio that reports nothing wrong. */
+    if (converted < 0) return converted == AVERROR(ENOMEM) ? STREAM_DECODE_ERR_ALLOC : STREAM_DECODE_ERR_RESAMPLE;
+    d->pending_frames += converted;
+    return STREAM_DECODE_OK;
 }
 
 /* `frame` through the resampler, reconfiguring it first when the frame's input format differs.
@@ -103,12 +105,13 @@ int sd_push_through_swr(StreamDecoder *d, AVFrame *frame, int *lead) {
         && frame->sample_rate > 0 && frame->ch_layout.nb_channels > 0) {
         /* The stream changed rate, layout or sample format mid-way (stitched audio): hand out
          * what the old resampler still holds, then take the new input to the unchanged output. */
-        if (!sd_convert_through_swr(d, NULL)) return STREAM_DECODE_ERR_ALLOC;
+        int rc = sd_convert_through_swr(d, NULL);
+        if (rc != STREAM_DECODE_OK) return rc;
         *lead = d->pending_frames;
-        int rc = init_swr_from(d, frame->sample_rate, frame->format, &frame->ch_layout);
+        rc = init_swr_from(d, frame->sample_rate, frame->format, &frame->ch_layout);
         if (rc != STREAM_DECODE_OK) return rc;
     }
-    return sd_convert_through_swr(d, frame) ? STREAM_DECODE_OK : STREAM_DECODE_ERR_ALLOC;
+    return sd_convert_through_swr(d, frame);
 }
 
 void sd_pending_reset(StreamDecoder *d) {

@@ -244,6 +244,28 @@ final class OutputFormatTests: XCTestCase {
         }
     }
 
+    /// A seek into the last few frames at 48 kHz hands out only what is after the target: the cut
+    /// there is longer than what the resampler gives back for the last codec frame, so the rest of
+    /// it must come off the resampler's flush, not play as audio before the target.
+    func testSeekIntoTheLastFramesAtANonNativeRateHandsOutOnlyWhatIsAfterIt() throws {
+        try skipUnlessAvailable()
+        let rate = 48000.0
+        for name in [Fixture.mp3, Fixture.moovFirst] {
+            let url = try Fixture.url(name)
+            let (clean, format) = try decoder(url, rate: rate)
+            let total = decodeAll(clean).count / format.channelCount
+
+            for back in [5, 20] {
+                let (seeking, _) = try decoder(url, rate: rate)
+                let landed = try seeking.seek(toSeconds: Double(total - back) / rate)
+                let landedFrame = Int((landed * rate).rounded())
+                let after = decodeAll(seeking).count / format.channelCount
+                XCTAssertEqual(Double(after), Double(total - landedFrame), accuracy: 1,
+                               "\(name): \(back) frames from the end landed at \(landedFrame) of \(total)")
+            }
+        }
+    }
+
     /// The MP4 edit list's end clip holds at a non-native output rate: `aac_edit_list.m4a`
     /// (from the conformance fixtures) at 48 kHz has the clipped duration × 48000 frames, to a
     /// frame, and a seek past its end lands on that clipped end with nothing left to read.

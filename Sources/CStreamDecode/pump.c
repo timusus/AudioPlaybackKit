@@ -146,11 +146,15 @@ static int pump_reopen_codec(StreamDecoder *d) {
     return PUMP_AGAIN;
 }
 
-/* The decoder is drained; whatever libswresample still holds is the last of it. */
-static int pump_finish(StreamDecoder *d) {
-    if (!sd_convert_through_swr(d, NULL)) return STREAM_DECODE_ERR_ALLOC;
+/* The decoder is drained; whatever libswresample still holds is the last of it, less any of the
+ * seek's cut the last frame's own output was too short to cover. */
+static int pump_finish(StreamDecoder *d, int64_t *skip) {
+    int rc = sd_convert_through_swr(d, NULL);
+    if (rc != STREAM_DECODE_OK) return rc;
     d->ended = 1;
-    return d->pending_frames > 0 ? STREAM_DECODE_OK : STREAM_DECODE_EOF;
+    d->pending_offset = *skip < d->pending_frames ? (int)*skip : d->pending_frames;
+    *skip -= d->pending_offset;
+    return d->pending_frames > d->pending_offset ? STREAM_DECODE_OK : STREAM_DECODE_EOF;
 }
 
 /* A frame the codec cannot decode is a glitch, not the end of the recording: skip it
@@ -247,11 +251,11 @@ int sd_pump(StreamDecoder *d) {
         int status;
         if (rc == 0) status = pump_decoded_frame(d, &skip);
         else if (rc == AVERROR_EOF && d->reopening) status = pump_reopen_codec(d);
-        else if (rc == AVERROR_EOF) status = pump_finish(d);
+        else if (rc == AVERROR_EOF) status = pump_finish(d, &skip);
         else if (rc != AVERROR(EAGAIN)) status = pump_decode_error(d, rc, 0);
         /* EAGAIN after a NULL packet cannot happen, but treat it as the end rather than
          * looping: an unbounded loop here is a hung player. */
-        else if (d->flushing) status = pump_finish(d);
+        else if (d->flushing) status = pump_finish(d, &skip);
         else status = pump_feed_packet(d);
         if (status != PUMP_AGAIN) return status;
     }
