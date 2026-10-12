@@ -186,9 +186,14 @@ it plays index 0), and under `.one` removing the current item always ends, as me
 that changes which item follows the current re-issues `setNext` (or `clearNext`), so the pre-armed next
 is always the list's next. The transport keys each load and each arm afresh and the player resolves a
 `.crossed` key to its entry, so a crossing into a next armed before an edit is reported at that entry's
-new index. Once decode has reached the armed next the transport has joined into it, so it is still heard:
-an insert after that point plays after it (media3 would drop the read-ahead), and a removed next is
-replaced by a jump to the list's next as soon as the crossing arrives.
+new index.
+
+An edit, a repeat-mode change or a seek back that changes what follows drops the armed next even once
+decode has read into it, as long as it is not yet heard, and arms what now follows, as media3's
+`MediaPeriodQueue.updateQueuedPeriods` and `updateRepeatMode` do. If its audio was already queued
+the transport re-feeds from the heard frame. An edit that leaves the same next keeps it armed with
+nothing re-fed. A crossing already in flight when the edit lands is resolved by its key: a removed
+next is replaced by a jump to the list's next.
 
 **State.** `playWhenReady` is the app's intent and only the app or a session event changes it.
 `state` is what the transport reports: `TransportStatus.paused` or `.playing` with a current item is
