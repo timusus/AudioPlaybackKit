@@ -90,6 +90,11 @@ final class NowPlayingRig {
         )
     }
 
+    /// Drops the only reference to the session; `settle` and `run` need it afterwards.
+    func dropSession() {
+        session = nil
+    }
+
     /// Runs the player for `seconds` of output, then lets the session catch up.
     func run(for seconds: TimeInterval) async {
         base.run(for: seconds)

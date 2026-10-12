@@ -112,6 +112,11 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         observe()
     }
 
+    // Both centres are global, so a dropped session would leave its handlers and info behind.
+    isolated deinit {
+        release()
+    }
+
     /// Disables every command and clears the info, rates and skip intervals, as media3's
     /// `MediaSession.release`. Final.
     public func release() {

@@ -444,6 +444,17 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertEqual(rig.info.playbackState, .stopped)
     }
 
+    func testDroppingTheSessionReleasesIt() async {
+        await opened()
+        XCTAssertNotEqual(enabled, [])
+
+        rig.dropSession()
+
+        XCTAssertEqual(enabled, [])
+        XCTAssertNil(rig.info.nowPlayingInfo)
+        XCTAssertEqual(rig.info.playbackState, .stopped)
+    }
+
     func testReleaseClearsTheRatesAndSkipIntervalsItSet() async {
         rig = NowPlayingRig(supportedRates: [1, 2]) { PolicyPlayer($0, intervals: SkipIntervals(forward: 15, backward: 30)) }
         await opened()
