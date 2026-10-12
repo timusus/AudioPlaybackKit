@@ -32,14 +32,21 @@ patches and linkage. The headers sit in `Sources/CFFmpeg/include`, also generate
 ## Commands
 
 ```sh
-swift test                                          # macOS slice, no simulator; the gate
-swift test --filter PlaybackDecodeConformance       # about 30 s
+swift test --filter <Class>                         # iterate on the tests you touch
+scripts/test-fast                                   # the worker finish: all but conformance, parallel, about 1-2 min
+swift test --filter PlaybackDecodeConformance       # about 410-480 s (the matrix test alone about 234 s)
 GOLDEN_UPDATE=1 swift test --filter PlaybackDecodeConformance   # after an intended change; review the JSON diff
 xcodebuild test -scheme AudioPlaybackKit-Package -only-testing:PlaybackStreamingTests \
   -destination 'platform=iOS Simulator,id=<UDID>'   # a UDID no parallel-testing run clones (that shuts it down)
 land <branch>                                       # from the landing worktree: cherry-pick, verify, push
 scripts/release.sh 0.1.1 notes.md                   # landing worktree: tests, FFmpeg source, tag, push, publish the release
 ```
+
+Workers iterate with `--filter` and finish with one `scripts/test-fast` run (`--filter` and other args pass
+through; `--with-conformance` adds the conformance bundle). Conformance runs only when decode or demux code
+changes. The full gate (`swift test`, conformance included) is `land`'s, once per batch; do not run it by hand.
+`scripts/test-fast` writes `.build/test-fast.log` and prints a verdict: read the log, and never pipe test
+output through `tail` or `head`, which hide the verdict (swift-testing's "Test run with 0 tests" is not the XCTest result).
 
 On a build with the FFmpeg xcframework only the two generated-MP3 tests (30-minute CBR, 5-minute Xing VBR) skip, without host `ffmpeg` and on iOS;
 the `XCTSkipUnless(FFmpegStreamDecoder.isAvailable)` guards skip only without it. Known decoder
