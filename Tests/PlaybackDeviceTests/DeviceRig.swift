@@ -92,6 +92,23 @@ final class GatedSource: ItemSource, @unchecked Sendable {
         return try base.open()
     }
     var duration: Int64? { base.duration }
+    var isSeekable: Bool { base.isSeekable }
+    func seek(toFrame frame: Int64) throws -> Int64 { try base.seek(toFrame: frame) }
+    func nextChunk() throws -> [Float]? { try base.nextChunk() }
+    func interrupt(through epoch: UInt64) { base.interrupt(through: epoch) }
+}
+
+/// Hides the file's duration but still seeks, as a server transcode that re-opens at a time offset.
+final class UnknownLengthSource: ItemSource, @unchecked Sendable {
+    private let base: FFmpegItemSource
+
+    init(_ base: FFmpegItemSource) {
+        self.base = base
+    }
+
+    var isSeekable: Bool { true }
+    func begin(epoch: UInt64) { base.begin(epoch: epoch) }
+    func open() throws -> PCMFormat { try base.open() }
     func seek(toFrame frame: Int64) throws -> Int64 { try base.seek(toFrame: frame) }
     func nextChunk() throws -> [Float]? { try base.nextChunk() }
     func interrupt(through epoch: UInt64) { base.interrupt(through: epoch) }
@@ -110,6 +127,8 @@ final class DeviceRig {
     /// Items whose next source waits for `GatedSource.release()`.
     var gated: Set<String> = []
     private(set) var gates: [GatedSource] = []
+    /// Items whose source is an `UnknownLengthSource`.
+    var unknownLength: Set<String> = []
     private var eventTask: Task<Void, Never>?
 
     /// `wrap` puts an app's wrapper between the session and the player.
@@ -119,6 +138,7 @@ final class DeviceRig {
         player = Player(
             makeSource: { item in
                 let source = try FFmpegItemSource(reader: FileByteReader(url: Fixture.url(item)))
+                if weakSelf?.unknownLength.contains(item) == true { return UnknownLengthSource(source) }
                 guard let rig = weakSelf, rig.gated.contains(item) else { return source }
                 let gate = GatedSource(source)
                 rig.gates.append(gate)

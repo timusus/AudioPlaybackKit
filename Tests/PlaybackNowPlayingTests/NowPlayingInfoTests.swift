@@ -260,6 +260,18 @@ final class NowPlayingInfoTests: XCTestCase {
         XCTAssertNil(duration)
     }
 
+    // ADR-0022: no known length is not live, so the metadata's duration stands in and elapsed time runs.
+    func testASeekableItemOfUnknownLengthIsNotLiveAndShowsTheMetadataDuration() async {
+        rig = NowPlayingRig(unknownLength: ["a"])
+        await playing(["a"])
+        rig.player.seek(to: 5)
+        await rig.settle()
+
+        XCTAssertEqual(rig.info[MPNowPlayingInfoPropertyIsLiveStream], false)
+        XCTAssertEqual(duration, 99)
+        XCTAssertEqual(elapsed, 5)
+    }
+
     func testTheCurrentItemsArtworkIsPublished() async {
         rig.player.setItems(["a", "b"])
         await rig.settle()

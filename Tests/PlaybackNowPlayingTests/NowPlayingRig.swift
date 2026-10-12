@@ -102,11 +102,13 @@ final class NowPlayingRig {
     init(
         supportedRates: [Double] = [],
         live: Set<String> = [],
+        unknownLength: Set<String> = [],
         wrap: (Player<String>) -> any NowPlayingControllable<String> = { $0 }
     ) {
         base = PlayerTestRig { item in
             let source = FakeItemSource(format: Self.format, frames: 80, chunkFrames: 2)
             if live.contains(item) { source.duration = nil }
+            if unknownLength.contains(item) { (source.duration, source.seekable) = (nil, true) }
             return source
         }
         session = NowPlayingSession(

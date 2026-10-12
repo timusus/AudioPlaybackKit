@@ -92,6 +92,24 @@ final class RemoteCommandTests: DeviceTestCase {
         await rig.assertAudible(over: 0.5)
     }
 
+    // ADR-0022: a source that seeks with no known length scrubs and is not shown live.
+    func testScrubberSeeksAnItemOfUnknownLength() async {
+        rig.unknownLength = [Fixture.items[2]]
+        await rig.startPlaying(at: 2)
+        await rig.settle()
+        XCTAssertNil(rig.player.duration)
+        XCTAssertFalse(rig.player.isLive)
+        XCTAssertEqual(rig.info[MPNowPlayingInfoPropertyIsLiveStream] as? Bool, false)
+        XCTAssertTrue(rig.remote(.changePlaybackPosition).isEnabled)
+
+        XCTAssertEqual(rig.send(.changePlaybackPosition, .position(6)), .success)
+        await rig.waitUntil("seek landed") { rig.didSend { if case .seekLanded = $0 { true } else { false } } }
+        XCTAssertEqual(rig.player.position, 6, accuracy: 0.25)
+        await rig.settle()
+        XCTAssertEqual(rig.shownElapsed ?? -1, 6, accuracy: 0.25)
+        await rig.assertAudible(over: 0.5)
+    }
+
     func testRateCommandChangesTheHeardRateAndTheShownOne() async {
         XCTAssertEqual(MPRemoteCommandCenter.shared().changePlaybackRateCommand.supportedPlaybackRates, [1, 1.5, 2])
         await rig.startPlaying(at: 2)

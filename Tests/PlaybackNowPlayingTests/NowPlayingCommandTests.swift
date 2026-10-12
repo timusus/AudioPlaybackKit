@@ -72,6 +72,17 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertFalse(enabled.contains(.skipBackward))
     }
 
+    // ADR-0022, media3 COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM follows Window.isSeekable, not its duration.
+    func testAScrubOnASeekableItemOfUnknownLengthSeeks() async {
+        rig = NowPlayingRig(unknownLength: ["a"])
+        await opened(["a"])
+
+        XCTAssertFalse(rig.player.isLive)
+        XCTAssertTrue(enabled.contains(.changePlaybackPosition))
+        XCTAssertEqual(rig.commands.fire(.changePlaybackPosition, .position(6)), .success)
+        XCTAssertEqual(rig.player.position, 6)
+    }
+
     // ADR-0019: a 15 s skip interval registers skipForward and not nextTrack, and the reverse.
     func testAPlayerEnablesNextAndPreviousAndNoSkips() async {
         await opened(at: 1)
