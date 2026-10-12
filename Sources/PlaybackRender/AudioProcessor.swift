@@ -50,6 +50,12 @@ extension StreamMetadata: Equatable {
 public enum AudioProcessingError: Error, Equatable {
     /// Tags count frames at the chunk's rate, so a stage cannot resample; the output stage does.
     case sampleRateChanged(from: PCMFormat, to: PCMFormat)
+    /// An `AudioProcessor` that is not buffering rewrites samples in place, so its output format is its input's.
+    case inPlaceStageChangedFormat(from: PCMFormat, to: PCMFormat)
+    /// A buffering stage's output or dropped runs cover more frames than it was given, or its drops are out of order.
+    case misreportedFrames
+    /// A buffering stage reported itself ended while still holding input it never handed on.
+    case endedWithInputPending
 }
 
 /// One Float32 interleaved PCM stage that keeps every frame where it is (Voice Boost, ReplayGain, EQ,

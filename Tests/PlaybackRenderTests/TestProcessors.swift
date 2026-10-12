@@ -237,3 +237,22 @@ final class DropRangesProcessor: TestProcessor, @unchecked Sendable {
         return ProcessorOutput(samples: output, dropped: dropped)
     }
 }
+
+/// An in-place stage that reports a different channel count, which an in-place stage cannot have.
+final class InPlaceFormatChangingProcessor: AudioProcessor, @unchecked Sendable {
+    func configure(_ input: PCMFormat) throws -> PCMFormat {
+        PCMFormat(sampleRate: input.sampleRate, channelCount: input.channelCount + 1)
+    }
+
+    var isActive: Bool { true }
+    func process(_ samples: UnsafeMutableBufferPointer<Float>) {}
+    func flush(_ metadata: StreamMetadata) {}
+    func reset() {}
+}
+
+/// Reports dropping more input frames than it was given.
+final class OverreportingProcessor: TestProcessor, @unchecked Sendable {
+    override func process(_ samples: [Float], format: PCMFormat) -> ProcessorOutput {
+        ProcessorOutput(samples: samples, dropped: [DroppedFrames(atOutputFrame: 0, inputFrames: 1_000_000)])
+    }
+}

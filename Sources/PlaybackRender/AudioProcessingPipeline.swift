@@ -65,8 +65,9 @@ final class AudioProcessingPipeline {
                 guard output.sampleRate == format.sampleRate else {
                     throw AudioProcessingError.sampleRateChanged(from: format, to: output)
                 }
-                precondition(processor is BufferingAudioProcessor || output == format,
-                             "\(processor) processes in place, so it cannot change the format")
+                guard processor is BufferingAudioProcessor || output == format else {
+                    throw AudioProcessingError.inPlaceStageChangedFormat(from: format, to: output)
+                }
                 active.append((processor, output))
                 format = output
             }
@@ -110,8 +111,12 @@ final class AudioProcessingPipeline {
         accept(chunk, into: first)
     }
 
+    /// Set once a buffering stage breaks its contract; `getOutput` then yields nothing until `reset`.
+    private(set) var failure: (any Error)?
+
     /// Runs every stage over what the one before produced; nil when nothing came out, not even a tag.
     func getOutput() -> TaggedChunk? {
+        guard failure == nil else { return nil }
         guard !stages.isEmpty else {
             return passThrough.isEmpty ? nil : passThrough.removeFirst()
         }
@@ -124,7 +129,12 @@ final class AudioProcessingPipeline {
             if index > 0, stages[index - 1].isEnded, !stage.endQueued {
                 stage.queueEndOfStream()
             }
-            carried = drain(stage)
+            do {
+                carried = try drain(stage)
+            } catch {
+                failure = error
+                return nil
+            }
         }
         guard let carried, !carried.tags.isEmpty || !carried.samples.isEmpty else { return nil }
         return carried
@@ -146,6 +156,7 @@ final class AudioProcessingPipeline {
         stagedInputs = Array(repeating: nil, count: processors.count)
         pendingActive = []
         pendingInput = nil
+        failure = nil
         inputFormat = nil
         stages = []
         passThrough = []
@@ -166,27 +177,25 @@ final class AudioProcessingPipeline {
         buffering.queueInput(chunk.samples)
     }
 
-    private func drain(_ stage: Stage) -> TaggedChunk? {
+    private func drain(_ stage: Stage) throws -> TaggedChunk? {
         guard let buffering = stage.buffering else {
             return stage.processed.isEmpty ? nil : stage.processed.removeFirst()
         }
         let output = buffering.getOutput()
         let frames = Int64(output.samples.count / stage.outputFormat.channelCount)
-        let tags = rewrite(stage, outputFrames: frames, dropped: output.dropped)
-        if buffering.isEnded {
-            precondition(stage.pending.isEmpty, "\(buffering) ended without handing over all its input")
-        }
+        let tags = try rewrite(stage, outputFrames: frames, dropped: output.dropped)
+        if buffering.isEnded, !stage.pending.isEmpty { throw AudioProcessingError.endedWithInputPending }
         return TaggedChunk(samples: output.samples, format: stage.outputFormat, tags: tags)
     }
 
     /// Output frames map one to one, in order, onto the stage's input minus the dropped runs. A
     /// zero-frame tag passes through where it falls, and a tag dropped whole leaves one at its end
     /// when its item has no frames in this output, so the item is still reported crossed.
-    private func rewrite(_ stage: Stage, outputFrames: Int64, dropped: [DroppedFrames]) -> [SegmentTag] {
+    private func rewrite(_ stage: Stage, outputFrames: Int64, dropped: [DroppedFrames]) throws -> [SegmentTag] {
         var out: [SegmentTag] = []
         var droppedWhole: Set<Int> = []
 
-        func consume(_ count: Int64, keep: Bool) {
+        func consume(_ count: Int64, keep: Bool) throws {
             var remaining = count
             while let head = stage.pending.first, remaining > 0 || head.tag.frameCount == 0 {
                 var tag = head.tag
@@ -212,19 +221,20 @@ final class AudioProcessingPipeline {
                     out.append(SegmentTag(item: tag.item, mediaStartFrame: tag.mediaStartFrame, frameCount: 0))
                 }
             }
-            precondition(remaining == 0, "\(stage.processor) output or dropped more frames than its input")
+            guard remaining == 0 else { throw AudioProcessingError.misreportedFrames }
         }
 
         var cursor: Int64 = 0
         for drop in dropped {
             let at = Int64(drop.atOutputFrame)
-            precondition(at >= cursor && at <= outputFrames && drop.inputFrames >= 0,
-                         "\(stage.processor) reported a drop out of order or outside its output: \(drop)")
-            consume(at - cursor, keep: true)
+            guard at >= cursor, at <= outputFrames, drop.inputFrames >= 0 else {
+                throw AudioProcessingError.misreportedFrames
+            }
+            try consume(at - cursor, keep: true)
             cursor = at
-            consume(drop.inputFrames, keep: false)
+            try consume(drop.inputFrames, keep: false)
         }
-        consume(outputFrames - cursor, keep: true)
+        try consume(outputFrames - cursor, keep: true)
 
         // An item with frames here is reported by them; one zero-frame tag per item otherwise.
         var reported = Set(out.filter { $0.frameCount > 0 }.map(\.item))

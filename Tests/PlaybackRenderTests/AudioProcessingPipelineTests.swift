@@ -338,6 +338,26 @@ final class AudioProcessingPipelineTests: XCTestCase {
         }
     }
 
+    func testAnInPlaceStageThatChangesTheFormatIsRejected() {
+        let pipeline = AudioProcessingPipeline([InPlaceFormatChangingProcessor()])
+        XCTAssertThrowsError(try pipeline.configure(format)) {
+            XCTAssertEqual($0 as? AudioProcessingError,
+                           .inPlaceStageChangedFormat(from: format, to: PCMFormat(sampleRate: 44100, channelCount: 3)))
+        }
+    }
+
+    func testABufferingStageThatOverreportsDroppedFramesFailsTheOutput() throws {
+        let pipeline = try started([OverreportingProcessor()], format: mono)
+        pipeline.queueInput(chunk([1, 2], format: mono, tags: [tag(0, 0, 2)]))
+
+        XCTAssertNil(pipeline.getOutput())
+        XCTAssertEqual(pipeline.failure as? AudioProcessingError, .misreportedFrames)
+        XCTAssertNil(pipeline.getOutput(), "a failed pipeline hands nothing on")
+
+        pipeline.reset()
+        XCTAssertNil(pipeline.failure)
+    }
+
     // MARK: in place (ADR-0026)
 
     // Every stage is lent the decoder's own buffer and the output is that buffer: no copy, no allocation.

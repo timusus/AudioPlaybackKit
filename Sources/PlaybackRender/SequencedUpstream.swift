@@ -73,6 +73,10 @@ final class SequencedUpstream: FeederUpstream {
     func pull() -> UpstreamSupply {
         while !failed {
             if let chunk = pipeline.getOutput() { return .chunk(chunk) }
+            if let error = pipeline.failure, let pipelineItem {
+                fail(pipelineItem, error)
+                return .pending
+            }
             if endQueued, !pipeline.isEnded { return .pending }
             if pendingProcessors != nil, pipelineFormat != nil, !endQueued {
                 pipeline.queueEndOfStream()

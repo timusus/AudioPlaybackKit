@@ -542,6 +542,17 @@ final class TransportTests: XCTestCase {
                        .sampleRateChanged(from: mono, to: PCMFormat(sampleRate: 16, channelCount: 1)))
     }
 
+    func testAProcessorThatOverreportsDroppedFramesFailsTheItemInsteadOfTrapping() {
+        transport.setProcessors([OverreportingProcessor()])
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        pump()
+        run(for: 3.25)
+
+        XCTAssertEqual(failedItems, ["a"])
+        XCTAssertEqual(failedErrors.first as? AudioProcessingError, .misreportedFrames)
+    }
+
     func testSetCurrentDropsTheNextItem() {
         transport.setCurrent(item: "a", source: a)
         transport.setNext(item: "b", source: b)
