@@ -12,6 +12,8 @@ public final class PlayerTestRig<Item: Hashable & Sendable> {
     public let executor = ManualExecutor()
     public let session = FakeAudioSession()
     public private(set) var player: Player<Item>!
+    /// Each player event as it is sent, during the call that caused it; `finish()` still returns them all.
+    public var onEvent: ((PlayerEvent<Item>) -> Void)?
     private let events: AsyncStream<PlayerEvent<Item>>
     private let gate = EventGate()
 
@@ -22,6 +24,7 @@ public final class PlayerTestRig<Item: Hashable & Sendable> {
             return Transport(output: output, timer: timer, executor: executor) { gate.send($0) }
         }
         events = player.events
+        player.onEvent = { [weak self] in self?.onEvent?($0) }
     }
 
     /// Runs `body` and returns the transport events it caused, kept from the player as if still on

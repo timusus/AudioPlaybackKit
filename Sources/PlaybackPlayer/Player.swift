@@ -43,6 +43,8 @@ public final class Player<Item: Hashable & Sendable> {
     private var seekable: Bool?
 
     @ObservationIgnored public let events: AsyncStream<PlayerEvent<Item>>
+    /// Each event as it is sent, before `events` yields it: a test sees it without awaiting the stream.
+    @_spi(Testing) @ObservationIgnored public var onEvent: ((PlayerEvent<Item>) -> Void)?
 
     private var intent = false
     private var storedRate: Double = 1
@@ -750,6 +752,7 @@ public final class Player<Item: Hashable & Sendable> {
     }
 
     private func send(_ event: PlayerEvent<Item>) {
+        onEvent?(event)
         continuation.yield(event)
     }
 }

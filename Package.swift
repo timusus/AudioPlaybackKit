@@ -27,8 +27,8 @@ let package = Package(
         // A main-actor `Player` over `Transport`: the item list, play intent and state, position
         // and duration in seconds, seek across items (ADR-0019).
         .library(name: "PlaybackPlayer", targets: ["PlaybackPlayer"]),
-        // `FakeAudioSession` and `PlayerTestRig`, to drive a `Player` deterministically from a
-        // consumer's own tests.
+        // `FakeAudioSession`, `PlayerTestRig` and `FakeItemFactory`, to drive a `Player` deterministically
+        // from a consumer's own tests.
         .library(name: "PlaybackPlayerTestSupport", targets: ["PlaybackPlayerTestSupport"]),
         // `NowPlayingSession`: a `Player` on the lock screen, Control Centre and CarPlay, and the
         // remote commands routed back to it. Kept apart so only an app that wants it links `MediaPlayer`.

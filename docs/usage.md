@@ -516,3 +516,10 @@ from your source factory, with a `FakeAudioSession` as `rig.session`. Step it wi
 `session.calls`. Only a route-change test needs `@_spi(Testing) import PlaybackPlayer`, for
 `routeChanged(reason:previous:current:)`'s types. See
 `Tests/PlaybackPlayerExternalConsumerTests/CoordinatorTests.swift` for a coordinator test to copy.
+
+`FakeItemFactory<Item>` is a source factory scripted per item: thrown by the factory (`failing`), at
+`open` (`unopenable`), at a seek (`failingSeeks`) or past a frame (`failingAtFrame`); ending early while
+declaring its full length (`endingAtFrame`); live, seekable of unknown length or unseekable; and held in
+`open` or a read by a `SourceStall` until `release()` or an interrupt. `factory.calls` lists the items
+asked for. `rig.onEvent` sees each `PlayerEvent` as it is sent; `rig.finish()` returns them all.
+`Tests/PlaybackPlayerExternalConsumerTests/ScriptedItemTests.swift` shows each.

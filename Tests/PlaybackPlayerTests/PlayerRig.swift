@@ -13,11 +13,13 @@ final class PlayerRig {
         var reason: TransitionReason
     }
 
-    let factory: FakeItemFactory
+    let factory: FakeItemFactory<String>
     private let base: PlayerTestRig<String>
 
     init() {
-        let factory = FakeItemFactory()
+        // Each name's samples start at its own base (a 0, b 1000, c 2000, ...).
+        let names = ["a", "b", "c", "d", "x", "y"]
+        let factory = FakeItemFactory<String> { Float(names.firstIndex(of: $0)! * 1000) }
         self.factory = factory
         base = PlayerTestRig { try factory.make($0) }
     }

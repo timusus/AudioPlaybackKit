@@ -1,4 +1,5 @@
 import Foundation
+import PlaybackPlayerTestSupport
 import XCTest
 @_spi(Testing) @testable import PlaybackPlayer
 
@@ -158,7 +159,7 @@ final class PlayerSeekabilityTests: XCTestCase {
     // media3 STATE_BUFFERING while a read waits on the network, then STATE_READY.
     func testAReadThatWaitsIsBufferingUntilItReturns() {
         let blocked = DispatchSemaphore(value: 0)
-        let stall = ReadStall(frame: 16, entered: blocked)
+        let stall = SourceStall(frame: 16, entered: blocked)
         rig.factory.stalls["a"] = stall
         player.setItems(["a"])
         player.play()
@@ -185,7 +186,7 @@ final class PlayerSeekabilityTests: XCTestCase {
         XCTAssertTrue(player.playWhenReady)
         XCTAssertNil(player.error)
 
-        stall.release.signal()
+        stall.release()
         blocked.wait()
         rig.run(for: 1)
         XCTAssertEqual(player.state, .ready)
