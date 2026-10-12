@@ -47,10 +47,10 @@ MACOS_DEPLOYMENT_TARGET="${MACOS_DEPLOYMENT_TARGET:-14.0}"
 # The four libraries the decode path needs, in link order.
 LIBS=(libavformat libavcodec libswresample libavutil)
 
-# What the libraries call outside themselves, all shipped with the OS: zlib (ID3v2, MP4 `cmov`,
-# Matroska header compression), iconv (metadata conversion), and the frameworks libavutil's
-# VideoToolbox hardware context needs (built in although nothing here decodes video).
-SYSTEM_LIBS=(-lz -liconv -framework CoreFoundation -framework CoreMedia -framework CoreVideo -framework VideoToolbox)
+# What the libraries call outside themselves, shipped with the OS: only zlib (ID3v2, MP4 `cmov`,
+# Matroska header compression). `nm -u` shows nothing else undefined; --disable-autodetect keeps
+# iconv and the Apple frameworks out of the configure.
+SYSTEM_LIBS=(-lz)
 FRAMEWORK_ID="com.simplecityapps.FFmpeg"
 FRAMEWORK_VERSION="${FFMPEG_TAG#n}"
 
