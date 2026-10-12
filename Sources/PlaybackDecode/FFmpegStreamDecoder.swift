@@ -250,8 +250,8 @@ public final class FFmpegStreamDecoder {
                 sampleRate: Double(info.sample_rate),
                 channelCount: Int(info.channel_count),
                 duration: info.duration_sec > 0 ? info.duration_sec : nil,
-                codec: Self.string(from: &info.codec_name, capacity: 32),
-                container: Self.string(from: &info.container_name, capacity: 64)
+                codec: Self.string(from: &info.codec_name),
+                container: Self.string(from: &info.container_name)
             )
             self.format = format
             outputRate = format.sampleRate
@@ -382,7 +382,7 @@ public final class FFmpegStreamDecoder {
 
     /// Shrink the byte budget one seek may spend before it falls back to the byte estimate.
     /// **Tests only** — see `stream_decoder_set_seek_budget_bytes`.
-    public func setSeekBudgetBytesForTesting(_ bytes: Int64) {
+    @_spi(Testing) public func setSeekBudgetBytesForTesting(_ bytes: Int64) {
         #if canImport(CStreamDecode)
             if let handle { stream_decoder_set_seek_budget_bytes(handle, bytes) }
         #endif
@@ -482,7 +482,7 @@ public final class FFmpegStreamDecoder {
     #if canImport(CStreamDecode)
         /// Read a fixed-size C char array as a Swift string. `withUnsafeBytes` on the imported
         /// tuple is the only way to see it as contiguous storage.
-        private static func string<T>(from field: inout T, capacity: Int) -> String {
+        private static func string<T>(from field: inout T) -> String {
             withUnsafeBytes(of: &field) { raw in
                 let bytes = raw.bindMemory(to: CChar.self)
                 guard let base = bytes.baseAddress else { return "" }

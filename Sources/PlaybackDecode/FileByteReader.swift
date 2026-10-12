@@ -15,7 +15,6 @@ public final class FileByteReader: StreamByteReader {
     private var offset: Int64 = 0
     private var cancelled = false
     private var interrupted = false
-    private var closed = false
 
     /// - Parameter reportsTotalLength: when false, ``totalLength`` is nil even though the file has
     ///   one. This is not a curiosity: it is how the tests stand in for a chunked HTTP response
@@ -37,7 +36,7 @@ public final class FileByteReader: StreamByteReader {
         reportsLength = reportsTotalLength
     }
 
-    deinit { if !closed { Foundation.close(descriptor) } }
+    deinit { Foundation.close(descriptor) }
 
     public var totalLength: Int64? {
         reportsLength ? length : nil

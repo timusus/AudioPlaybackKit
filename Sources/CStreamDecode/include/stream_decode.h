@@ -72,7 +72,7 @@ typedef struct {
     int64_t (*fetched_end)(void *opaque);
 } StreamDecodeCallbacks;
 
-/** What the container says about the audio, filled in by `stream_decoder_open`. */
+/** What the container says about the audio, filled in by `stream_decoder_open_with`. */
 typedef struct {
     int    sample_rate;      /* the SOURCE's rate; the output's unless `stream_decoder_set_output` */
     int    channel_count;
@@ -84,21 +84,8 @@ typedef struct {
 
 typedef struct StreamDecoder StreamDecoder;
 
-/**
- * Open `callbacks` as an audio stream. Returns a handle on success and writes `info`; returns NULL
- * on failure and writes the reason to `status`.
- *
- * A failed open is ALWAYS a failure, never silence: a caller can fall back to another player on
- * it, and a decoder that opened nothing but reported success would present as a stream that plays
- * no audio and never ends.
- */
-StreamDecoder *stream_decoder_open(const StreamDecodeCallbacks *callbacks,
-                                   void *opaque,
-                                   StreamAudioInfo *info,
-                                   int *status);
-
-/** The probe budget `stream_decoder_open` uses: 64 KiB and 1 s of analysis (stream_decode.c says
- *  why a single-stream audio container needs no more). */
+/** The default probe budget: 64 KiB and 1 s of analysis (stream_decode.c says why a single-stream
+ *  audio container needs no more). */
 #define STREAM_DECODE_DEFAULT_PROBE_BYTES 65536
 #define STREAM_DECODE_DEFAULT_MAX_ANALYZE_US 1000000
 
@@ -112,9 +99,14 @@ typedef struct {
 } StreamDecodeOptions;
 
 /**
- * `stream_decoder_open` with a caller-chosen probe budget; `options` may be NULL, which is exactly
- * `stream_decoder_open`. A larger budget buys more container analysis (better stream info for
- * unusual files) at the cost of bytes read before the first frame.
+ * Open `callbacks` as an audio stream within `options`' probe budget (NULL takes the defaults).
+ * Returns a handle on success and writes `info`; returns NULL on failure and writes the reason to
+ * `status`. A larger budget buys more container analysis (better stream info for unusual files) at
+ * the cost of bytes read before the first frame.
+ *
+ * A failed open is ALWAYS a failure, never silence: a caller can fall back to another player on
+ * it, and a decoder that opened nothing but reported success would present as a stream that plays
+ * no audio and never ends.
  */
 StreamDecoder *stream_decoder_open_with(const StreamDecodeCallbacks *callbacks,
                                         void *opaque,

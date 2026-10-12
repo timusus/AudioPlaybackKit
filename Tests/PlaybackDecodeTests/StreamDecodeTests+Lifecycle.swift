@@ -253,7 +253,7 @@ extension StreamDecodeTests {
 
     // MARK: - Probe budget
 
-    /// The Swift default and the C fallback (used when a field is zero, or by `stream_decoder_open`)
+    /// The Swift default and the C fallback (used when a field is zero or the options are NULL)
     /// are two spellings of one number. If they drift, a caller passing `.default` probes
     /// differently from one that passes nothing.
     func testDefaultProbeBudgetMatchesTheCFallback() {

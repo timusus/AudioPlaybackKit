@@ -8,8 +8,9 @@ import Foundation
 /// above this protocol knows which one it has.
 ///
 /// Every call runs on the decoder's own thread and may block: `read` waits for bytes to arrive,
-/// `seek` may cancel and reopen a transport. `cancel()` is the one call made from another thread;
-/// it must unblock a waiting `read` or `seek`, which then throws ``StreamByteReaderError/cancelled``.
+/// `seek` may cancel and reopen a transport. `cancel()` and `interrupt()` are the calls made from
+/// another thread; each must unblock a waiting `read` or `seek`, which then throws
+/// ``StreamByteReaderError/cancelled`` or ``StreamByteReaderError/interrupted``.
 public protocol StreamByteReader: AnyObject {
 
     /// Total length in bytes, or nil while unknown. FFmpeg asks for it (`AVSEEK_SIZE`) to reach a

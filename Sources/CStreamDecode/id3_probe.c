@@ -19,7 +19,7 @@ static int probe_failure(int rc) {
  * Measured on a published 108 MB MP3: a 13 782 278-byte
  * ID3v2 tag holding a 3000x3000 PNG cover, which `mp3_read_header` READS — not seeks over, because
  * it parses every APIC frame and turns the picture into an attached-pic stream nobody asked for.
- * `stream_decoder_open` cost 13.8 MB of cellular data before a note was heard. `probesize` does not
+ * `stream_decoder_open_with` cost 13.8 MB of cellular data before a note was heard. `probesize` does not
  * bound it: the tag is consumed before the demuxer ever gets to probe audio.
  *
  * So the tag is stepped over here and FFmpeg's byte 0 is the first MPEG frame. The decoder reports

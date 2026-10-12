@@ -2,7 +2,7 @@ import AVFoundation
 import Foundation
 import XCTest
 
-@testable import PlaybackDecode
+@testable @_spi(Testing) import PlaybackDecode
 #if canImport(CStreamDecode)
     import CStreamDecode
 #endif

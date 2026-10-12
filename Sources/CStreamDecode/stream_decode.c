@@ -18,13 +18,6 @@
 
 #include "decoder.h"
 
-StreamDecoder *stream_decoder_open(const StreamDecodeCallbacks *callbacks,
-                                   void *opaque,
-                                   StreamAudioInfo *info,
-                                   int *status) {
-    return stream_decoder_open_with(callbacks, opaque, NULL, info, status);
-}
-
 StreamDecoder *stream_decoder_open_with(const StreamDecodeCallbacks *callbacks,
                                         void *opaque,
                                         const StreamDecodeOptions *options,
@@ -111,12 +104,8 @@ StreamDecoder *stream_decoder_open_with(const StreamDecodeCallbacks *callbacks,
     info->channel_count = d->channels;
     info->skipped_probe = d->skipped_probe;
     /* Format duration first, stream duration second (an MP3's Xing frame count reaches the stream
-     * before it reaches the format).
-     *
-     * A source with NO TOTAL LENGTH still gets the Xing duration: stock n7.1 mp3dec stored the
-     * negative "unknown" `avio_size()` in a uint64_t and discarded the tag, which the local patch
-     * scripts/ffmpeg-patches/0001 fixes. A length-less MP3 with no Xing tag reports 0,
-     * and the caller falls back to whatever duration it has from elsewhere. */
+     * before it reaches the format). A length-less MP3 with no Xing tag reports 0, and the caller
+     * falls back to whatever duration it has from elsewhere. */
     if (d->fmt->duration != AV_NOPTS_VALUE) {
         info->duration_sec = (double)d->fmt->duration / (double)AV_TIME_BASE;
     } else if (stream->duration != AV_NOPTS_VALUE) {

@@ -49,7 +49,7 @@ int sd_avio_read_packet(void *opaque, uint8_t *buf, int buf_size) {
     /* Never 0: libavformat reads a 0 as "nothing yet, ask again" and spins on it forever. */
     switch (n) {
         case STREAM_READ_EOF:       d->source_eof = 1; return AVERROR_EOF;
-        /* Latch it. During `stream_decoder_open` there is no handle for the caller's `cancel` to
+        /* Latch it. During `stream_decoder_open_with` there is no handle for the caller's `cancel` to
          * reach, so the reader's own refusal is the only evidence that this was a cancel and not a
          * broken file — and the two must not be reported the same way. */
         case STREAM_READ_CANCELLED: d->cancelled = 1; return AVERROR_EXIT;
@@ -128,8 +128,8 @@ int64_t sd_avio_seek_packet(void *opaque, int64_t offset, int whence) {
         default: return AVERROR(EINVAL);
     }
     if (whence == SEEK_CUR) {
-        /* libavformat resolves SEEK_CUR itself for buffered IO, but a custom context can still be
-         * handed one; the reader knows its own position, so ask it. */
+        /* `avio_seek` turns SEEK_CUR into SEEK_SET before calling here, so one is never expected;
+         * refuse it rather than guess where the reader is. */
         return AVERROR(ENOSYS);
     }
     if (target < 0) return AVERROR(EINVAL);
@@ -158,10 +158,9 @@ int64_t sd_avio_seek_packet(void *opaque, int64_t offset, int whence) {
  * Every refusal this file makes — a cancel, an interruption, a seek that blew its byte budget —
  * reaches libavformat as a failed read, and `AVIOContext` keeps it: `error` holds the code and
  * `eof_reached` stays 1. `avio_seek` resets `eof_reached` and nothing resets `error`, so the reads
- * that follow come straight back with the OLD failure without asking the byte source for anything:
- * an interrupted decoder reported a cancel on its next seek, and a seek that fell back to the byte
- * estimate reported `STREAM_DECODE_ERR_IO` after landing correctly. A seek is precisely the point
- * at which those refusals stop being true, so it is where they are cleared.
+ * that follow come straight back with the OLD failure without asking the byte source for anything.
+ * A seek is precisely the point at which those refusals stop being true, so it is where they are
+ * cleared.
  */
 void sd_avio_clear_latched_error(StreamDecoder *d) {
     if (!d->avio) return;
