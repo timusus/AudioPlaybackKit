@@ -538,3 +538,52 @@ declaring its full length (`endingAtFrame`); live, seekable of unknown length or
 `open` or a read by a `SourceStall` until `release()` or an interrupt. `factory.calls` lists the items
 asked for. `rig.onEvent` sees each `PlayerEvent` as it is sent; `rig.finish()` returns them all.
 `Tests/PlaybackPlayerExternalConsumerTests/ScriptedItemTests.swift` shows each.
+
+## Testing your app against the test-support products
+
+### Linking
+
+Adding AudioPlaybackKit to an app's test target as well as the app makes Xcode link the package's
+targets as dynamic frameworks. These ignore the project's `EXCLUDED_ARCHS[sdk=iphonesimulator*]`, so the
+generic simulator build includes x86_64. The FFmpeg xcframework has no x86_64 simulator slice, so the
+link fails with undefined `CStreamDecode` symbols. Build for arm64 only: pass `ARCHS=arm64` on the
+`xcodebuild` line (or `ONLY_ACTIVE_ARCH=YES`). Shuttle2 also re-exports the test-support products
+through a local package of its own, so its test targets depend on one package.
+
+### Failing sources
+
+Set the knobs before the player asks for the item. Each is keyed by item; `Episode` is your `Item` type.
+
+```swift
+let factory = FakeItemFactory<Episode>()
+let rig = PlayerTestRig { try factory.make($0) }
+
+factory.failing = [Episode(id: 1)]          // make() throws, as an item that cannot be resolved
+factory.unopenable = [Episode(id: 2)]       // open() throws, as a dead URL does
+factory.failingAtFrame = [Episode(id: 3): 40]   // throws once decode passes frame 40 (5 s at the default 8 Hz)
+factory.failingSeeks = [Episode(id: 4)]     // throws on any seek that would move; a seek to the current frame succeeds
+```
+
+All of them throw `FakeItemError<Episode>(item:)`. `rig.player.error?.kind` is `.source` for the player
+failures; `factory.calls` shows which items were asked for.
+
+To hold a source instead of failing it, give it a `SourceStall`. `frame: nil` holds `open()`; a frame
+holds the first read at or past it. It blocks once. Wait on `entered`, then `release()` it, or interrupt
+the player's call.
+
+```swift
+let stall = SourceStall(frame: nil)
+factory.stalls = [Episode(id: 1): stall]
+rig.player.setItems([Episode(id: 1)])
+rig.player.play()
+// stall.entered.wait() once decode is blocked in open()
+stall.release()
+```
+
+### Now Playing
+
+`PlaybackNowPlayingTestSupport` has `FakeNowPlayingInfoCenter` (`nowPlayingInfo`, `playbackState`,
+`writes`, and a subscript by key) and `FakeRemoteCommandCenter` (`enabled`, `intervals`, `rates`, and
+`press(_:)` to run a command as the lock screen would). Pass them to `NowPlayingSession` with a `now:`
+clock, and `await session.settle()` after driving the player, before reading them. See
+[Show a `Player` on the lock screen](#show-a-player-on-the-lock-screen).
