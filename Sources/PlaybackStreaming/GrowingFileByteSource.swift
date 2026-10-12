@@ -80,8 +80,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     /// URLSession's default 60 s a silent link held the read that long. A constant consumers may
     /// read, in seconds.
     public static let idleTimeoutSeconds: TimeInterval = 6
-    /// How long a transaction's first request waits for its response, on the clock; also the
-    /// session's `timeoutIntervalForRequest`, a backstop restarted on every redirect hop. Generous,
+    /// How long a transaction's first request waits for its response, on the clock. Generous,
     /// so a cold origin or a long chain of redirects (5.3 s to the first byte on a real host) is
     /// waited for rather than failed; the body's silence is ``idleTimeoutSeconds``'s alone.
     static let requestTimeoutSeconds: TimeInterval = 20
@@ -96,11 +95,14 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     /// One process-wide session, so a host's connection stays warm between plays and restarts.
     public static let sharedSession = makeSession(configuration: .default)
 
+    /// The machine's clock timers own every timeout; this only stops URLSession from racing them.
+    static let sessionBackstopTimeout: TimeInterval = 3600
+
     /// No URL cache: a host may change its media body behind the same headers. Delegates are per task.
     static func makeSession(configuration: URLSessionConfiguration) -> URLSession {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCache = nil
-        configuration.timeoutIntervalForRequest = requestTimeoutSeconds
+        configuration.timeoutIntervalForRequest = sessionBackstopTimeout
         let delegateQueue = OperationQueue()
         delegateQueue.maxConcurrentOperationCount = 1
         return URLSession(configuration: configuration, delegate: nil, delegateQueue: delegateQueue)

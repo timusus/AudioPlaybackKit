@@ -360,7 +360,7 @@ extension GrowingFileByteSourceTests {
         XCTAssertTrue(configuration.allowsCellularAccess)
         XCTAssertTrue(configuration.allowsExpensiveNetworkAccess)
         XCTAssertTrue(configuration.allowsConstrainedNetworkAccess)
-        XCTAssertEqual(configuration.timeoutIntervalForRequest, GrowingFileByteSource.requestTimeoutSeconds)
+        XCTAssertEqual(configuration.timeoutIntervalForRequest, GrowingFileByteSource.sessionBackstopTimeout)
         XCTAssertGreaterThan(
             GrowingFileByteSource.requestTimeoutSeconds, GrowingFileByteSource.idleTimeoutSeconds * 2,
             "the headers' wait is the generous one"

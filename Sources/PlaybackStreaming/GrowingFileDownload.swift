@@ -481,8 +481,7 @@ struct GrowingFileDownload {
     }
 
     /// The current transaction's next request, and its wait for a response: ``target(retrying:)``'s,
-    /// cut at the link window's end. The session's own timeout is real time, restarted on every
-    /// hop, and longer.
+    /// cut at the link window's end. The response cancels it; its firing ends the transaction like a drop.
     private mutating func send(from: Int64, ifRange: String?, retrying: Bool, now: TimeInterval) {
         let target = target(retrying: retrying)
         attemptsSent += 1

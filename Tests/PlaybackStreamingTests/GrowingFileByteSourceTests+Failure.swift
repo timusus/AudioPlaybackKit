@@ -137,11 +137,12 @@ extension GrowingFileByteSourceTests {
             server.delayForEveryRange = 3600
 
             let rest = readAsync(source, Int.max)
-            XCTAssertTrue(clock.drive(nil, timeout: 30) { rest.finished(within: 0) }, "the read never failed")
+            // Every wait is on the clock, so the read fails exactly at the window's end.
+            clock.advance(by: 29.75)
+            XCTAssertFalse(rest.finished(within: 0.2), "the read failed inside the window: \(redirected)")
+            clock.advance(by: 0.25)
+            XCTAssertTrue(rest.finished(within: 10), "the read never failed: \(redirected)")
             assertTransport(rest.result)
-            let quietFor = clock.now - 1_000
-            XCTAssertGreaterThanOrEqual(quietFor, GrowingFileDownload.Retry.linkWindowSeconds - GrowingFileDownload.Retry.maxBackoffSeconds, "\(redirected)")
-            XCTAssertLessThanOrEqual(quietFor, GrowingFileDownload.Retry.linkWindowSeconds + 1.5, "the window ran long: \(redirected)")
             XCTAssertEqual(server.requestedRanges.first, 0)
             // A resume's 64 KiB overlap before the frontier reaches back to the file's start.
             XCTAssertTrue(server.requestedRanges.dropFirst().allSatisfy { $0 == 0 }, "a retry did not resume")

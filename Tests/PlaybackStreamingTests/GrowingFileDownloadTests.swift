@@ -213,8 +213,8 @@ struct GrowingFileDownloadTests {
         #expect(h.read(1000) == .serve(fileOffset: 0, count: 1000, landed: nil))
         #expect(h.requests.count == 1)
         #expect(h.machine.generation == 1)
-        // The session's own header wait, on real time, is no shorter than the machine's.
-        #expect(GrowingFileByteSource.makeSession(configuration: .ephemeral).configuration.timeoutIntervalForRequest == 20)
+        // The session's own wait, on real time, is far past the machine's, so it never fires first.
+        #expect(GrowingFileByteSource.makeSession(configuration: .ephemeral).configuration.timeoutIntervalForRequest == GrowingFileByteSource.sessionBackstopTimeout)
     }
 
     @Test("a new network path ends a body at once and resumes from the frontier, from the same budget")
