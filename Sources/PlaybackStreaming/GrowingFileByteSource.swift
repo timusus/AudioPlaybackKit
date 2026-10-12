@@ -6,11 +6,13 @@ import PlaybackDecode
 /// no redirect cache.
 ///
 /// - A transaction is `GET` with `Range: bytes=<base>-` and the caller's auth headers (on every
-///   hop of the origin, or its `https` upgrade), bounded (`bytes=<base>-<end>`) when the file already holds a range after `base`. A
-///   request starts up to 64 KiB before `base` and a bounded one ends up to 64 KiB past `end`, so
-///   the bytes at each join are compared (ADR-0016); no more of the disk is fetched again. Each
-///   body chunk is written at its resource offset and the frontier advances. A read inside a range on disk needs no transaction. A `200` to a ranged
-///   request re-declares the transaction as starting at byte 0, under a new generation, and the
+///   hop of the origin, or its `https` upgrade), bounded (`bytes=<base>-<end>`) when the file
+///   already holds a range after `base`. A request starts up to 64 KiB before `base` and a
+///   bounded one ends up to 64 KiB past `end`, so the bytes at each join are compared
+///   (ADR-0016); no more of the disk is fetched again. Each body chunk is written at its resource
+///   offset and the frontier advances. A read inside a range on disk needs no transaction. A
+///   `200` to a ranged request re-declares the transaction as starting at byte 0, under a new
+///   generation, and the
 ///   read waits for its position. Once `[0, total)` is on disk, whichever transactions wrote it,
 ///   the file is renamed into ``GrowingFileStore``'s cache. A new transaction whose total or
 ///   strong ETag differs from the session's deletes the file. With no known total, a range more
@@ -26,8 +28,9 @@ import PlaybackDecode
 ///   `If-Range` when the host gave a strong ETag), appended to the same file under the same
 ///   generation; only the 64 KiB overlap is fetched again, to be compared. A resume the host
 ///   answers with anything but a `206` from the frontier with the same total (a `200`, or a body
-///   the server has changed between requests) deletes the file for a restart at the decoder's position; a retry whose
-///   transaction does not hold that position restarts there, keeping the file.
+///   the server has changed between requests) deletes the file for a restart at the
+///   decoder's position; a retry whose transaction does not hold that position restarts there,
+///   keeping the file.
 ///   Retries and resumes go straight to the redirect chain's remembered end, so a slow chain is
 ///   not walked again inside a retry's short wait. A request there that is refused (a `4xx`, a
 ///   page) or unanswered forgets it, a signed hop may have expired, and the next request walks the
@@ -37,9 +40,10 @@ import PlaybackDecode
 /// - With a ``GrowingFileReadAhead``, on an expensive or constrained path, the request is cancelled
 ///   once the frontier is that far ahead of the decoder and resumed as above, with nothing spent,
 ///   when the decoder is within half of it (ADR-0013).
-/// - A transaction whose answer says the resource ends exactly at its base or resume point (`416` with
-///   `bytes */N`, or a range clamped to the last byte) is a zero-length open, as in media3: the
-///   length is learned and the read is at its end (``GrowingFileDownload/totalEndingAt(_:status:contentRange:)``).
+/// - A transaction whose answer says the resource ends exactly at its base or resume point
+///   (`416` with `bytes */N`, or a range clamped to the last byte) is a zero-length open, as in
+///   media3: the length is learned and the read is at its end
+///   (``GrowingFileDownload/totalEndingAt(_:status:contentRange:)``).
 ///   One that puts the read past the end (any other `416`, a clamped range, or a body that ignores
 ///   the range and ends before the read) fails the read at once, with no retry, as media3 does.
 /// - ``snapshot`` is the only read surface for anyone but the decoder; ``GrowingFileEvent``s
@@ -61,16 +65,17 @@ import PlaybackDecode
 ///
 /// **``cancel()`` must be called**: a running task retains its delegate, this object. Handed to an
 /// `FFmpegItemSource`, the transport's `ItemSource.release()` calls it once it lets go of the item.
-public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFileSnapshotSource, URLSessionDataDelegate {
+public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFileSnapshotSource,
+    URLSessionDataDelegate {
 
     /// The window, in seconds, over which ``GrowingFileSnapshot/downloadBytesPerSecond`` is
     /// averaged. A constant consumers may read.
     public static let throughputWindowSeconds: Double = 2
     static let downloadEventSeconds: Double = 1
-    /// A parked read also looks again after this many seconds. Load-bearing: the download rate decays while
-    /// no bytes arrive and nothing broadcasts that, so a wait for a gap ahead of the frontier only
-    /// becomes the restart the read rule then asks for when the read looks again. A constant
-    /// consumers may read.
+    /// A parked read also looks again after this many seconds. Load-bearing: the download rate
+    /// decays while no bytes arrive and nothing broadcasts that, so a wait for a gap ahead
+    /// of the frontier only becomes the restart the read rule then asks for when the read looks
+    /// again. A constant consumers may read.
     public static let recheckSeconds: Double = 1
     /// How many of a body's first bytes the media sniff needs.
     static let sniffBytes = 12
@@ -98,7 +103,8 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     /// The machine's clock timers own every timeout; this only stops URLSession from racing them.
     static let sessionBackstopTimeout: TimeInterval = 3600
 
-    /// No URL cache: a host may change its media body behind the same headers. Delegates are per task.
+    /// No URL cache: a host may change its media body behind the same headers.
+    /// Delegates are per task.
     static func makeSession(configuration: URLSessionConfiguration) -> URLSession {
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
         configuration.urlCache = nil
@@ -173,18 +179,20 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
 
     /// - Parameters:
     ///   - authHeaders: resolved by the caller before construction; values are never logged.
-    ///   - cacheKey: names the resource in the store's completed-file cache, for a `url` that carries a
-    ///     token or session id which changes between plays. Pass the URL without them, and ask the
-    ///     store for `completedFile(for:)` with the same key. The requests still go to `url`. Nil
-    ///     (the default) keys the cache by `url`.
-    ///   - connectionPolicy: extra headers and the leaf certificates the user trusted for `url`'s origin; nil
-    ///     (the default) is the system's trust and no extra headers. Like `authHeaders`, its headers
-    ///     are sent only to that origin, never to another one a redirect lands on.
-    ///   - clientCredential: answers a client-certificate challenge (mutual TLS) from `url`'s origin with an
-    ///     identity credential; nil (the default), or a nil result, leaves the system's handling. Never asked
-    ///     for another origin a redirect lands on.
+    ///   - cacheKey: names the resource in the store's completed-file cache, for a `url` that
+    ///     carries a token or session id which changes between plays. Pass the URL without them,
+    ///     and ask the store for `completedFile(for:)` with the same key. The requests still go
+    ///     to `url`. Nil (the default) keys the cache by `url`.
+    ///   - connectionPolicy: extra headers and the leaf certificates the user trusted for
+    ///     `url`'s origin; nil (the default) is the system's trust and no extra headers. Like
+    ///     `authHeaders`, its headers are sent only to that origin, never to another one a
+    ///     redirect lands on.
+    ///   - clientCredential: answers a client-certificate challenge (mutual TLS) from `url`'s
+    ///     origin with an identity credential; nil (the default), or a nil result, leaves the
+    ///     system's handling. Never asked for another origin a redirect lands on.
     ///   - readAhead: how far the download may run ahead of the decoder while the network path is
-    ///     expensive or constrained (ADR-0013); nil (the default) downloads the whole file on any path.
+    ///     expensive or constrained (ADR-0013); nil (the default) downloads the whole file
+    ///     on any path.
     ///   - onEvent: the `transaction`/`download` events.
     public convenience init(
         url: URL,
@@ -239,12 +247,15 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         }
         locked {
             pathObserver = observer
-            if let path = pathMonitor.path, path.satisfied { _ = machine.pathCost(isExpensive: Self.costs(path), now: clock.now) }
+            if let path = pathMonitor.path, path.satisfied {
+                _ = machine.pathCost(isExpensive: Self.costs(path), now: clock.now)
+            }
         }
     }
 
-    /// Tells a seconds read-ahead the probed stream's duration (`StreamAudioFormat.duration`), so it can
-    /// convert with the bitrate; a no-op for a byte read-ahead, or before the length is known.
+    /// Tells a seconds read-ahead the probed stream's duration (`StreamAudioFormat.duration`),
+    /// so it can convert with the bitrate; a no-op for a byte read-ahead, or before the length
+    /// is known.
     public func streamProbed(duration: TimeInterval) {
         locked { machine.streamProbed(duration: duration) }
     }
@@ -306,7 +317,9 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         return try readLocked(into: buffer, maxLength: maxLength, announcedWait: &announcedWait)
     }
 
-    private func readLocked(into buffer: UnsafeMutableRawPointer, maxLength: Int, announcedWait: inout Bool) throws -> Int {
+    private func readLocked(
+        into buffer: UnsafeMutableRawPointer, maxLength: Int, announcedWait: inout Bool
+    ) throws -> Int {
         condition.lock()
         defer { condition.unlock() }
         defer { machine.endRead() }
@@ -323,7 +336,9 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
                 condition.unlock()
                 if let landed { onEvent?(.seekLanded(seekGeneration: landed)) }
                 var got: Int
-                repeat { got = pread(file.descriptor, buffer, count, off_t(fileOffset)) } while got < 0 && errno == EINTR
+                repeat {
+                    got = pread(file.descriptor, buffer, count, off_t(fileOffset))
+                } while got < 0 && errno == EINTR
                 condition.lock()
                 guard got > 0 else { throw StreamByteReaderError.transport("pread failed at \(fileOffset)") }
                 machine.advance(by: got)
@@ -457,8 +472,8 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     }
 
     /// Frees the whole blocks of `range`. Its start rounds down, since every byte before a dropped
-    /// range is dropped too; its end rounds down, keeping the block it shares with bytes still kept.
-    /// A failure only keeps the blocks.
+    /// range is dropped too; its end rounds down, keeping the block it shares with bytes
+    /// still kept. A failure only keeps the blocks.
     private static func punchHole(_ range: Range<Int64>, in descriptor: Int32) {
         var info = stat()
         guard fstat(descriptor, &info) == 0, info.st_blksize > 0 else { return }
@@ -488,8 +503,8 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         condition.lock()
     }
 
-    /// A change reopens a transaction still on the network; every satisfied path sets whether the read-ahead
-    /// cap applies.
+    /// A change reopens a transaction still on the network; every satisfied path sets whether
+    /// the read-ahead cap applies.
     private func networkPathUpdated(_ path: GrowingFilePathMonitor.Path, isChange: Bool) {
         perform(locked {
             let changed = isChange ? runLocked(machine.pathChanged(now: clock.now)) : []
@@ -507,16 +522,19 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     private func request(for target: URL, from base: Int64, end: Int64?) -> URLRequest {
         var request = URLRequest(url: target)
         request.setValue("bytes=\(base)-\(end.map { String($0 - 1) } ?? "")", forHTTPHeaderField: "Range")
-        // A byte range of an encoded representation is not a byte range of the file (media3 DefaultHttpDataSource).
+        // A byte range of an encoded representation is not a byte range of the file
+        // (media3 DefaultHttpDataSource).
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         if target.hasSameOrigin(as: url) { applyServerHeaders(to: &request) }
         return request
     }
 
-    /// The caller's auth headers, then the policy's: for `url`'s origin only. `Range` and
-    /// `Accept-Encoding` are the package's alone: the byte arithmetic breaks if an app changes either.
+    /// App headers, for `url`'s origin only, never override the package-owned `Range` and
+    /// `Accept-Encoding`.
     private func applyServerHeaders(to request: inout URLRequest) {
-        for (field, value) in authHeaders where !Self.isOwned(field) { request.setValue(value, forHTTPHeaderField: field) }
+        for (field, value) in authHeaders where !Self.isOwned(field) {
+            request.setValue(value, forHTTPHeaderField: field)
+        }
         for (field, value) in policy?.headers ?? [:] where !Self.isOwned(field) {
             request.setValue(value, forHTTPHeaderField: field)
         }
@@ -551,11 +569,13 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         completionHandler: @escaping (URLRequest?) -> Void
     ) {
         // Every hop carries the range and a resume's validator, whichever host it lands on. The
-        // caller's and the policy's headers ride only the original origin's hops: URLSession carries
-        // custom headers across a redirect, so another origin's hop has them taken off.
+        // caller's and the policy's headers ride only the original origin's hops: URLSession
+        // carries custom headers across a redirect, so another origin's hop has them taken off.
         var next = newRequest
         for field in ["Range", "If-Range"] {
-            if let value = task.originalRequest?.value(forHTTPHeaderField: field) { next.setValue(value, forHTTPHeaderField: field) }
+            if let value = task.originalRequest?.value(forHTTPHeaderField: field) {
+                next.setValue(value, forHTTPHeaderField: field)
+            }
         }
         if let target = next.url, target.hasSameOrigin(as: url) {
             applyServerHeaders(to: &next)
@@ -608,8 +628,8 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         return space.protocol?.lowercased() == scheme && space.host.lowercased() == host && space.port == port
     }
 
-    /// The system refused the origin's certificate and the user trusted no such leaf: the read fails
-    /// at once, with no retry.
+    /// The system refused the origin's certificate and the user trusted no such leaf: the read
+    /// fails at once, with no retry.
     func certificateRejected(task: URLSessionTask) {
         perform(locked { () -> [Deferred] in
             guard let attempt = attemptLocked(task) else { return [] }
@@ -679,7 +699,8 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
             guard let attempt = attemptLocked(task) else { return [] }
             let nsError = error.map { $0 as NSError }
             return runLocked(machine.completed(
-                attempt: attempt, errorDomain: nsError?.domain ?? NSURLErrorDomain, errorCode: nsError?.code, now: clock.now
+                attempt: attempt, errorDomain: nsError?.domain ?? NSURLErrorDomain,
+                errorCode: nsError?.code, now: clock.now
             ))
         })
     }
@@ -695,7 +716,8 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     /// The file holds `bytes` at `fileOffset`; a failed read is no match.
     private static func file(_ descriptor: Int32, holds bytes: Data, at fileOffset: Int64) -> Bool {
         var onDisk = [UInt8](repeating: 0, count: bytes.count)
-        return pread(descriptor, &onDisk, onDisk.count, off_t(fileOffset)) == onDisk.count && bytes.elementsEqual(onDisk)
+        return pread(descriptor, &onDisk, onDisk.count, off_t(fileOffset)) == onDisk.count
+            && bytes.elementsEqual(onDisk)
     }
 
     /// Writes all of `data` through the store's seam; nil, or the `errno` it failed with.
