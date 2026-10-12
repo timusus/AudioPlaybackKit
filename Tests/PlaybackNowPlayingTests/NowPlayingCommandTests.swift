@@ -102,14 +102,13 @@ final class NowPlayingCommandTests: XCTestCase {
 
     // A steering-wheel or headphone press of next or previous reaches the player while skip buttons show.
     func testNextAndPreviousWorkWithSkipIntervals() async {
-        let policy = policyRig(intervals: SkipIntervals(forward: 15, backward: 30))
+        _ = policyRig(intervals: SkipIntervals(forward: 15, backward: 30))
         await opened(at: 1)
 
         XCTAssertEqual(rig.commands.press(.nextTrack), .success)
         XCTAssertEqual(rig.player.currentIndex, 2)
         XCTAssertEqual(rig.commands.press(.previousTrack), .success)
         XCTAssertEqual(rig.player.currentIndex, 1)
-        XCTAssertNotNil(policy.intervals)
     }
 
     func testSkipIntervalsWithoutTrackCommandsLeaveNextAndPreviousUnregistered() async {

@@ -66,7 +66,7 @@ final class RemoteCommandTests: DeviceTestCase {
         XCTAssertEqual(center.skipForwardCommand.preferredIntervals, [3])
         XCTAssertEqual(center.skipBackwardCommand.preferredIntervals, [2])
         await rig.startPlaying(at: 2, position: 2)
-        XCTAssertTrue(rig.remote(.nextTrack).isEnabled, "next stays registered beside the skips")
+        XCTAssertFalse(rig.remote(.nextTrack).isEnabled, "next is registered beside the skips, greyed out on the last item")
         XCTAssertTrue(rig.remote(.previousTrack).isEnabled)
 
         var before = rig.player.position
@@ -171,7 +171,7 @@ final class RemoteCommandTests: DeviceTestCase {
         await rig.waitUntil("item 2 heard") { rig.player.currentIndex == 1 && rig.player.isPlaying }
     }
 
-    func testPerItemSkipIntervalsSwapTheButtonsAtTheItemChange() async {
+    func testPerItemSkipIntervalsChangeOnlyTheSkipButtonsAtTheItemChange() async {
         let policy = await makePolicyRig()
         policy.itemIntervals = [Fixture.items[0]: SkipIntervals(forward: 30, backward: 30)]
         let center = MPRemoteCommandCenter.shared()
@@ -179,7 +179,7 @@ final class RemoteCommandTests: DeviceTestCase {
         await rig.settle()
         XCTAssertEqual(center.skipForwardCommand.preferredIntervals, [30])
         XCTAssertEqual(center.skipBackwardCommand.preferredIntervals, [30])
-        XCTAssertTrue(rig.remote(.nextTrack).isEnabled, "next stays registered on an item with skip intervals")
+        XCTAssertTrue(rig.remote(.nextTrack).isEnabled, "next is registered on an item with skip intervals")
         XCTAssertEqual(rig.send(.skipBackward, .interval(30)), .success)
         await rig.waitUntil("restarted") { rig.player.position < 0.5 }
 

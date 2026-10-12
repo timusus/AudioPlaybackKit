@@ -15,7 +15,7 @@ and the wrapper's `Player.Commands` decide what controllers are offered.
 
 We will have `NowPlayingSession` drive `NowPlayingControllable` (in `PlaybackPlayer`): the state it
 shows, the commands it sends, `availableCommands: PlayerCommands` (media3 `Player.Commands`) and
-`skipIntervals`, nil for next and previous. `Player` conforms; an app wraps it through
+`skipIntervals`, which only adds the skip buttons beside next and previous. `Player` conforms; an app wraps it through
 `ForwardingNowPlayingControllable`, which forwards every requirement the wrapper does not declare.
 
 ## Alternatives rejected

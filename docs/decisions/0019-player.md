@@ -413,8 +413,8 @@ Cases each slice must have:
   `playWhenReadyChanged`; `stop()` deactivates with `notifyOthersOnDeactivation`. Each
   in-scope `AudioFocusManagerTest` case is mapped in `docs/player-conformance-mapping.md`.
 - **Now Playing**: the info centre gets title, duration, elapsed and rate on item change and state
-  change and not on each position tick; a 15 s skip interval registers `skipForward` and not
-  `nextTrack`, and the reverse; each remote command calls the player method; `changePlaybackRate`
+  change and not on each position tick; a 15 s skip interval registers `skipForward` and
+  `nextTrack` together, and no interval leaves only `nextTrack`; each remote command calls the player method; `changePlaybackRate`
   registers only with `supportedRates`. The session writes elapsed time when the player's
   `discontinuityCount` changes, so every seek is seen, however small and whether or not it buffers.
   Commands follow media3's availability: play and pause always, next while `hasNext`, skips and

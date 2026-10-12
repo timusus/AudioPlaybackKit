@@ -29,8 +29,8 @@ public struct NowPlayingMetadata: Sendable {
 /// jump of the player's position, a pause or play, a rate change, an item change, or when what is heard
 /// strays from where the system has extrapolated it (the output started late). A remote command is
 /// enabled only while the player's `availableCommands` has it, as a media3 session offers a controller;
-/// `skipIntervals` adds the skip buttons, which the lock screen draws in place of next and previous. One session per app, since both
-/// centres are global.
+/// `skipIntervals` adds the skip buttons, which the lock screen draws over next and previous. One
+/// session per app, since both centres are global.
 @MainActor
 public final class NowPlayingSession<Item: Hashable & Sendable> {
     let player: any NowPlayingControllable<Item>
