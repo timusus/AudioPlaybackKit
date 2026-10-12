@@ -91,8 +91,10 @@ final class CorruptStreamTests: XCTestCase {
         try assertSurvivesDamage(Fixture.moovLast, at: 0.4, count: 3000)
     }
 
-    func testLongRunOfGarbageEndsWithAnErrorRatherThanHanging() throws {
+    func testLongRunOfGarbageEndsCleanlyRatherThanHanging() throws {
         let clean = try fixture(Fixture.mp3)
+        // media3 parity: Mp3Extractor reports end of input on a sync it cannot recover, so garbage
+        // ends like trailing filler, not as a failure.
         // Everything after the first quarter is noise, far more than any cap on skipped frames.
         let start = clean.count / 4
         var data = clean
@@ -104,6 +106,6 @@ final class CorruptStreamTests: XCTestCase {
         let (frames, reason) = try decode(data)
         let (cleanFrames, _) = try decode(clean)
         XCTAssertLessThan(frames, cleanFrames, "garbage is not audio")
-        XCTAssertNotEqual(reason, .running)
+        XCTAssertEqual(reason, .eof)
     }
 }

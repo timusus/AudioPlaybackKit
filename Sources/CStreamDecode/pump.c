@@ -215,10 +215,13 @@ static int pump_feed_packet(StreamDecoder *d) {
     if (d->seek_fmt->packet_fed) d->seek_fmt->packet_fed(d, d->pkt);
     int sent = avcodec_send_packet(d->dec, d->pkt);
     av_packet_unref(d->pkt);
-    /* A packet the decoder rejects is a corrupt frame, not the end of the stream: skip it and
-     * keep going, which is what every player does with a bad MP3 frame. */
-    (void)sent;
-    return PUMP_AGAIN;
+    /* A packet with bad data is a corrupt frame, not the end of the stream: skip it and keep
+     * going, like every player with a bad MP3 frame. A stream that is all garbage then ends at
+     * EOF (media3's Mp3Extractor does the same). Anything else is the decoder or the machine
+     * failing, which skipping would hide. EAGAIN means output is still queued; the pump drains it. */
+    if (sent == 0 || sent == AVERROR(EAGAIN) || sent == AVERROR_INVALIDDATA ||
+        sent == AVERROR_PATCHWELCOME) return PUMP_AGAIN;
+    return sent == AVERROR(ENOMEM) ? STREAM_DECODE_ERR_ALLOC : STREAM_DECODE_ERR_DECODER;
 }
 
 /*
