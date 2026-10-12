@@ -225,6 +225,8 @@ final class DeviceRig {
     /// and what reaches the renderer is the fixture's audio, not silence.
     func assertAudible(over seconds: TimeInterval = 1, file: StaticString = #filePath, line: UInt = #line) async {
         let renderer = output.base.renderer
+        // A seek reports the new position before the player is back to playing.
+        await waitUntil("playing", file: file, line: line) { player.isPlaying }
         XCTAssertEqual(renderer.status, .rendering, "renderer status", file: file, line: line)
         XCTAssertNil(renderer.error, file: file, line: line)
         XCTAssertEqual(renderer.volume, 1, file: file, line: line)
