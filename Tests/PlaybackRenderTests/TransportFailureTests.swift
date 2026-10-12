@@ -146,6 +146,26 @@ final class TransportFailureTests: XCTestCase {
         XCTAssertEqual(output.rate, 0)
     }
 
+    // Decode pulls b's failure 0.25 s before the join, then the live clock crosses it before the
+    // drop runs: b is heard by then, so its failure pauses as the current's does.
+    func testANextItemThatFailsAsTheClockCrossesTheJoinPausesAsTheCurrentDoes() {
+        let output = output, recorder = recorder
+        let transport = Transport<String>(output: output, timer: timer, executor: executor) { event in
+            recorder.append(event)
+            if case .failed = event { output.advanceAfterNextRead(by: 0.5) }
+        }
+        transport.setCurrent(item: "a", source: a)
+        transport.setNext(item: "b", source: FailingSource(chunks: 6, base: 1000))
+        transport.play()
+        pump()
+        run(for: 3.5)
+        XCTAssertEqual(failedItems, ["b"])
+        XCTAssertEqual(crossed, ["a", "b"])
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused])
+        XCTAssertEqual(output.rate, 0)
+        XCTAssertEqual(output.flushes, [0])
+    }
+
     // The seek runs before decode reaches `b` on its own.
     func testASeekToTheNextItemMakesItsFailurePause() {
         transport.setCurrent(item: "a", source: a)

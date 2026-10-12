@@ -262,14 +262,22 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
 
     /// Once decode has passed into the next its audio may be queued, so it is dropped and the output
     /// re-fed from the heard frame, as media3 `MediaPeriodQueue.removeAfter` drops a read-ahead period.
-    /// Before that the sequencer swaps it with no flush. The heard frame is read once: the clock may
-    /// cross into the next after it, and a re-read would seek to the item just dropped.
+    /// Before that the sequencer swaps it with no flush.
     private func clearUnheardNext() {
         let change = sequencer.clearNext()
         forget(change)
-        guard change == .unchanged, let heard = feeder.heardPosition, let last = ids.keys.max(), last > heard.item else { return }
-        ids[last] = nil
-        if !upstream.drop(item: last) { feeder.flush(from: heard) }
+        guard change == .unchanged, let last = ids.keys.max() else { return }
+        _ = dropUnheard(last)
+    }
+
+    /// Drops `id` and re-feeds from the heard frame if its audio may be queued; false, changing
+    /// nothing, once `id` is heard. The heard frame is read once: the clock may cross into `id`
+    /// after it, and a re-read would seek to the item just dropped.
+    private func dropUnheard(_ id: Int) -> Bool {
+        guard let heard = feeder.heardPosition, id > heard.item else { return false }
+        ids[id] = nil
+        if !upstream.drop(item: id) { feeder.flush(from: heard) }
+        return true
     }
 
     private func forget(_ change: Sequencer.TailChange) {
@@ -303,12 +311,16 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// (ADR-0019); the app decides what follows. Only the heard item's failure pauses.
     private func fail(item id: Int, _ error: any Error) {
         onEvent(.failed(item: ids[id], error: error))
-        if let current = feeder.heardPosition?.item, id > current {
-            ids[id] = nil
-            // Deferred: this runs inside the feeder's fill, which a flush would re-enter.
-            if !upstream.drop(item: id) { queue.async { [self] in feeder.flush(from: feeder.heardPosition) } }
-            return
+        guard let current = feeder.heardPosition?.item, id > current else { return halt() }
+        // Deferred: this runs inside the feeder's fill, which a flush would re-enter. By then a call
+        // may have dropped `id`, or the clock reached it and it fails as the heard item.
+        queue.async { [self] in
+            guard ids[id] != nil, !dropUnheard(id) else { return }
+            halt()
         }
+    }
+
+    private func halt() {
         failed = true
         feeder.halt()
     }
