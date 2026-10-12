@@ -8,7 +8,7 @@ iOS directory (`mobile/ios` in `timusus/shuttle-podcasts`, `ios` in `timusus/shu
 
 ## Prerequisites
 
-- **Pin the 0.10.0 tag or later**, never a branch. Add `PlaybackPlayer` and `PlaybackNowPlaying` next to
+- **Pin the 0.11.0 tag or later**, never a branch. Add `PlaybackPlayer` and `PlaybackNowPlaying` next to
   `PlaybackDecode` and `PlaybackStreaming`; the test targets add `PlaybackPlayerTestSupport`.
 - **Embed `FFmpeg.framework` once**, in the app target. Both apps already do; check that the package's
   `FFmpeg` product and any FFmpeg of the app's own are not both linked.

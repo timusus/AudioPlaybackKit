@@ -9,6 +9,10 @@ Play the audio AVPlayer won't, and own the PCM on the way out. A Swift package o
 a decoder, a streaming byte source, an output layer, and a `Player` with the audio session and lock screen
 on top. Built for Shuttle Podcasts and Shuttle2.
 
+It is built to be checked. 125 conformance fixtures are pinned to hashes of their decoded audio and run
+through a fault-injecting reader and a seek matrix modelled on androidx/media, among about 780 tests. The FFmpeg
+framework is about 1.6 MB per iOS slice, and the fakes let an app test its own player code.
+
 What an app gets:
 
 - **Formats AVPlayer lacks.** Ogg Vorbis, Ogg Opus, FLAC in Ogg and Matroska/WebM audio, alongside MP3, AAC, M4A/ALAC, FLAC and WAV/AIFF.
@@ -42,6 +46,19 @@ Link only the products you import.
 audio session over a renderer: add `PlaybackRender`. Playback with the queue, session and interruptions done:
 `PlaybackPlayer`, plus `PlaybackNowPlaying` for the lock screen. Each `*TestSupport` product goes in your test
 target only. `FFmpeg` is for an app with its own C code against libavformat.
+
+## What it doesn't do
+
+Pick something else if you need:
+
+- HLS, DRM/FairPlay, ICY metadata, crossfade, casting or video. `AVPlayer` covers HLS and FairPlay.
+- watchOS, tvOS or Intel Macs. It builds for iOS 17+ and macOS 14+ on Apple silicon.
+- Every format. APE, WavPack, DSD and WMA are not built in; SFBAudioEngine or VLCKit cover more.
+- Live AAC or Ogg streams that reconnect after a dropped connection; they fail instead ([ADR-0017](docs/decisions/0017-live-streams.md)).
+- A download manager. The streaming cache lasts one session.
+
+Known limits: a VBR MP3 without a Xing table seeks by estimate. The API is 0.x and still changing, and
+there is one maintainer and no CI. `Player` and `NowPlayingSession` have not yet shipped in an app.
 
 ## Install
 
@@ -94,7 +111,7 @@ Effects (skip-silence, Voice Boost) are `AudioProcessor`s you give the player; s
 - [Usage](docs/usage.md): decode a file, stream a URL, seek, cancel, show buffering state, play through the render layer, run a `Player`, show it on the lock screen, test it.
 - [Migrating to Player](docs/migrating.md): moving Shuttle Podcasts and Shuttle2 off their `AVAudioEngine` players.
 - [Device checklist](docs/device-checklist.md): what no test covers, to run on an iPhone before relying on a release.
-- [Architecture](docs/architecture.md): how the decoder and the download source work.
+- [Architecture](docs/architecture.md): how each layer works, from decoder to lock screen.
 - [Decisions](docs/decisions/README.md): why it is built this way.
 - [Contributing](CONTRIBUTING.md) and [docs/contributing.md](docs/contributing.md): tests, rebuilding FFmpeg, releasing.
 
