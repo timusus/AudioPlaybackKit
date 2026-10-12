@@ -169,4 +169,122 @@ final class PlayerTelemetryEventTests: XCTestCase {
 
         XCTAssertEqual(telemetry, ["bufferingStarted", "bufferingEnded", "firstAudioRendered"])
     }
+
+    // MARK: A stall in progress ends exactly once
+
+    private func stallInProgress(_ items: [String] = ["a", "b"], startIndex: Int = 0) {
+        player.setItems(items, startIndex: startIndex)
+        player.play()
+        rig.run(for: 3)
+        events = []
+        rig.output.injectStall()
+        rig.pump()
+        XCTAssertEqual(telemetry, ["bufferingStarted"])
+    }
+
+    func testStopEndsAStallOnce() {
+        stallInProgress()
+        player.stop()
+        rig.run(for: 2)
+        XCTAssertEqual(telemetry, ["bufferingStarted", "bufferingEnded"])
+    }
+
+    func testRemoveAllEndsAStallOnce() {
+        stallInProgress()
+        player.removeAll()
+        rig.run(for: 2)
+        XCTAssertEqual(telemetry, ["bufferingStarted", "bufferingEnded"])
+    }
+
+    func testRemovingTheOnlyItemEndsAStallOnce() {
+        stallInProgress(["a"])
+        player.remove(at: 0)
+        rig.run(for: 2)
+        XCTAssertEqual(telemetry, ["bufferingStarted", "bufferingEnded"])
+    }
+
+    func testAnItemFailureEndsAStallOnce() {
+        stallInProgress()
+        rig.output.injectFailure()
+        rig.run(for: 2)
+        XCTAssertEqual(telemetry.filter { $0 != "firstAudioRendered" }, ["bufferingStarted", "bufferingEnded"])
+    }
+
+    func testAnInterruptionEndsAStallOnce() {
+        stallInProgress()
+        rig.session.interruptionBegan()
+        rig.run(for: 2)
+        XCTAssertEqual(telemetry, ["bufferingStarted", "bufferingEnded"])
+    }
+
+    func testAGaplessTransitionEndsAStallBeforeTheTransition() {
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 9.5)
+        events = []
+        rig.output.injectStall()
+        rig.pump()
+        XCTAssertEqual(telemetry, ["bufferingStarted"])
+
+        rig.run(for: 2)
+
+        XCTAssertEqual(names.filter { $0 != "firstAudioRendered" }, ["bufferingStarted", "bufferingEnded", "itemTransition"])
+    }
+
+    // MARK: Seeks and edits
+
+    func testTwoRapidSeeksSendOneFirstAudioAtTheSecondTarget() {
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 3)
+        events = []
+
+        player.seek(to: 6)
+        player.seek(to: 8)
+        rig.run(for: 2)
+
+        XCTAssertEqual(firstAudio, [PlayerRig.Landing(index: 0, position: 8)])
+    }
+
+    func testASeekBeforeFirstAudioSendsOneFirstAudioAtTheTarget() {
+        player.setItems(["a"])
+        player.play()
+        player.seek(to: 5)
+        rig.run(for: 2)
+
+        XCTAssertEqual(firstAudio, [PlayerRig.Landing(index: 0, position: 5)])
+    }
+
+    func testAPositionFromBeforeASeekSendsNoFirstAudio() {
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 3)
+        let stale = rig.inFlight {
+            rig.output.advance(by: 0.25)
+            rig.timer.fire()
+        }
+        events = []
+
+        player.seek(to: 6)
+        rig.deliver(stale)
+        XCTAssertEqual(firstAudio, [])
+
+        rig.run(for: 2)
+        XCTAssertEqual(firstAudio, [PlayerRig.Landing(index: 0, position: 6)])
+    }
+
+    func testTheIndexFollowsAnEditBeforeTheCurrentItem() {
+        player.setItems(["a", "b"], startIndex: 1)
+        player.play()
+        player.insert(["c"], at: 0)
+        rig.run(for: 3)
+        XCTAssertEqual(firstAudio.map(\.index), [2])
+
+        events = []
+        player.remove(at: 0)
+        rig.output.injectStall()
+        rig.pump()
+        guard case let .bufferingStarted(index, _) = events.last else { return XCTFail("\(events)") }
+        XCTAssertEqual(index, 1)
+    }
 }

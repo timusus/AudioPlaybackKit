@@ -26,7 +26,8 @@ reads into `state`; no second mechanism.
   apart from rebuffers; `onAudioUnderrun` is its renderer-level twin. Paused there is no event. Every
   start is ended exactly once: by audio resuming, or by a pause, interruption, seek, load, stop or
   failure ending the wait. `bufferingEnded` carries nothing, since an edit or skip may already have
-  moved `currentIndex` when it is sent.
+  moved `currentIndex` when it is sent. At an item transition an in-progress stall's `bufferingEnded`
+  comes before the `itemTransition`, since the new item's join is not a rebuffer.
 
 Any wait for audio after the first is a rebuffer, not only a network stall: a re-feed after an edit
 drops audio decode had queued, and a renderer recovery restarts the output before it lands paused (a
