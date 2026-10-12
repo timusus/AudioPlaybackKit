@@ -58,7 +58,11 @@ let package = Package(
         // The fake output, hand-fired pump and hand-run decode for an app's tests of anything built
         // on `Transport`, so none of them needs a real renderer or a wall clock (ADR-0018).
         .target(name: "PlaybackRenderTestSupport", dependencies: ["PlaybackRender"]),
-        .testTarget(name: "PlaybackRenderTests", dependencies: ["PlaybackRender", "PlaybackRenderTestSupport"]),
+        .testTarget(
+            name: "PlaybackRenderTests",
+            dependencies: ["PlaybackRender", "PlaybackRenderTestSupport"],
+            resources: [.copy("Dumps")]
+        ),
         // Drives `Transport` through its public API only, so anything it needs is a render-layer change.
         .target(name: "PlaybackPlayer", dependencies: ["PlaybackRender"]),
         // The fake session and a rig that builds a `Player` on the fake output and manual clock, for

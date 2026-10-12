@@ -1,0 +1,47 @@
+{
+  "buffers" : [
+    "#0 t=0.0000 frames=2 8Hzx1 pcm=22b6f43bd8d27738",
+    "#1 t=0.2500 frames=2 8Hzx1 pcm=2fd848aa90e817e1",
+    "#2 t=0.5000 frames=2 8Hzx1 pcm=84c4426d4f7c3fb4",
+    "#3 t=0.7500 frames=2 8Hzx1 pcm=f6012f035ce2ff1d",
+    "#4 t=1.0000 frames=2 8Hzx1 pcm=3d49a32ed51365ac",
+    "#5 t=1.2500 frames=2 8Hzx1 pcm=06d196bd4974cd57",
+    "#6 t=1.5000 frames=2 8Hzx1 pcm=5a97e1d2f0151f50",
+    "#7 t=1.7500 frames=2 8Hzx1 pcm=9309ea685648e64b",
+    "#8 t=2.0000 frames=2 8Hzx1 pcm=76984304b0c9e882",
+    "#9 t=2.2500 frames=2 8Hzx1 pcm=1ab8133677b9e5a3",
+    "#10 t=2.5000 frames=2 8Hzx1 pcm=a6bb0045d82f0f6e",
+    "#11 t=2.7500 frames=2 8Hzx1 pcm=a162e24f69d58458",
+    "#12 t=1.0000 frames=2 8Hzx1 pcm=76984304b0c9e882",
+    "#13 t=1.2500 frames=2 8Hzx1 pcm=1ab8133677b9e5a3",
+    "#14 t=1.5000 frames=2 8Hzx1 pcm=a6bb0045d82f0f6e",
+    "#15 t=1.7500 frames=2 8Hzx1 pcm=a162e24f69d58458"
+  ],
+  "events" : [
+    "sought a 0.0 applied=true",
+    "status buffering",
+    "status playing",
+    "crossed a 8.0Hz x1",
+    "position a 0.0 duration=3.0 seekable=true",
+    "position a 0.25 duration=3.0 seekable=true",
+    "position a 0.5 duration=3.0 seekable=true",
+    "position a 0.75 duration=3.0 seekable=true",
+    "position a 1.0 duration=3.0 seekable=true",
+    "sought a 2.0 applied=true",
+    "status buffering",
+    "status playing",
+    "position a 2.0 duration=3.0 seekable=true",
+    "position a 2.25 duration=3.0 seekable=true",
+    "position a 2.5 duration=3.0 seekable=true",
+    "position a 2.75 duration=3.0 seekable=true",
+    "position a 3.0 duration=3.0 seekable=true",
+    "status ended"
+  ],
+  "flushes" : [
+    "t=0.0000",
+    "t=1.0000"
+  ],
+  "played" : [
+    "audio t=0.0000 for=2.0000 8Hzx1 pcm=b9c4d129bc6b7e00"
+  ]
+}
