@@ -24,10 +24,11 @@ and is kept as history. The overview is in [architecture](../architecture.md).
 | [0016](0016-overlap-check-at-every-join.md) | Every join (resume, session-file restart) is checked by a 64 KiB overlap with the bytes on disk. | Accepted |
 | [0017](0017-live-streams.md) | A stream with no length and no duration is live: unseekable, restarted not resumed, a small window. | Accepted; amended by 0022 |
 | [0018](0018-render-layer.md) | A `PlaybackRender` product: processor pipeline, position map and gapless scheduler over ASBAR + synchronizer. | Accepted |
-| [0019](0019-player.md) | A `PlaybackPlayer` product over `Transport` (item list, `playWhenReady` and state, seconds, audio session) and a separate `PlaybackNowPlaying`; shuffle, sleep timer and persistence stay in the apps. | Accepted (2026-10-11) |
+| [0019](0019-player.md) | A `PlaybackPlayer` product over `Transport` (item list, `playWhenReady` and state, seconds, audio session) and a separate `PlaybackNowPlaying`; shuffle, sleep timer and persistence stay in the apps. | Accepted (2026-10-11); amended by 0023 |
 | [0020](0020-now-playing-drives-a-protocol.md) | `NowPlayingSession` drives `NowPlayingControllable`; an app's forwarding wrapper sets the available commands and per-item skip intervals, as media3's `ForwardingPlayer`. | Accepted (2026-10-12) |
 | [0021](0021-processor-stream-metadata.md) | `AudioProcessor.flush(_:)` gets a `StreamMetadata` naming the item that follows; the chain drains and flushes at every join. | Accepted (2026-10-12) |
 | [0022](0022-source-declared-seekability.md) | `ItemSource.isSeekable`; live is neither seekable nor of known duration; a seek not made as asked is reported as `seekAdjusted`. | Accepted (2026-10-12) |
 | [0026](0026-in-place-processing.md) | `AudioProcessor.process(_:)` rewrites each chunk in place; `BufferingAudioProcessor` keeps the queue shape for stages that drop or hold back frames. | Accepted (2026-10-12) |
+| [0023](0023-pause-at-end-stays-on-the-item.md) | `pauseAtEndOfItem` stays on the finished item at its end, as media3; `play()` moves on. | Accepted (2026-10-12) |
 
 These decisions were first made in the Shuttle Podcasts app and moved here with the code.

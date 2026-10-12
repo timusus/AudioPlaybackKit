@@ -164,21 +164,21 @@ final class PlayerAdvanceTests: XCTestCase {
         XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 1, reason: .auto)])
     }
 
-    // ADR-0019 departs from media3, which pauses at the end of the item itself: the next is current,
-    // paused at 0, so `play()` plays it.
-    func testPauseAtEndOfItemLandsPausedAtTheStartOfTheNext() async {
+    // media3 ExoPlayerTest.pauseAtEndOfMediaItems_pausesPlaybackBeforeTransitioningToTheNextItem:
+    // the finished item stays current at its end, and `play()` moves on.
+    func testPauseAtEndOfItemStaysAtTheEndOfTheItemUntilPlay() async {
         player.setItems(["a", "b", "c"])
         player.play()
         rig.run(for: 1)
         player.pauseAtEndOfItem = true
         rig.run(for: 11)
 
-        XCTAssertEqual(player.currentItem, "b")
-        XCTAssertEqual(player.position, 0)
+        XCTAssertEqual(player.currentItem, "a")
+        XCTAssertEqual(player.position, 10)
         XCTAssertFalse(player.playWhenReady)
         XCTAssertEqual(player.state, .ready)
         XCTAssertEqual(rig.output.rate, 0)
-        XCTAssertEqual(rig.factory.calls, ["a", "b", "b"], "b's arm was cleared, and b loaded at the end")
+        XCTAssertEqual(rig.factory.calls, ["a", "b"], "b's arm was cleared, and nothing loaded at the end")
 
         player.pauseAtEndOfItem = false
         player.play()
@@ -186,37 +186,82 @@ final class PlayerAdvanceTests: XCTestCase {
         XCTAssertEqual(player.currentItem, "b")
         XCTAssertEqual(player.position, 1)
         let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.kinds(events), [.playWhenReadyChanged, .itemTransition])
         XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 1, reason: .auto)])
         XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [.init(value: false, reason: .endOfItem)])
     }
 
-    // Set after decode reached b, whose arm can no longer be cleared: b is paused at 0 once it is heard.
-    func testPauseAtEndOfItemSetLatePausesTheNextAtItsStart() async {
+    // Set after decode reached b, whose arm can no longer be cleared: as media3 flushes back to the
+    // current item, the player stays on a at its end, and `play()` starts b from 0.
+    func testPauseAtEndOfItemSetLateStillStaysOnTheFinishedItem() async {
         player.setItems(["a", "b", "c"])
         player.play()
         rig.run(for: 9)
         player.pauseAtEndOfItem = true
         rig.run(for: 2)
 
-        XCTAssertEqual(player.currentItem, "b")
-        XCTAssertEqual(player.position, 0)
+        XCTAssertEqual(player.currentItem, "a")
+        XCTAssertEqual(player.position, 10)
         XCTAssertFalse(player.playWhenReady)
         XCTAssertEqual(player.state, .ready)
         XCTAssertEqual(rig.output.rate, 0)
+        let written = rig.output.enqueues.count
+
+        player.play()
+        rig.run(for: 1)
+        XCTAssertEqual(player.currentItem, "b")
+        XCTAssertEqual(rig.firstSampleWritten(skipping: written), 1000)
         let events = await rig.finish()
         XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 1, reason: .auto)])
         XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [.init(value: false, reason: .endOfItem)])
     }
 
-    // Nothing is armed under pause at end, so b's source is first made at a's end; its failure
-    // follows the transition into b, as a failed next's does.
+    // A seek while paused at the end stays on the item, as media3's seek within the current item does.
+    func testASeekWhilePausedAtTheEndOfAnItemStaysOnIt() {
+        player.setItems(["a", "b"])
+        player.pauseAtEndOfItem = true
+        player.play()
+        rig.run(for: 11)
+        XCTAssertEqual(player.position, 10)
+
+        player.seek(to: 4)
+        player.play()
+        rig.run(for: 1)
+        XCTAssertEqual(player.currentItem, "a")
+        XCTAssertEqual(player.position, 5)
+        XCTAssertEqual(player.state, .ready)
+    }
+
+    func testPauseAtEndOfItemUnderRepeatOneRepeatsOnPlay() async {
+        player.setItems(["a", "b"])
+        player.repeatMode = .one
+        player.pauseAtEndOfItem = true
+        player.play()
+        rig.run(for: 11)
+        XCTAssertEqual(player.currentIndex, 0)
+        XCTAssertEqual(player.position, 10)
+
+        player.play()
+        rig.run(for: 1)
+        XCTAssertEqual(player.currentIndex, 0)
+        XCTAssertEqual(player.position, 1)
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 0, reason: .repeat)])
+    }
+
+    // Nothing is armed under pause at end, so b's source is first made by the `play()` that moves on
+    // to it; its failure follows the transition into b, as a failed next's does.
     func testPauseAtEndOfItemIntoANextThatFailsToMakeReportsTheTransitionFirst() async {
         rig.factory.failing = ["b"]
         player.pauseAtEndOfItem = true
         player.setItems(["a", "b", "c"])
         player.play()
         rig.run(for: 11)
+        XCTAssertEqual(player.currentItem, "a")
+        XCTAssertEqual(player.state, .ready)
+        XCTAssertNil(player.error)
 
+        player.play()
         XCTAssertEqual(player.currentItem, "b")
         XCTAssertEqual(player.state, .idle)
         XCTAssertEqual(player.error?.kind, .source)
@@ -297,8 +342,9 @@ final class PlayerAdvanceTests: XCTestCase {
         XCTAssertEqual(PlayerRig.transitions(events), [])
     }
 
-    // c is not armed, as pause at end was set after b was removed: a's end pauses at c's start.
-    func testACrossingIntoARemovedNextUnderPauseAtEndPausesAtTheListsNext() async {
+    // c is not armed, as pause at end was set after b was removed: a's end pauses there, and `play()`
+    // moves on to c.
+    func testACrossingIntoARemovedNextUnderPauseAtEndPausesAtTheEndOfTheItem() async {
         player.setItems(["a", "b", "c"])
         player.play()
         rig.run(for: 9)
@@ -306,11 +352,16 @@ final class PlayerAdvanceTests: XCTestCase {
         player.pauseAtEndOfItem = true
         rig.run(for: 2)
 
-        XCTAssertEqual(player.currentItem, "c")
-        XCTAssertEqual(player.position, 0)
+        XCTAssertEqual(player.currentItem, "a")
+        XCTAssertEqual(player.position, 10)
         XCTAssertFalse(player.playWhenReady)
         XCTAssertEqual(player.state, .ready)
         XCTAssertEqual(rig.output.rate, 0)
+
+        player.play()
+        rig.run(for: 1)
+        XCTAssertEqual(player.currentItem, "c")
+        XCTAssertEqual(player.currentIndex, 1)
         let events = await rig.finish()
         XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 1, reason: .auto)])
         XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [.init(value: false, reason: .endOfItem)])

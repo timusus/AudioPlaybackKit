@@ -231,7 +231,7 @@ personal output. `PlayerSessionTests` drives them through `FakeAudioSession`.
 | `clearMediaItems_unprepared_correctMaskingMediaItemIndex_notEnded` | n/a: masking |
 | `errorThrownDuringPlaylistUpdate_keepsConsistentPlayerState` | n/a: timeline |
 | `seekToCurrentPosition_inEndedState_switchesToBufferingStateAndContinuesPlayback` | `PlayerAdvanceTests.testASeekInAnEndedListPlaysOnIntoAnAddedItem` |
-| `pauseAtEndOfMediaItems_pausesPlaybackBeforeTransitioningToTheNextItem` | `PlayerAdvanceTests.testPauseAtEndOfItemLandsPausedAtTheStartOfTheNext`; **deviation**: media3 pauses at the end of the item and moves on at `play`; ADR-0019 moves to the next item and pauses at its 0, so the UI shows what `play` starts |
+| `pauseAtEndOfMediaItems_pausesPlaybackBeforeTransitioningToTheNextItem` | `PlayerAdvanceTests.testPauseAtEndOfItemStaysAtTheEndOfTheItemUntilPlay`, `testPauseAtEndOfItemSetLateStillStaysOnTheFinishedItem` (ADR-0023) |
 | `pauseAtEndOfMediaItems_pausesPlaybackWhenEnded` | `PlayerAdvanceTests.testPauseAtEndOfTheLastItemEnds` |
 | `loading_withLargeAllocationCausingOom_playsRemainingMediaAndThenThrows` | n/a: internal |
 | `seekTo_withEmptyTimeline_emitsPositionDiscontinuityEvent` | n/a: timeline |

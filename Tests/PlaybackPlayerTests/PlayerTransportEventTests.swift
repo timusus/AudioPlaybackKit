@@ -109,9 +109,8 @@ final class PlayerTransportEventTests: XCTestCase {
         XCTAssertNotEqual(player.state, .ended)
     }
 
-    // The player adopts the last status held across an applied seek without the end handling, which
-    // is sound only because the transport's restart always reports a status after `.sought` that
-    // replaces an `.ended` before it.
+    // An applied seek drops an `.ended` held before it without the end handling, which is sound only
+    // because the transport's restart always buffers after `.sought`.
     func testAnEndHeldAcrossAnAppliedSeekIsFollowedByAFreshStatus() async {
         player.setItems(["a"])
         player.pauseAtEndOfItem = true

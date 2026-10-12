@@ -83,6 +83,9 @@ public final class Player<Item: Hashable & Sendable> {
     @ObservationIgnored private var startTarget: TimeInterval?
     /// The transport heard the end of the list; nothing is armed until a seek or load restarts it.
     @ObservationIgnored private var atEnd = false
+    /// Paused by `pauseAtEndOfItem` at the end of the current item; `play()` moves on to the next.
+    /// Every exit is a load or unload, so the transport's key may be stale meanwhile.
+    @ObservationIgnored private var pausedAtEnd = false
     /// The next that failed before it was heard, reported when playback reaches it (media3).
     @ObservationIgnored private var failedNext: (entryID: Int, error: PlaybackError)?
     /// The session is ours until an interruption, a reset or our own deactivation; the transport
@@ -231,7 +234,19 @@ public final class Player<Item: Hashable & Sendable> {
                 return transport.pause()
             }
             guard let current = currentIndex else { return }
-            if loadedKey == nil || error != nil {
+            if pausedAtEnd {
+                // media3 moves on from a pause at the end of an item when playback resumes; with
+                // nothing left to follow it, as from an end.
+                let next = following(current)
+                if let next {
+                    currentIndex = next
+                    movePosition(to: 0)
+                    forgetSource()
+                    // Before the load, whose failure to make a source is reported after the transition.
+                    send(.itemTransition(from: current, to: next, reason: next == current ? .repeat : .auto))
+                }
+                load(next ?? current, at: 0)
+            } else if loadedKey == nil || error != nil {
                 // media3 `prepare()`: after a stop or an error, from the position; at the end, from 0.
                 load(current, at: state == .ended ? 0 : position)
             } else if state == .ended, let loadedKey {
@@ -258,8 +273,9 @@ public final class Player<Item: Hashable & Sendable> {
         didSet { armNext() }
     }
 
-    /// At the end of each item, sets `playWhenReady` false and makes the next item current, paused
-    /// at 0; at the end of the last it ends. Nothing is armed meanwhile, so no audio runs on.
+    /// media3 `pauseAtEndOfMediaItems`: at the end of each item, sets `playWhenReady` false (sent as
+    /// `playWhenReadyChanged(false, reason: .endOfItem)`) and stays on that item, `.ready` at its end;
+    /// `play()` moves on to the next. At the end of the last it ends. Nothing is armed meanwhile.
     public var pauseAtEndOfItem = false {
         didSet { armNext() }
     }
@@ -295,12 +311,12 @@ public final class Player<Item: Hashable & Sendable> {
         }
         let target = min(max(position, 0), duration ?? .infinity)
         defer { if target != position { send(.seekAdjusted(index: current, requested: position, position: target)) } }
-        if let loadedKey, error == nil {
+        if let loadedKey, error == nil, !pausedAtEnd {
             seekTransport(item: loadedKey, to: target)
             movePosition(to: target)
             seekTarget = target
             armNext()
-        } else if unloadedState == .ended, error == nil {
+        } else if unloadedState == .ended || pausedAtEnd, error == nil {
             load(current, at: target)
             seekTarget = target
         } else {
@@ -559,6 +575,7 @@ public final class Player<Item: Hashable & Sendable> {
 
     private func seekTransport(item key: Int, to seconds: TimeInterval) {
         atEnd = false
+        pausedAtEnd = false
         unansweredCalls += 1
         transport.seek(item: key, toSeconds: seconds)
         refreshState()
@@ -570,6 +587,12 @@ public final class Player<Item: Hashable & Sendable> {
         keyedItems.forget(below: key)
         // The first audio after a load or seek is the current item's own.
         guard key != loadedKey, let from = currentIndex, let entryID = keyedEntries[key] else { return }
+        if pauseAtEndOfItem {
+            // Decode passed into a next that pause at end could no longer clear. media3 flushes back
+            // to the current item there (`setPauseAtEndOfWindowInternal`), so the player stays on it.
+            transport.pause()
+            return pauseAtEnd()
+        }
         loadedKey = key
         if key == armedKey { armedKey = nil }
         seekTarget = nil
@@ -588,11 +611,6 @@ public final class Player<Item: Hashable & Sendable> {
             return jump(to: next, at: 0)
         }
         currentIndex = index
-        if pauseAtEndOfItem {
-            // Set after decode reached this item, so the end of the last went unpaused.
-            pauseByPlayer(.endOfItem)
-            seekTransport(item: key, to: 0)
-        }
         send(.itemTransition(from: from, to: index, reason: index == from ? .repeat : .auto))
         armNext()
     }
@@ -611,19 +629,23 @@ public final class Player<Item: Hashable & Sendable> {
             reportFailure(at: index, failedNext.error)
             return true
         }
-        guard pauseAtEndOfItem, let next = following(current) else {
+        guard pauseAtEndOfItem, following(current) != nil else {
             if pauseAtEndOfItem { pauseByPlayer(.endOfItem) }
             atEnd = true
             nothingToPlay(.ended)
             return false
         }
-        pauseByPlayer(.endOfItem)
-        currentIndex = next
-        movePosition(to: 0)
-        forgetSource()
-        send(.itemTransition(from: current, to: next, reason: next == current ? .repeat : .auto))
-        load(next, at: 0)
+        pauseAtEnd()
         return true
+    }
+
+    /// Pauses on the current item at its end, `.ready`, as media3 `pauseAtEndOfMediaItems` does.
+    private func pauseAtEnd() {
+        atEnd = true
+        pausedAtEnd = true
+        if let duration { position = duration }
+        refreshState()
+        pauseByPlayer(.endOfItem)
     }
 
     private func pauseByPlayer(_ reason: PlayWhenReadyChangeReason) {
@@ -650,6 +672,7 @@ public final class Player<Item: Hashable & Sendable> {
         }
         let key = newKey(for: entry, replacing: true)
         atEnd = false
+        pausedAtEnd = false
         failedNext = nil
         unansweredCalls += 1
         transport.setCurrent(item: key, source: source, startSeconds: position)
@@ -665,6 +688,7 @@ public final class Player<Item: Hashable & Sendable> {
     private func unload(as state: PlaybackState) {
         transport.stop()
         keyedEntries = [:]
+        pausedAtEnd = false
         loadedKey = nil
         armedKey = nil
         seekTarget = nil
@@ -741,6 +765,8 @@ public final class Player<Item: Hashable & Sendable> {
     private func refreshState() {
         state = if currentIndex == nil || error != nil {
             .idle
+        } else if pausedAtEnd {
+            .ready
         } else if loadedKey == nil {
             unloadedState
         } else if unansweredCalls > 0 {

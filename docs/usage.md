@@ -393,9 +393,11 @@ Task {
 
 `repeatMode` is `.off`, `.all` (wraps from the last item to the first) or `.one` (the same entry again,
 gapless). `pauseAtEndOfItem = true` is a sleep timer's "end of episode": when the current item finishes
-the player sets `playWhenReady` to false (reason `.endOfItem`), moves `currentIndex` to the next item and
-prepares it paused at 0, so the UI shows what `play()` starts. On the last item it ends. Set it before the
-crossing; it also stops the next item being armed early.
+the player sets `playWhenReady` to false and stays on the finished item, `.ready` with `position` at its
+end, as media3's `pauseAtEndOfMediaItems` does; `play()` then moves on to the next item
+(`itemTransition(.auto)`). Key on `playWhenReadyChanged(false, reason: .endOfItem)`: it is sent once, at
+that pause. On the last item it ends. It also stops the next item being armed early; set within the last
+seconds of an item, after decode has reached the next, the player still pauses at the end of the item.
 
 ### Errors and recovery
 
