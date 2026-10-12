@@ -687,8 +687,9 @@ public final class Player<Item: Hashable & Sendable> {
         loadedKey = key
         error = nil
         refreshState()
-        // During an interruption a seek or skip is applied paused.
-        if intent && sessionActive { transport.play() }
+        // During an interruption a seek or skip is applied paused. Otherwise the intent takes the
+        // session it lacks, as after a play with nothing to play.
+        if intent, suppression == .none { sessionActive ? transport.play() : activate() }
         armNext()
     }
 

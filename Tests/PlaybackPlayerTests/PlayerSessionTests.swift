@@ -398,6 +398,16 @@ final class PlayerSessionTests: XCTestCase {
         XCTAssertEqual(session.calls, [.configure, .activate, .deactivate, .activate])
     }
 
+    // media3 AudioFocusManagerTest.updateAudioFocus_idleToBuffering_setsPlayerCommandPlayWhenReady:
+    // a play with nothing to play takes no session, and the load that follows takes it.
+    func testItemsSetAfterAPlayOnAnEmptyListActivateAndPlay() {
+        player.play()
+        XCTAssertEqual(session.calls, [.configure])
+        player.setItems(["a", "b"])
+        XCTAssertTrue(isHeard())
+        XCTAssertEqual(session.calls, [.configure, .activate])
+    }
+
     func testEmptyingTheListDeactivates() {
         startPlaying()
         player.remove(at: 1)
