@@ -1,6 +1,6 @@
 # ADR-0019: A player layer over Transport
 
-Status: Accepted (2026-10-11)
+Status: Accepted (2026-10-11); amended by ADR-0022, ADR-0023, ADR-0024, ADR-0025, ADR-0027, ADR-0028
 Date: 2026-10-11
 
 ## Context
@@ -85,8 +85,8 @@ import PlaybackPlayer
 public typealias ItemSourceFactory<Item> = @MainActor (Item) throws -> any ItemSource
 
 /// media3 `Player.State`: `.idle` has nothing prepared or stopped on an error; `.buffering` is
-/// `playWhenReady` with decode behind the clock, or an item opening; `.ready` can play at once;
-/// `.ended` is the end of the last item.
+/// waiting for audio (a load or seek not yet decoded, or decode behind the clock) whatever
+/// `playWhenReady` is; `.ready` can play at once; `.ended` is the end of the last item.
 public enum PlaybackState: Sendable { case idle, buffering, ready, ended }
 
 /// Why audio is not heard although `playWhenReady` is true and the state is `.ready`.
@@ -106,20 +106,30 @@ public struct PlaybackError: Error, Sendable {
     public var underlying: any Error
 }
 
+/// `.auto` when the previous item ended, `.seek` on `skipToNext`, `seek(to:itemAt:)` or an edit that
+/// removed the current item, `.repeat` when the end of an item restarted it.
+public enum TransitionReason: Sendable { case auto, seek, `repeat` }
+
+/// A route went (`.routeLost`), an interruption ended without `shouldResume` (`.interruptionEnded`),
+/// the end was reached (`.endOfItem`).
+public enum PlayWhenReadyChangeReason: Sendable { case routeLost, interruptionEnded, endOfItem }
+
 /// Discrete things the state cannot carry: each is sent once, in order.
 public enum PlayerEvent<Item: Hashable & Sendable>: Sendable {
-    /// `currentIndex` moved: `.auto` when the previous item ended, `.seek` on `skipToNext`, `seek(to:itemAt:)`
-    /// or an edit that removed the current item, `.repeat` when the end of an item restarted it.
+    /// `currentIndex` moved; `to` is nil when the list emptied.
     case itemTransition(from: Int?, to: Int?, reason: TransitionReason)
-    /// The item at `index` failed, and the player is `.idle` on it with `error` set. A next item that
-    /// failed while the current played is reported once playback reaches it, after its `itemTransition`.
+    /// The item at `index` failed, and the player is `.idle` on it with `error` set; no automatic
+    /// skip. A next item that failed while the current played is reported once playback reaches it,
+    /// after its `itemTransition`.
     case itemFailed(index: Int, error: PlaybackError)
     /// The seek's audio reached the speaker; `position` is where it landed.
     case seekLanded(index: Int, position: TimeInterval)
+    /// A seek went to `position` instead of `requested`: clamped, refused by an unseekable item,
+    /// or landed elsewhere by the source (ADR-0022).
+    case seekAdjusted(index: Int, requested: TimeInterval, position: TimeInterval)
     /// A renderer failure or media-services reset was recovered; playback is paused at the same position.
     case recoveredPaused
-    /// `playWhenReady` changed by the player, not the app: a route went (`.routeLost`), an interruption
-    /// ended without `shouldResume` (`.interruptionEnded`), the end was reached (`.endOfItem`).
+    /// `playWhenReady` changed by the player, not the app.
     case playWhenReadyChanged(Bool, reason: PlayWhenReadyChangeReason)
     /// Telemetry (ADR-0028): first audio heard after a load, seek or transition, and a rebuffer's start and end.
     case firstAudioRendered(index: Int, position: TimeInterval)
@@ -156,13 +166,17 @@ public final class Player<Item: Hashable & Sendable> {
     public var isPlaying: Bool { state == .ready && playWhenReady && suppression == .none }
     public private(set) var error: PlaybackError?
     public func stop()                              // `.idle`, session deactivated, items kept
+    public func prepare()                           // from `.idle`, loads the current item at `position` (ADR-0024)
     public func skipToNext(); public func skipToPrevious()
     public var hasNext: Bool { get }; public var hasPrevious: Bool { get }
 
     // Position, in seconds of the current item's media time.
     public private(set) var position: TimeInterval   // what is heard; updated every 100 ms while it changes
     public private(set) var duration: TimeInterval?  // nil until probed, or for a live stream
-    public private(set) var isLive: Bool
+    public var isSeekable: Bool { get }              // ADR-0022
+    public var isLive: Bool { get }                  // unseekable with no duration
+    public private(set) var audioFormat: PCMFormat?  // the heard item's decoded format (ADR-0025)
+    public var bufferedAhead: TimeInterval { get }   // seconds decoded past `position`
     public private(set) var discontinuityCount: Int  // changes on every jump of `position`, never on playback
     public func seek(to position: TimeInterval)
     public func seek(to position: TimeInterval, itemAt index: Int)
@@ -533,7 +547,12 @@ format needs `setProcessors` called again.
   any item's failure today, which would stop an album because the track after the current one is corrupt.
 - **Both apps migrate straight onto `Player`.** Moving onto `Transport` first writes the adapters twice.
 
-Links: [ADR-0018](0018-render-layer.md), [ADR-0005](0005-shared-engine-repo.md),
+Links: [ADR-0018](0018-render-layer.md), [ADR-0021](0021-processor-stream-metadata.md),
+[ADR-0026](0026-in-place-processing.md) (the processors `setProcessors` takes),
+[ADR-0022](0022-source-declared-seekability.md), [ADR-0023](0023-pause-at-end-stays-on-the-item.md),
+[ADR-0024](0024-prepare.md), [ADR-0025](0025-output-format.md),
+[ADR-0027](0027-now-playing-rate-follows-is-playing.md),
+[ADR-0028](0028-first-audio-and-buffering-events.md), [ADR-0005](0005-shared-engine-repo.md),
 [migrating](../migrating.md), [usage](../usage.md), issues #114, #115, #116; media3 `Player`,
 `ExoPlayerImpl`, `MediaSession`, `AudioFocusManager`, `DefaultShuffleOrder`; `AVPlayer.timeControlStatus`,
 `AVQueuePlayer`.
