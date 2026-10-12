@@ -522,6 +522,22 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(statuses.last, .ended)
     }
 
+    func testSetProcessorsAfterAFailureAndAStopReplaysNothing() {
+        transport.setProcessors([FixedRateProcessor(sampleRate: 44100)])
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        pump()
+        XCTAssertEqual(failedItems, ["a"])
+        transport.stop()
+        pump()
+        let before = statuses.count
+
+        transport.setProcessors([])
+        pump()
+
+        XCTAssertEqual(statuses.count, before)
+    }
+
     func testAProcessorThatChangesTheSampleRateFailsTheItem() {
         transport.setProcessors([RateDoublingProcessor()])
         transport.setCurrent(item: "a", source: a)

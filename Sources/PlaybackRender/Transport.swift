@@ -140,6 +140,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     public func stop() {
         queue.async { [self] in
             ids = [:]
+            failed = false
             Self.tearDown(upstream, feeder)
             publishBufferedAhead()
         }
