@@ -32,5 +32,6 @@ and is kept as history. The overview is in [architecture](../architecture.md).
 | [0024](0024-prepare.md) | `prepare()` loads the current item from idle, as media3; no auto-skip of a failed item. | Accepted (2026-10-12) |
 | [0025](0025-output-format.md) | `Player.audioFormat` is the heard item's decoded format, the one its processors run at, carried on `TransportEvent.crossed`. | Accepted (2026-10-12) |
 | [0026](0026-in-place-processing.md) | `AudioProcessor.process(_:)` rewrites each chunk in place; `BufferingAudioProcessor` keeps the queue shape for stages that drop or hold back frames. | Accepted (2026-10-12) |
+| [0027](0027-now-playing-rate-follows-is-playing.md) | The shown Now Playing rate follows `isPlaying`, not play intent, as media3's `MediaSessionLegacyStub`; the playing state carries the intent. | Accepted (2026-10-12) |
 
 These decisions were first made in the Shuttle Podcasts app and moved here with the code.
