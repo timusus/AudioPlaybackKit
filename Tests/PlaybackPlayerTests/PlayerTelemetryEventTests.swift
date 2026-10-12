@@ -207,7 +207,7 @@ final class PlayerTelemetryEventTests: XCTestCase {
         stallInProgress()
         rig.output.injectFailure()
         rig.run(for: 2)
-        XCTAssertEqual(telemetry.filter { $0 != "firstAudioRendered" }, ["bufferingStarted", "bufferingEnded"])
+        XCTAssertEqual(names, ["bufferingStarted", "bufferingEnded", "recoveredPaused"])
     }
 
     func testAnInterruptionEndsAStallOnce() {
@@ -228,7 +228,8 @@ final class PlayerTelemetryEventTests: XCTestCase {
 
         rig.run(for: 2)
 
-        XCTAssertEqual(names.filter { $0 != "firstAudioRendered" }, ["bufferingStarted", "bufferingEnded", "itemTransition"])
+        XCTAssertEqual(names, ["bufferingStarted", "bufferingEnded", "itemTransition", "firstAudioRendered"])
+        XCTAssertEqual(firstAudio.map(\.index), [1])
     }
 
     // MARK: Seeks and edits
@@ -284,7 +285,8 @@ final class PlayerTelemetryEventTests: XCTestCase {
         player.remove(at: 0)
         rig.output.injectStall()
         rig.pump()
-        guard case let .bufferingStarted(index, _) = events.last else { return XCTFail("\(events)") }
+        XCTAssertEqual(names, ["bufferingStarted"])
+        guard case let .bufferingStarted(index, _) = events.first else { return XCTFail("\(events)") }
         XCTAssertEqual(index, 1)
     }
 }

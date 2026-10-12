@@ -411,8 +411,8 @@ For telemetry, `firstAudioRendered` is sent once the first audio after a load, s
 item transition is heard playing, so time to first audio is the time from your call to it; a paused load
 counts until `play()`, and a resume sends none. `bufferingStarted` and `bufferingEnded` bracket a
 rebuffer: waiting for audio after the first was heard, while `playWhenReady` is set. A pause, seek, load,
-stop, failure or item transition ends one (its `bufferingEnded` comes before the `itemTransition`), and nothing is sent while paused, so a stall watchdog arms on the start and
-disarms on the end (ADR-0028).
+stop, failure or item transition ends one (its `bufferingEnded` comes before the `itemTransition`), and
+nothing is sent while paused, so a stall watchdog arms on the start and disarms on the end (ADR-0028).
 
 ### Repeat and pause at the end of an item
 
