@@ -169,6 +169,22 @@ int sd_reopen_single_frame_mp3(StreamDecoder *d, const StreamDecodeOptions *opti
     return rc;
 }
 
+/* Cut the junk the parser glued in front of the first frame off `pkt`, which the decoder would
+ * otherwise reject whole. The frame runs to the packet's end, so it starts at the header within
+ * the last `kMP3MaxFrameBytes` whose length reaches exactly there; without one it is left as is. */
+static int trim_glued_junk(AVPacket *pkt) {
+    for (int i = pkt->size - kMP3MaxFrameBytes; i + 4 <= pkt->size; i++) {
+        uint32_t key;
+        if (mp3_frame_length(pkt->data + i, &key) != pkt->size - i) continue;
+        if (av_packet_make_writable(pkt) < 0) return STREAM_DECODE_ERR_ALLOC;
+        memmove(pkt->data, pkt->data + i, (size_t)(pkt->size - i));
+        av_shrink_packet(pkt, pkt->size - i);
+        pkt->pos += i;
+        break;
+    }
+    return STREAM_DECODE_OK;
+}
+
 /*
  * Step over junk before the first MP3 frame that libavformat itself did not.
  *
@@ -198,19 +214,19 @@ int sd_skip_unscanned_junk(StreamDecoder *d, const StreamDecodeOptions *options)
      * packet's last `kMP3MaxFrameBytes`. Reopening there leaves less junk than mp3dec's own scan
      * covers, and that scan finds the frame exactly. */
     int64_t junk = end - kMP3MaxFrameBytes;
+    /* Before the format context is closed: a reader that cannot serve the frame's offset (a
+     * forward-only one, which the frame is behind) keeps the demuxer it has. That decodes, junk
+     * and all; only the byte estimates are off. */
+    int rc = reopen_seek(d, d->base_offset + junk);
+    if (rc == STREAM_DECODE_ERR_IO) {
+        rc = trim_glued_junk(d->held);
+        if (rc == STREAM_DECODE_OK) sd_hold_first_packet(d);
+        return rc;
+    }
+    if (rc != STREAM_DECODE_OK) return rc;
     av_packet_unref(d->held);
     sd_close_format(d);
     d->base_offset += junk;
-    int rc = reopen_seek(d, d->base_offset);
-    if (rc == STREAM_DECODE_ERR_IO) {
-        /* The reader cannot serve the frame's offset. Open where the demuxer first did and keep
-         * the junk: that decodes, as it did before this reopen existed, and only the byte
-         * estimates are off. */
-        d->base_offset -= junk;
-        rc = reopen_seek(d, d->base_offset);
-        if (rc == STREAM_DECODE_ERR_IO) return STREAM_DECODE_ERR_OPEN;
-    }
-    if (rc != STREAM_DECODE_OK) return rc;
     d->io_pos = 0;
     d->prologue_len = 0;
     rc = sd_open_format(d, options);

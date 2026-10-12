@@ -6,8 +6,8 @@ import XCTest
     import CStreamDecode
 #endif
 
-/// A source that can only move forward (an unknown-length chunked transcode): no total length, and
-/// any seek behind the read position throws ``StreamByteReaderError/unseekable``.
+/// A source that can only move forward (an unknown-length chunked transcode): no total length unless
+/// `knowsLength`, and any seek behind the read position throws ``StreamByteReaderError/unseekable``.
 private final class ForwardOnlyByteReader: StreamByteReader {
     private let data: Data
     private var offset: Int64 = 0
@@ -142,6 +142,23 @@ final class ForwardOnlySourceTests: XCTestCase {
                 XCTAssertEqual(error as? StreamDecoderError, .failed(status: Int32(STREAM_DECODE_ERR_IO.rawValue)), name)
             }
         }
+    }
+
+    /// More junk before the first frame than mp3dec's 64 KiB scan: the seekable open reopens at the
+    /// frame, which a forward-only reader cannot serve, so it keeps the demuxer it has and decodes.
+    func testMP3WithMoreThan64KiBOfJunkBeforeTheAudioOpensAndDecodes() throws {
+        var state: UInt64 = 404
+        let junk = Data((0..<100_000).map { _ -> UInt8 in
+            state = state &* 6364136223846793005 &+ 1442695040888963407
+            return UInt8(0x20 + (state >> 33) % 0x5f)   // printable, never the 0xFF sync byte
+        })
+        let body = try Data(contentsOf: fixtureURL("../../PlaybackDecodeConformanceTests/Fixtures/cbr_padding_bit.mp3"))
+        // A budget that covers the junk, so libavformat takes it for MP3 and mp3dec's scan misses.
+        let budget = StreamProbeBudget(bytes: 256 * 1024, analyzeDuration: 1)
+        let source = ForwardOnlyByteReader(junk + body)
+        let forward = try decodeAll(FFmpegStreamDecoder(reader: source, probeBudget: budget))
+        let bare = try decodeAll(FFmpegStreamDecoder(reader: ForwardOnlyByteReader(body), probeBudget: budget))
+        XCTAssertEqual(forward, bare)
     }
 
     func testBackwardSeekFailsAsUnseekableNotAsCorruptStream() throws {
