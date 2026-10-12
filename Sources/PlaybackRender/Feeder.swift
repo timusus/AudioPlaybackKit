@@ -133,9 +133,10 @@ final class Feeder {
         pump()
     }
 
-    /// Re-feeds from the heard position, e.g. so a reconfigured pipeline applies to what is queued.
-    func flush() {
-        restart(from: currentPosition(at: playhead()))
+    /// Re-feeds from `position`, a `heardPosition` the caller resolved, e.g. so a reconfigured
+    /// pipeline applies to what is queued. Taken, not re-read: the clock moves on in between.
+    func flush(from position: SeekTarget?) {
+        restart(from: position)
         pump()
     }
 
@@ -150,9 +151,9 @@ final class Feeder {
         max(map.writtenEnd - playhead(), 0)
     }
 
-    /// The item heard now, or the one the last restart asked for until its audio is written.
-    var currentItem: Int? {
-        currentPosition(at: playhead())?.item
+    /// The frame heard now, or where the last restart asked for until its audio is written.
+    var heardPosition: SeekTarget? {
+        currentPosition(at: playhead())
     }
 
     // MARK: Tick

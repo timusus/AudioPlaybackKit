@@ -48,6 +48,7 @@ public final class FakeAudioOutput: @unchecked Sendable {
     private var _played: [Played] = []
     private var _rateChanges: [RateChange] = []
     private var _events: [AudioOutputEvent] = []
+    private var stepAfterRead: TimeInterval?
 
     /// Ready for more while less than this much is queued ahead of the clock.
     public let readyAhead: TimeInterval
@@ -109,7 +110,14 @@ public final class FakeAudioOutput: @unchecked Sendable {
         locked { _volume = volume }
     }
 
-    public func currentTime() -> TimeInterval { locked { clock } }
+    public func currentTime() -> TimeInterval {
+        let (time, step) = locked {
+            defer { stepAfterRead = nil }
+            return (clock, stepAfterRead)
+        }
+        if let step { advance(by: step) }
+        return time
+    }
 
     public var isReadyForMoreData: Bool {
         locked { (timelineEnd ?? clock) - clock < readyAhead }
@@ -163,6 +171,12 @@ public final class FakeAudioOutput: @unchecked Sendable {
             }
             if cursor < to { record(.silence(start: cursor, duration: to - cursor)) }
         }
+    }
+
+    /// Advances by `seconds` just after the next `currentTime()` read, as a live clock moves on
+    /// between two reads of one call.
+    public func advanceAfterNextRead(by seconds: TimeInterval) {
+        locked { stepAfterRead = seconds }
     }
 
     /// The route-change auto-flush: drops everything queued and reports the flush time, by default

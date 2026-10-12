@@ -229,7 +229,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
             upstream.setProcessors(processors)
             guard failed else { return }
             failed = false
-            feeder.flush()
+            feeder.flush(from: feeder.heardPosition)
         }
     }
 
@@ -262,13 +262,14 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
 
     /// Once decode has passed into the next its audio may be queued, so it is dropped and the output
     /// re-fed from the heard frame, as media3 `MediaPeriodQueue.removeAfter` drops a read-ahead period.
-    /// Before that the sequencer swaps it with no flush.
+    /// Before that the sequencer swaps it with no flush. The heard frame is read once: the clock may
+    /// cross into the next after it, and a re-read would seek to the item just dropped.
     private func clearUnheardNext() {
         let change = sequencer.clearNext()
         forget(change)
-        guard change == .unchanged, let heard = feeder.currentItem, let last = ids.keys.max(), last > heard else { return }
+        guard change == .unchanged, let heard = feeder.heardPosition, let last = ids.keys.max(), last > heard.item else { return }
         ids[last] = nil
-        if !upstream.drop(item: last) { feeder.flush() }
+        if !upstream.drop(item: last) { feeder.flush(from: heard) }
     }
 
     private func forget(_ change: Sequencer.TailChange) {
@@ -302,10 +303,10 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// (ADR-0019); the app decides what follows. Only the heard item's failure pauses.
     private func fail(item id: Int, _ error: any Error) {
         onEvent(.failed(item: ids[id], error: error))
-        if let current = feeder.currentItem, id > current {
+        if let current = feeder.heardPosition?.item, id > current {
             ids[id] = nil
             // Deferred: this runs inside the feeder's fill, which a flush would re-enter.
-            if !upstream.drop(item: id) { queue.async { [self] in feeder.flush() } }
+            if !upstream.drop(item: id) { queue.async { [self] in feeder.flush(from: feeder.heardPosition) } }
             return
         }
         failed = true

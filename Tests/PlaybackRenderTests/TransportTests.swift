@@ -653,6 +653,46 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(statuses.last, .ended)
     }
 
+    // The live clock crosses into b between the transport's reads; the re-feed must not seek to the dropped b.
+    func testClearNextAsTheClockCrossesTheJoinReFeedsFromThePositionItResolved() {
+        transport.setCurrent(item: "a", source: a)
+        transport.setNext(item: "b", source: b)
+        transport.play()
+        pump()
+        run(for: 2.75)
+
+        output.advanceAfterNextRead(by: 0.375)
+        transport.clearNext()
+        pump()
+        run(for: 1)
+
+        XCTAssertEqual(heard, allOfA + [1000, 22, 23])
+        XCTAssertEqual(crossed, ["a"])
+        XCTAssertEqual(output.flushes, [0, 3.125])
+        XCTAssertEqual(statuses.last, .ended)
+    }
+
+    // The clock reached b with the seek queued: the seek's restart drops that crossing, so b is
+    // never reported and stays swappable.
+    func testACrossingRacingASeekBackIsNotReportedAndTheNextStaysSwappable() {
+        transport.setCurrent(item: "a", source: a)
+        transport.setNext(item: "b", source: b)
+        transport.play()
+        pump()
+        run(for: 2.75)
+
+        transport.seek(item: "a", toSeconds: 2.5)
+        output.advance(by: 0.5)
+        transport.setNext(item: "c", source: c)
+        pump()
+        run(for: 2)
+
+        XCTAssertEqual(heard, allOfA + [1000, 1001, 20, 21, 22, 23, 500, 501, 502, 503, 504, 505, 506, 507])
+        XCTAssertEqual(crossed, ["a", "c"])
+        XCTAssertEqual(output.flushes, [0, 3.25])
+        XCTAssertEqual(statuses.last, .ended)
+    }
+
     // The seek dropped b's decoded audio, so it is swapped with no flush.
     func testSetNextAfterASeekBackBehindTheJoinReplacesTheNextWithNoFlush() {
         transport.setCurrent(item: "a", source: a)
