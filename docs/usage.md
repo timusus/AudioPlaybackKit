@@ -104,7 +104,9 @@ while let chunk = decoder.nextChunk() { /* schedule it */ }
   resumes from its frontier. A host that does the same races it
   ([ADR-0004](decisions/0004-one-recovery-layer-in-the-byte-source.md)).
 - **Auth headers stay on the origin.** A redirect to another origin (a CDN) and its later restarts carry
-  none of them.
+  none of them. The origin is scheme, host and port; a redirect to the same host that upgrades from `http`
+  to `https` (port 80 to 443) keeps them, a downgrade to `http` does not. `Range` and `Accept-Encoding` are
+  the package's own: a header of either name is ignored.
 - **Extra headers.** `GrowingFileConnectionPolicy.headers` adds request headers for the origin, with the same redirect rule as `authHeaders`.
 - **Mutual TLS.** Pass `clientCredential: { space in ... }` to answer the origin's client-certificate challenge with an identity `URLCredential`; nil keeps the system's handling, and no other origin is asked.
 - **Self-signed servers.** Pass `connectionPolicy: GrowingFileConnectionPolicy(trustedLeafSHA256: [...])`

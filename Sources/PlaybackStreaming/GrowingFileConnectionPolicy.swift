@@ -75,13 +75,16 @@ public struct GrowingFileConnectionPolicy: Sendable, Equatable {
 }
 
 extension URL {
-    /// Same scheme, host and port (the scheme's default when none is given), case-insensitively.
+    /// Same scheme, host and port (the scheme's default when none is given), case-insensitively; or
+    /// the same host moved from `http` to `https` (port 80 to 443, or unchanged), which keeps the
+    /// credentials the user sent. A downgrade does not.
     func hasSameOrigin(as other: URL) -> Bool {
         func origin(_ url: URL) -> (String, String, Int)? {
             guard let scheme = url.scheme?.lowercased(), let host = url.host?.lowercased() else { return nil }
             return (scheme, host, url.port ?? (scheme == "https" ? 443 : scheme == "http" ? 80 : 0))
         }
         guard let a = origin(self), let b = origin(other) else { return false }
-        return a == b
+        if a == b { return true }
+        return a.0 == "https" && b.0 == "http" && a.1 == b.1 && (a.2 == b.2 || (a.2 == 443 && b.2 == 80))
     }
 }

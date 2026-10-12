@@ -5,11 +5,11 @@ import PlaybackDecode
 /// the decoder reads the file and waits at the frontier** (ADR-0014). Unthrottled, no run cache,
 /// no redirect cache.
 ///
-/// - A transaction is `GET` with `Range: bytes=<base>-` and the caller's auth headers (on every hop
-///   too), bounded (`bytes=<base>-<end>`) when the file already holds a range after `base`. A
+/// - A transaction is `GET` with `Range: bytes=<base>-` and the caller's auth headers (on every
+///   hop of the origin, or its `https` upgrade), bounded (`bytes=<base>-<end>`) when the file already holds a range after `base`. A
 ///   request starts up to 64 KiB before `base` and a bounded one ends up to 64 KiB past `end`, so
-///   the bytes at each join are compared (ADR-0016); no more of the disk is fetched again. Each body chunk is written at its resource offset and the
-///   frontier advances. A read inside a range on disk needs no transaction. A `200` to a ranged
+///   the bytes at each join are compared (ADR-0016); no more of the disk is fetched again. Each
+///   body chunk is written at its resource offset and the frontier advances. A read inside a range on disk needs no transaction. A `200` to a ranged
 ///   request re-declares the transaction as starting at byte 0, under a new generation, and the
 ///   read waits for its position. Once `[0, total)` is on disk, whichever transactions wrote it,
 ///   the file is renamed into ``GrowingFileStore``'s cache. A new transaction whose total or
@@ -24,9 +24,9 @@ import PlaybackDecode
 ///   one nothing answered, so a dead link fails about 30 s after it went quiet. A retry whose
 ///   transaction holds the decoder's position resumes it: `Range: bytes=<frontier - 64 KiB>-` (with
 ///   `If-Range` when the host gave a strong ETag), appended to the same file under the same
-///   generation; only the 64 KiB overlap is fetched again, to be compared. A resume the host answers with anything but a `206`
-///   from the frontier with the same total (a `200`, or a body the server has changed between
-///   requests) deletes the file for a restart at the decoder's position; a retry whose
+///   generation; only the 64 KiB overlap is fetched again, to be compared. A resume the host
+///   answers with anything but a `206` from the frontier with the same total (a `200`, or a body
+///   the server has changed between requests) deletes the file for a restart at the decoder's position; a retry whose
 ///   transaction does not hold that position restarts there, keeping the file.
 ///   Retries and resumes go straight to the redirect chain's remembered end, so a slow chain is
 ///   not walked again inside a retry's short wait. A request there that is refused (a `4xx`, a
@@ -81,7 +81,8 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     /// A constant consumers may read, in seconds.
     public static let idleTimeoutSeconds: TimeInterval = 6
     /// How long a transaction's first request waits for its response, on the clock. Generous,
-    /// so a cold origin or a long chain of redirects is waited for rather than failed; the body's silence is ``idleTimeoutSeconds``'s alone.
+    /// so a cold origin or a long chain of redirects is waited for rather than failed; the body's
+    /// silence is ``idleTimeoutSeconds``'s alone.
     static let requestTimeoutSeconds: TimeInterval = 20
     /// How long a retry or resume waits for its response. Short: the host was just talking to
     /// this source or the link just went quiet, the request goes to the chain's remembered end
@@ -512,14 +513,21 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         return request
     }
 
-    /// The caller's auth headers, then the policy's: for `url`'s origin only.
+    /// The caller's auth headers, then the policy's: for `url`'s origin only. `Range` and
+    /// `Accept-Encoding` are the package's alone: the byte arithmetic breaks if an app changes either.
     private func applyServerHeaders(to request: inout URLRequest) {
-        for (field, value) in authHeaders { request.setValue(value, forHTTPHeaderField: field) }
-        for (field, value) in policy?.headers ?? [:] { request.setValue(value, forHTTPHeaderField: field) }
+        for (field, value) in authHeaders where !Self.isOwned(field) { request.setValue(value, forHTTPHeaderField: field) }
+        for (field, value) in policy?.headers ?? [:] where !Self.isOwned(field) {
+            request.setValue(value, forHTTPHeaderField: field)
+        }
+    }
+
+    private static func isOwned(_ field: String) -> Bool {
+        ["range", "accept-encoding"].contains(field.lowercased())
     }
 
     private func removeServerHeaders(from request: inout URLRequest) {
-        for field in Array(authHeaders.keys) + Array(policy?.headers.keys ?? [:].keys) {
+        for field in Array(authHeaders.keys) + Array(policy?.headers.keys ?? [:].keys) where !Self.isOwned(field) {
             request.setValue(nil, forHTTPHeaderField: field)
         }
     }

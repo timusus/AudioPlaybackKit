@@ -809,12 +809,13 @@ struct GrowingFileDownload {
         return takeEffects()
     }
 
-    /// URL errors no retry fixes: a refused certificate or TLS setup (-1200...-1206), ATS refusing
-    /// the scheme (-1022), a malformed or unsupported URL (-1000, -1002). Like media3, which never
-    /// retries a `CleartextNotPermittedException`.
+    /// URL errors no retry fixes: a refused certificate (-1201...-1206), ATS refusing the scheme
+    /// (-1022), a malformed or unsupported URL (-1000, -1002). Like media3, which never retries a
+    /// `CleartextNotPermittedException`. -1200 is retried: a handshake reset on a flaky link
+    /// (Wi-Fi to cellular) surfaces as it, and media3 retries generic SSL IOExceptions.
     private static func isPermanent(domain: String, code: Int) -> Bool {
         guard domain == NSURLErrorDomain else { return false }
-        return (-1206 ... -1200).contains(code) || [-1022, -1000, -1002].contains(code)
+        return (-1206 ... -1201).contains(code) || [-1022, -1000, -1002].contains(code)
     }
 
     /// The request `attempt` ended: its body is whole when `errorCode` is nil.

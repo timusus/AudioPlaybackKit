@@ -6,7 +6,7 @@ import Testing
 /// **URL errors no retry fixes fail the read at once** (#164), with the one request sent.
 struct GrowingFileDownloadPermanentErrorTests {
 
-    @Test("a certificate, TLS, ATS or bad-URL error fails the read without a retry", arguments: [-1200, -1202, -1206, -1022, -1000, -1002])
+    @Test("a certificate, TLS, ATS or bad-URL error fails the read without a retry", arguments: [-1201, -1202, -1206, -1022, -1000, -1002])
     func permanentCodesFailAtOnce(code: Int) {
         let h = Harness()
         #expect(h.read() == .park)
@@ -26,5 +26,8 @@ struct GrowingFileDownloadPermanentErrorTests {
         h.end(error: -1202, domain: "NSPOSIXErrorDomain")
         h.clock.advance(by: 1)
         #expect(h.requests.count == 3)
+        h.end(error: -1200)
+        h.clock.advance(by: 1)
+        #expect(h.requests.count == 4)
     }
 }

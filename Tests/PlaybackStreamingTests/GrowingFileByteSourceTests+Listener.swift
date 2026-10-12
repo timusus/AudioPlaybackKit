@@ -106,14 +106,32 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(source.position, 1000, "the refused seek moved nothing")
     }
 
+    func testAnAppHeaderCannotOverrideRangeOrAcceptEncoding() throws {
+        let body = makeBody(8 * 1024)
+        let server = try startServer(body: body)
+        let source = makeSource(
+            server.url, authHeaders: ["Accept-Encoding": "gzip", "range": "bytes=5-", "Authorization": "Basic c2VjcmV0"],
+            connectionPolicy: GrowingFileConnectionPolicy(headers: ["accept-encoding": "br"])
+        )
+        XCTAssertEqual(try readToEnd(source), body)
+        let sent = try XCTUnwrap(server.requestHeads.first).lowercased()
+        XCTAssertTrue(sent.contains("accept-encoding: identity"), sent)
+        XCTAssertFalse(sent.contains("gzip") || sent.contains("accept-encoding: br"), sent)
+        XCTAssertTrue(sent.contains("range: bytes=0-"), sent)
+        XCTAssertTrue(sent.contains("authorization: basic c2vjcmv0"), sent)
+    }
+
     /// media3 `DefaultHttpDataSourceTest.open_redirectCrossProtocol_*`: the loopback server speaks no
     /// TLS, so the scheme change is fed to the delegate; the caller's headers belong to the original
-    /// origin (same scheme, host and port), and the range goes on every hop.
-    func testARedirectAcrossSchemesKeepsTheRangeAndDropsTheCallersHeaders() throws {
+    /// origin (same scheme, host and port) or its `https` upgrade, and the range goes on every hop.
+    func testARedirectAcrossSchemesKeepsTheRangeAndOnlyAnUpgradeKeepsTheCallersHeaders() throws {
         let headers = ["Authorization": "Basic c2VjcmV0"]
-        for (from, to) in [("http://host.example/a.mp3", "https://host.example/b.mp3"),
-                           ("https://host.example/a.mp3", "http://host.example/b.mp3"),
-                           ("https://host.example/a.mp3", "https://host.example/b.mp3")] {
+        for (from, to, keeps) in [("http://host.example/a.mp3", "https://host.example/b.mp3", true),
+                                  ("http://host.example:8080/a.mp3", "https://host.example:8080/b.mp3", true),
+                                  ("http://host.example:8080/a.mp3", "https://host.example/b.mp3", false),
+                                  ("https://host.example/a.mp3", "http://host.example/b.mp3", false),
+                                  ("http://host.example/a.mp3", "https://other.example/b.mp3", false),
+                                  ("https://host.example/a.mp3", "https://host.example/b.mp3", true)] {
             let source = makeSource(URL(string: from)!, authHeaders: headers)
             var original = URLRequest(url: URL(string: from)!)
             original.setValue("bytes=500-", forHTTPHeaderField: "Range")
@@ -133,8 +151,7 @@ extension GrowingFileByteSourceTests {
             XCTAssertEqual(hop.url?.absoluteString, to)
             XCTAssertEqual(hop.value(forHTTPHeaderField: "Range"), "bytes=500-", "\(from) -> \(to)")
             XCTAssertEqual(hop.value(forHTTPHeaderField: "If-Range"), "\"v1\"", "\(from) -> \(to)")
-            let sameOrigin = URL(string: from)!.scheme == URL(string: to)!.scheme
-            XCTAssertEqual(hop.value(forHTTPHeaderField: "Authorization"), sameOrigin ? "Basic c2VjcmV0" : nil, "\(from) -> \(to)")
+            XCTAssertEqual(hop.value(forHTTPHeaderField: "Authorization"), keeps ? "Basic c2VjcmV0" : nil, "\(from) -> \(to)")
             task.cancel()
         }
     }
