@@ -16,6 +16,11 @@ import PlaybackDecode
 /// `clearNext`, releases that next; a crossing into an item releases the ones before it; a next that
 /// fails before it is heard, `stop()` and dropping the transport release theirs. A seek releases
 /// nothing: it may land in any item still set. A source passed again while still set is not released.
+///
+/// To follow an item's decode (a listener on its byte source), wrap `FFmpegItemSource` in a source of
+/// the app's own that forwards every call, `release()` included: the first `open()` is the start of
+/// playback, and `seek(toFrame:)` each seek, before the decoder moves. A wrapper is the supported
+/// route, so the source protocol stays the one hook.
 public protocol ItemSource: AnyObject, Sendable {
     /// Never blocks: the calls that follow belong to the sequencer's `epoch`.
     func begin(epoch: UInt64)
