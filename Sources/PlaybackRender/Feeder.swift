@@ -145,6 +145,11 @@ final class Feeder {
         restart(from: nil, status: .ended)
     }
 
+    /// Media seconds written past the playhead.
+    var bufferedAhead: TimeInterval {
+        max(map.writtenEnd - playhead(), 0)
+    }
+
     /// The item heard now, or the one the last restart asked for until its audio is written.
     var currentItem: Int? {
         currentPosition(at: playhead())?.item

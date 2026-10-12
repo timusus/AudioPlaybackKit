@@ -42,6 +42,9 @@ public final class Player<Item: Hashable & Sendable> {
     /// media3 `getAudioFormat()`: the current item's decoded format, the one the processors run at
     /// for it. Nil until its audio is heard; a next item's replaces it when the join is heard.
     public private(set) var audioFormat: PCMFormat?
+    /// media3 `getTotalBufferedDuration()`: seconds of PCM written past what is heard, into the next
+    /// item too. Not observed: it changes every pump, so poll it.
+    public var bufferedAhead: TimeInterval { transport.bufferedAhead }
     /// The source's `isSeekable`, nil until it has opened.
     private var seekable: Bool?
 

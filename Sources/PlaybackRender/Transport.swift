@@ -75,6 +75,14 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private var ids: [Int: Item] = [:]
     private var failed = false
     private var takenDiscontinuities = 0
+    private let bufferedLock = NSLock()
+    private var lastBufferedAhead: TimeInterval = 0
+
+    /// Seconds of the media decoded and queued past what is heard, as of the last pump (every
+    /// `pumpInterval`); any thread. About two seconds while decode keeps up, less near the end of what is set.
+    public var bufferedAhead: TimeInterval {
+        bufferedLock.withLock { lastBufferedAhead }
+    }
 
     /// Plays through the device's audio output (`AVSampleBufferAudioRenderer`). The transport never
     /// touches `AVAudioSession`: on iOS the app sets the category and activates the session before
@@ -240,6 +248,8 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
 
     private func pump() {
         feeder.pump()
+        let ahead = feeder.bufferedAhead
+        bufferedLock.withLock { lastBufferedAhead = ahead }
     }
 
     /// Every frame position comes from audio already pulled, so its item's rate is known. One computed
