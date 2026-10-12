@@ -196,6 +196,9 @@ public final class FFmpegStreamDecoder {
     public func open() throws -> StreamAudioFormat {
         #if canImport(CStreamDecode)
             guard handle == nil else { throw StreamDecoderError.invalidState("already open") }
+            // A failed open has moved the reader and set `reason`: opening again would read from
+            // the middle of the source.
+            guard reason == .running else { throw StreamDecoderError.invalidState("open already failed") }
             var callbacks = StreamDecodeCallbacks(
                 read: { opaque, buffer, count in
                     guard let opaque, let buffer else { return Int32(STREAM_READ_ERROR) }

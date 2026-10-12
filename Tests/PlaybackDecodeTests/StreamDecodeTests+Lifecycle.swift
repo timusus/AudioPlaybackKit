@@ -238,6 +238,19 @@ extension StreamDecodeTests {
         XCTAssertNil(decoder.nextChunk())
     }
 
+    /// A failed open is final for the decoder: opening it again is refused, not a dead decoder.
+    func testASecondOpenAfterAFailedOneIsRefused() throws {
+        try skipUnlessAvailable()
+        let decoder = FFmpegStreamDecoder(reader: DataByteReader(Data("<html>not audio</html>".utf8)))
+        XCTAssertThrowsError(try decoder.open())
+        XCTAssertThrowsError(try decoder.open()) { error in
+            guard case StreamDecoderError.invalidState = error else {
+                return XCTFail("expected invalidState, got \(error)")
+            }
+        }
+        XCTAssertEqual(decoder.endReason, .failure)
+    }
+
     // MARK: - Probe budget
 
     /// The Swift default and the C fallback (used when a field is zero, or by `stream_decoder_open`)
