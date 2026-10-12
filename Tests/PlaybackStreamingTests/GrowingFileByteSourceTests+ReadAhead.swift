@@ -16,6 +16,8 @@ extension GrowingFileByteSourceTests {
     private func pausedSource(
         _ server: LoopbackMediaServer, path: GrowingFilePathMonitor.Path, store: GrowingFileStore? = nil
     ) throws -> (GrowingFileByteSource, GrowingFilePathMonitor) {
+        // The first request can never reach the end of the body, however late the test thread runs.
+        server.heldBodyAfterBytesForRangeStartingAt = [0: 400_000]
         let monitor = GrowingFilePathMonitor()
         monitor.update(path)
         let source = makeSource(
