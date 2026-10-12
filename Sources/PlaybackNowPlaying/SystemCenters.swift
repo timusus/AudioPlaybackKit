@@ -71,7 +71,7 @@ final class SystemRemoteCommandCenter: RemoteCommandCenter {
     }
 
     func setSupportedRates(_ rates: [Double]) {
-        center.changePlaybackRateCommand.supportedPlaybackRates = rates.map { NSNumber(value: $0) }
+        center.changePlaybackRateCommand.supportedPlaybackRates = rates.map { NSNumber(value: Float($0)) }
     }
 
     private func command(_ command: RemoteCommand) -> MPRemoteCommand {
