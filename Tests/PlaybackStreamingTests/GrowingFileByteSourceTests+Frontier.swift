@@ -79,6 +79,23 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(source.snapshot.transactionGeneration, 3, "the restart, then its base moved to 0")
     }
 
+    /// A drop under 64 KiB in resumes from byte 0, and a 200 is the answer to that: the whole file
+    /// is the bytes asked for, so the file is kept and nothing restarts.
+    func testAResumeFromByteZeroAnsweredWithA200KeepsTheFile() throws {
+        let body = makeBody(128 * 1024)
+        let server = try startServer(body: body)
+        server.respondsWholeBodyIgnoringRange = true
+        server.closesAfterBodyBytes = 20_000
+        let source = makeSource(server.url)
+
+        let head = try read(source, 4096)
+        XCTAssertTrue(waitUntil { server.requestedRanges.count == 2 })
+        XCTAssertEqual(head + (try readToEnd(source)), body)
+        XCTAssertEqual(server.requestedRanges, [0, 0], "no restart after the resume")
+        XCTAssertEqual(source.snapshot.transactionGeneration, 1, "a resume is the same file")
+        XCTAssertEqual(events.transactions.count, 1)
+    }
+
     /// The host spliced different content in between the drop and the resume (the total moved): its bytes are not
     /// this file's end, so the retry is a restart at the decoder's position into a new file.
     func testAResumeIntoADifferentSpliceRestartsIntoANewFile() throws {

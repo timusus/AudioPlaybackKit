@@ -628,8 +628,13 @@ struct GrowingFileDownload {
             // The same bytes from the frontier on, as far as the host lets that be checked:
             // the start asked for, and the total the file was begun under.
             let sameTotal = range?.total.map { tx.totalLength == nil || $0 == tx.totalLength } ?? true
+            let wholeLength = response.expectedContentLength > 0 ? response.expectedContentLength : nil
             switch status {
             case 206 where range?.start == resumeAt && sameTotal:
+                break
+            case 200 where resumeAt == 0 && wholeLength != nil && (tx.totalLength == nil || wholeLength == tx.totalLength):
+                // From byte 0 a whole body is the range asked for (media3 DefaultHttpDataSource
+                // skips bytes only when the position is not 0). Without a length it could be any stream.
                 break
             case 200, 206, 416:
                 // The range ignored, or a different file behind the URL: not these bytes' end.
@@ -652,7 +657,7 @@ struct GrowingFileDownload {
                 end("not audio: content-type=\(response.mimeType ?? "?")", retryable: tx.remembered, refused: true, now: now)
                 return false
             }
-            if tx.totalLength == nil { current?.totalLength = range?.total }
+            if tx.totalLength == nil { current?.totalLength = range?.total ?? (status == 200 ? wholeLength : nil) }
             lastKnownTotalLength = current?.totalLength
             if let total = current?.totalLength { effects.append(.makeRoom(bytes: total - resumeAt)) }
             if finalURL == nil { finalURL = response.url }
