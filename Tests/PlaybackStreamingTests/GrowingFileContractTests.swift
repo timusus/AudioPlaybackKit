@@ -29,6 +29,7 @@ final class GrowingFileContractTests: GrowingFileContractCase {
         let body = makeBody()
         try forEachResource { resource in
             for offset in [1, 4095, 12_345, body.count - 1] {
+                defer { endIteration() }
                 let (_, source) = try open(resource, body: body)
                 try source.seek(to: Int64(offset))
                 let result = finish(readAsync(source, Int.max), "\(resource.name) @\(offset)")
@@ -115,6 +116,7 @@ final class GrowingFileContractTests: GrowingFileContractCase {
         let body = makeBody()
         for strict in [false, true] {
             for html in [false, true] {
+                defer { endIteration() }
                 let server = try startServer(body: body)
                 server.answers416AtOrAfterEnd = strict
                 server.htmlErrorBodies = html
@@ -133,6 +135,7 @@ final class GrowingFileContractTests: GrowingFileContractCase {
     func testAPositionPastTheEndOfARangeIgnoringBodyFailsTheRead() throws {
         let body = makeBody()
         for declaresLength in [true, false] {
+            defer { endIteration() }
             let server = try startServer(body: body)
             server.respondsWholeBodyIgnoringRange = true
             server.omitsContentLength = !declaresLength
@@ -153,6 +156,7 @@ final class GrowingFileContractTests: GrowingFileContractCase {
         let body = makeBody()
         for strict in [false, true] {
             for html in [false, true] {
+                defer { endIteration() }
                 let context = "strict416=\(strict) html=\(html)"
                 let server = try startServer(body: body)
                 server.answers416AtOrAfterEnd = strict
@@ -217,6 +221,7 @@ final class GrowingFileContractTests: GrowingFileContractCase {
         let body = makeBody()
         for html in [false, true] {
             for status in [400, 401, 403, 404, 410, 416, 500, 503] {
+                defer { endIteration() }
                 let server = try startServer(body: body)
                 server.htmlErrorBodies = html
                 server.reject(host: "127.0.0.1:\(server.port)", status: status)
@@ -227,7 +232,10 @@ final class GrowingFileContractTests: GrowingFileContractCase {
                 assertTransport(finish(pending, of: source, on: clock, context), context)
                 let requests = status == 416 ? 1 : 1 + GrowingFileDownload.Retry.maxAttempts
                 XCTAssertEqual(server.requestHeads.count, requests, context)
+                // Before the iteration's cancel, which deletes a partial itself.
+                XCTAssertEqual(partials(), [], context)
             }
+            defer { endIteration() }
             let server = try startServer(body: body)
             server.htmlErrorBodies = html
             let context = "missing path html=\(html)"
@@ -236,8 +244,8 @@ final class GrowingFileContractTests: GrowingFileContractCase {
             let pending = readAsync(source, 1)
             assertTransport(finish(pending, of: source, on: clock, context), context)
             XCTAssertEqual(server.requestHeads.count, 1 + GrowingFileDownload.Retry.maxAttempts, context)
+            XCTAssertEqual(partials(), [], context)
         }
-        XCTAssertEqual(partials(), [])
     }
 
     /// An HTML page where the audio should be: declared as HTML, or as an unknown type whose body
@@ -245,11 +253,13 @@ final class GrowingFileContractTests: GrowingFileContractCase {
     func testAPageServedAsAudioOrAsAPageFailsTheRead() throws {
         let page = Data("<!DOCTYPE html><html><body>expired</body></html>".utf8)
         for mimeType in ["text/html; charset=utf-8", "application/octet-stream"] {
+            defer { endIteration() }
             let server = try startServer(body: page, mimeType: mimeType)
             let context = "mime=\(mimeType)"
             assertTransport(finish(readAsync(makeSource(server.url), 1), within: 10, context), context)
+            // Before the iteration's cancel, which deletes a partial itself.
+            XCTAssertEqual(partials(), [], context)
         }
-        XCTAssertEqual(partials(), [])
     }
 
     /// Ours (media3's `HttpDataSource` tests cover request properties, not in the contract test):

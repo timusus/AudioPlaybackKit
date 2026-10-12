@@ -79,11 +79,19 @@ class GrowingFileContractCase: XCTestCase {
     }
 
     override func tearDown() {
-        sources.forEach { $0.cancel() }
-        servers.forEach { $0.stop() }
+        endIteration()
         session.invalidateAndCancel()
         try? FileManager.default.removeItem(at: directory)
         super.tearDown()
+    }
+
+    /// Cancels every source and stops every server so far. A loop ends each iteration with it, so
+    /// one iteration's servers and downloads are not still running under the next.
+    func endIteration() {
+        sources.forEach { $0.cancel() }
+        servers.forEach { $0.stop() }
+        sources = []
+        servers = []
     }
 
     // MARK: - Helpers
@@ -212,6 +220,7 @@ class GrowingFileContractCase: XCTestCase {
     /// Runs `check` once per resource of ``matrix``, with the resource's name in every failure.
     func forEachResource(_ check: (Resource) throws -> Void) rethrows {
         for resource in matrix {
+            defer { endIteration() }
             try check(resource)
         }
     }

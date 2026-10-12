@@ -54,6 +54,8 @@ public final class LoopbackMediaServer: @unchecked Sendable {
     var _etag: String?
     var _etags: [String]?
     private var connections: [NWConnection] = []
+    private var stopped = false
+    private let listenerCancelled = DispatchSemaphore(value: 0)
 
     /// The port the listener bound; zero until `init` returns.
     public private(set) var port: UInt16 = 0
@@ -82,10 +84,16 @@ public final class LoopbackMediaServer: @unchecked Sendable {
         listener = try NWListener(using: parameters)
 
         let ready = DispatchSemaphore(value: 0)
+        let cancelled = listenerCancelled
         listener.stateUpdateHandler = { [weak self] state in
-            if case .ready = state {
+            switch state {
+            case .ready:
                 self?.port = self?.listener.port?.rawValue ?? 0
                 ready.signal()
+            case .cancelled:
+                cancelled.signal()
+            default:
+                break
             }
         }
         listener.newConnectionHandler = { [weak self] connection in
@@ -140,16 +148,21 @@ public final class LoopbackMediaServer: @unchecked Sendable {
         URL(string: "http://\(redirectsToAlternateHost ? "localhost" : "127.0.0.1"):\(port)\(Self.fixturePath)")!
     }
 
-    /// Cancels the listener and every open connection.
+    /// Cancels the listener and every open connection, and returns once the listener is
+    /// cancelled, so its port is free and no later connection reaches this server. Idempotent.
     public func stop() {
-        listener.cancel()
         lock.lock()
+        let first = !stopped
+        stopped = true
         let open = connections
         connections = []
         // Held sends capture self; dropping them here lets the server deallocate.
         _heldOffsetZeroSends = []
         lock.unlock()
+        guard first else { return }
+        listener.cancel()
         for connection in open { connection.cancel() }
+        _ = listenerCancelled.wait(timeout: .now() + 5)
     }
 
     func accept(_ connection: NWConnection) {
