@@ -20,19 +20,28 @@ gh auth status >/dev/null 2>&1 || { echo "release.sh: gh is not authenticated" >
 
 cd "$(dirname "$0")/.."
 
+git fetch --quiet origin --tags
 if git rev-parse -q --verify "refs/tags/$version" >/dev/null; then
     echo "release.sh: tag $version already exists" >&2
     exit 1
 fi
 
-git fetch --quiet origin
 git rev-parse -q --verify origin/main >/dev/null || { echo "release.sh: no origin/main" >&2; exit 1; }
 
 # Own worktree, never the landing one: moving that mid-land invalidates the verify.
 # Only landed work is released, so it is always exactly origin/main.
 common="$(git rev-parse --path-format=absolute --git-common-dir)"
 release_tree="$(dirname "$common")/.claude/worktrees/release"
-if [[ -d "$release_tree" ]]; then
+# A plain directory here would make git -C resolve to the enclosing checkout, which reset --hard would wipe.
+is_worktree() { [[ -d "$1" && "$(cd "$1" && git rev-parse --show-toplevel 2>/dev/null)" == "$(cd "$1" && pwd -P)" ]]; }
+if ! is_worktree "$release_tree"; then
+    git worktree prune
+    if [[ -e "$release_tree" ]]; then
+        echo "release.sh: $release_tree exists but is not a git worktree; remove it and rerun" >&2
+        exit 1
+    fi
+fi
+if is_worktree "$release_tree"; then
     git -C "$release_tree" reset --quiet --hard
     git -C "$release_tree" clean --quiet -fd
     git -C "$release_tree" checkout --quiet --detach origin/main

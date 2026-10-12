@@ -13,6 +13,8 @@ for arg in "$@"; do
     if [[ "$arg" == --with-conformance ]]; then
         args=()
     else
+        # A filter naming the bundle would otherwise be skipped into "no tests ran".
+        [[ "$arg" == *PlaybackDecodeConformance* ]] && args=()
         passthrough+=("$arg")
     fi
 done
@@ -35,7 +37,7 @@ grep -E "^ *Executed [0-9]+ tests?, with" <<<"$plain" | sort -u | sed 's/^ */XCT
 failed=$({
     sed -nE "s|^Test Case '-\[([^ ]+) ([^]]+)\]' failed.*|\1/\2|p" <<<"$plain"
     sed -nE 's|^.*: error: -\[([^ ]+) ([^]]+)\] : .*|\1/\2|p' <<<"$plain"
-    sed -nE 's|^.*✘ Test (.+) failed after .*|\1|p' <<<"$plain"
+    sed -nE 's|^.*✘ Test (.+) failed after .*|\1|p' <<<"$plain" | grep -vE '^run with [0-9]+ tests?$'
 } | sort -u)
 if [[ -n "$failed" ]]; then
     echo "failing tests:"
@@ -46,5 +48,12 @@ grep -E "error: " <<<"$plain" | grep -vE ": error: -\[" | sort -u | head -n 10 |
 if [[ "$status" -ne 0 && -z "$failed" ]]; then
     echo "no failing test named; last log lines:"
     tail -n 8 "$log" | sed 's/^/  | /'
+fi
+# A filter matching nothing exits 0; that must not read as a pass.
+executed=$(sed -nE 's/^ *Executed ([0-9]+) tests?, with.*/\1/p' <<<"$plain" | grep -cvx 0)
+swift_testing=$(sed -nE 's/.*Test run with ([0-9]+) tests?.*/\1/p' <<<"$plain" | grep -cvx 0)
+if [[ "$status" -eq 0 && "$started" -eq 0 && "$executed" -eq 0 && "$swift_testing" -eq 0 ]]; then
+    echo "test-fast: no tests ran"
+    exit 3
 fi
 exit "$status"

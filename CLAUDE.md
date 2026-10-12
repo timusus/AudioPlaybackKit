@@ -39,7 +39,7 @@ GOLDEN_UPDATE=1 swift test --filter PlaybackDecodeConformance   # after an inten
 xcodebuild test -scheme AudioPlaybackKit-Package -only-testing:PlaybackStreamingTests \
   -destination 'platform=iOS Simulator,id=<UDID>'   # a UDID no parallel-testing run clones (that shuts it down)
 land <branch>                                       # from the landing worktree: cherry-pick, verify, push
-scripts/release.sh 0.1.1 notes.md                   # landing worktree: tests, FFmpeg source, tag, push, publish the release
+scripts/release.sh 0.1.1 notes.md                   # any checkout, works in .claude/worktrees/release: tests, FFmpeg source, tag, push, publish
 ```
 
 Workers iterate with `--filter` and finish with one `scripts/test-fast` run (`--filter` and other args pass
