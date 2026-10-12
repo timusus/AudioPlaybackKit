@@ -35,16 +35,22 @@ final class SampleBufferAudioOutputAutoFlushTests: XCTestCase {
         transport.play()
         wait(for: [playing], timeout: 5)
         // 0.5 s at 1x, 0.75 s at 2x, 0.75 s at 1x, then the last second at 0.5x.
+        // Each rate is set when the test hears the frame, which under load is later than the frame
+        // asked for, so the expected wall time comes from the frames heard at each change.
+        var segments: [(from: Int64, rate: Double)] = [(0, 1)]
         for (frame, rate) in [(Int64(24000), 2.0), (60000, 1), (96000, 0.5)] {
             wait(for: [log.expect { ($0.frame ?? 0) >= frame }], timeout: 5)
+            segments.append((log.positions.last ?? frame, rate))
             transport.setRate(rate)
         }
         wait(for: [ended], timeout: 10)
 
         let wall = log.timing(from: .playing, to: .ended)
-        print("rate 1-2-1-0.5: \(output.summary()); playing to ended \(wall) s")
-        // About 3.6 s of wall time, so every rate took effect.
-        XCTAssertGreaterThan(wall, 3.2)
+        let boundaries = segments.map(\.from) + [RampSource.frames]
+        let expected = zip(segments, boundaries.dropFirst()).reduce(0.0) { $0 + Double($1.1 - $1.0.from) / 48000 / $1.0.rate }
+        print("rate 1-2-1-0.5: \(output.summary()); playing to ended \(wall) s, expected \(expected) s")
+        // Every rate took effect: the wall time follows the frames played at each rate.
+        XCTAssertGreaterThan(wall, expected * 0.9)
         if RenderEventBounds.enabled { XCTAssertLessThan(wall, 5) }
         XCTAssertLessThan(wall, 9)
         assertContinuous()
