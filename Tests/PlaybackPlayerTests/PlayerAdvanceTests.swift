@@ -286,28 +286,78 @@ final class PlayerAdvanceTests: XCTestCase {
         XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [.init(value: false, reason: .endOfItem)])
     }
 
-    // An insert after decode reached b arms x behind b, so b is still heard: the player follows it.
-    func testACrossingIntoANextArmedBeforeAnEditIsReportedByItsIndex() async {
+    // Decode has written some of b by 9 s: the insert drops it and x follows a, as media3
+    // `MediaPeriodQueue.updateQueuedPeriods` drops a read-ahead period.
+    func testAnInsertAfterDecodeReachedTheNextPlaysTheInsertedItemNext() async {
         player.setItems(["a", "b", "c"])
         player.play()
         rig.run(for: 9)
+        XCTAssertTrue(rig.output.enqueues.contains { $0.samples.first == 1000 }, "b is written ahead")
         player.insert(["x"], at: 1)
         rig.run(for: 2)
 
-        XCTAssertEqual(player.currentItem, "b")
-        XCTAssertEqual(player.currentIndex, 2)
+        XCTAssertEqual(player.currentItem, "x")
+        XCTAssertEqual(player.currentIndex, 1)
         rig.run(for: 10)
-        XCTAssertEqual(player.currentItem, "c")
+        XCTAssertEqual(player.currentItem, "b")
         let events = await rig.finish()
         XCTAssertEqual(PlayerRig.transitions(events), [
-            .init(from: 0, to: 2, reason: .auto),
-            .init(from: 2, to: 3, reason: .auto),
+            .init(from: 0, to: 1, reason: .auto),
+            .init(from: 1, to: 2, reason: .auto),
         ])
     }
 
-    // b was removed after decode reached it, so the transport still joins into it; the player moves
-    // on to the list's next instead of reporting an item it no longer has.
-    func testACrossingIntoARemovedNextPlaysTheListsNext() async {
+    // media3 `MediaPeriodQueue.updateRepeatMode`: b, already decoded, gives way to a's repeat.
+    func testARepeatChangeAfterDecodeReachedTheNextRepeatsTheCurrent() async {
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 9)
+        player.repeatMode = .one
+        rig.run(for: 2)
+
+        XCTAssertEqual(player.currentIndex, 0)
+        XCTAssertEqual(player.position, 1, accuracy: 0.01)
+        XCTAssertTrue(rig.output.enqueues.suffix(4).flatMap(\.samples).allSatisfy { $0 < 1000 }, "a is heard again")
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 0, reason: .repeat)])
+    }
+
+    // The seek drops b's decoded audio; it stays armed, and the insert after replaces it.
+    func testAnInsertAfterASeekBackPlaysTheInsertedItemNext() async {
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 9)
+        player.seek(to: 0)
+        rig.run(for: 1)
+        XCTAssertEqual(rig.factory.calls, ["a", "b"], "b stays armed across the seek")
+        player.insert(["x"], at: 1)
+        rig.run(for: 10)
+
+        XCTAssertEqual(player.currentItem, "x")
+        XCTAssertEqual(player.currentIndex, 1)
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 1, reason: .auto)])
+    }
+
+    // An edit after the next keeps it armed, so nothing is re-fed, as media3 keeps a period that still matches.
+    func testAnEditThatLeavesTheNextKeepsItWithNoFlush() async {
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 9)
+        let flushes = rig.output.flushes
+        player.insert(["c"], at: 2)
+        player.repeatMode = .all
+        rig.run(for: 2)
+
+        XCTAssertEqual(player.currentItem, "b")
+        XCTAssertEqual(rig.output.flushes, flushes)
+        XCTAssertEqual(rig.factory.calls, ["a", "b", "c"], "b is opened once; c is armed once b is current")
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 1, reason: .auto)])
+    }
+
+    // Decode had reached b: the remove drops it and c follows a.
+    func testRemovingTheNextAfterDecodeReachedItPlaysTheListsNext() async {
         player.setItems(["a", "b", "c"])
         player.play()
         rig.run(for: 9)
@@ -319,13 +369,13 @@ final class PlayerAdvanceTests: XCTestCase {
         rig.run(for: 1)
         let samples = rig.output.enqueues.suffix(4).flatMap(\.samples)
         XCTAssertTrue(samples.allSatisfy { $0 >= 2000 }, "c is heard")
-        XCTAssertEqual(rig.factory.calls, ["a", "b", "c"], "the transport took the seek to c's armed key")
+        XCTAssertEqual(rig.factory.calls, ["a", "b", "c"], "c is armed once")
         let events = await rig.finish()
         XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 1, reason: .auto)])
     }
 
     // With nothing after the removed b, a's end is the end of the list.
-    func testACrossingIntoARemovedLastItemEnds() async {
+    func testRemovingTheLastItemAfterDecodeReachedItEnds() async {
         player.setItems(["a", "b"])
         player.play()
         rig.run(for: 9)
@@ -344,7 +394,7 @@ final class PlayerAdvanceTests: XCTestCase {
 
     // c is not armed, as pause at end was set after b was removed: a's end pauses there, and `play()`
     // moves on to c.
-    func testACrossingIntoARemovedNextUnderPauseAtEndPausesAtTheEndOfTheItem() async {
+    func testRemovingTheNextUnderPauseAtEndPausesAtTheEndOfTheItem() async {
         player.setItems(["a", "b", "c"])
         player.play()
         rig.run(for: 9)

@@ -34,30 +34,17 @@ final class PlayerModelBasedTests: XCTestCase {
     }
 
     // media3 flushes a next it already read when a repeat change or an edit means another follows
-    // (`MediaPeriodQueue.updateRepeatMode`, `updateQueuedPeriods`); the player follows what decode passed into.
-    // Each scope matches only the divergence of its own sequence, at its own step, so a fix or another mismatch fails.
+    // (`MediaPeriodQueue.updateRepeatMode`, `updateQueuedPeriods`), and so does the player.
     func testAChangeToWhatFollowsAfterDecodePassedTheJoinIsHonoured() {
         let repeatChange: [Operation] = [.setItems(["a", "b"], startIndex: 0, startPosition: 0), .play, .advance(quarters: 12), .repeatMode(.one), .advance(quarters: 8)]
-        let options = XCTExpectedFailure.Options()
-        options.issueMatcher = { $0.compactDescription.contains("after step 4, advance(2.0 s)") }
-        XCTExpectFailure("#159: a repeat change after decode passed the join", options: options) {
-            XCTAssertNil(Self.run(repeatChange, allowsLateChanges: true))
-        }
+        XCTAssertNil(Self.run(repeatChange))
 
         let insert: [Operation] = [.setItems(["a", "b"], startIndex: 0, startPosition: 0), .play, .advance(quarters: 12), .insert(["c"], at: 1), .advance(quarters: 8)]
-        let insertOptions = XCTExpectedFailure.Options()
-        insertOptions.issueMatcher = { $0.compactDescription.contains("after step 4, advance(2.0 s)") }
-        XCTExpectFailure("#159: an insert after decode passed the join", options: insertOptions) {
-            XCTAssertNil(Self.run(insert, allowsLateChanges: true))
-        }
+        XCTAssertNil(Self.run(insert))
 
-        // Seconds from the join again after the seek, yet the transport keeps b, of which it decoded some.
+        // Seconds from the join again after the seek, with b already decoded before it.
         let seekBack: [Operation] = [.setItems(["a", "b"], startIndex: 0, startPosition: 0), .play, .advance(quarters: 12), .seek(0), .insert(["c"], at: 1), .advance(quarters: 20)]
-        let seekOptions = XCTExpectedFailure.Options()
-        seekOptions.issueMatcher = { $0.compactDescription.contains("after step 5, advance(5.0 s)") }
-        XCTExpectFailure("#159: a seek back after the next is armed keeps the next", options: seekOptions) {
-            XCTAssertNil(Self.run(seekBack, allowsLateChanges: true))
-        }
+        XCTAssertNil(Self.run(seekBack))
     }
 
     // MARK: Operations
@@ -112,7 +99,7 @@ final class PlayerModelBasedTests: XCTestCase {
     /// Item lists and indices are drawn against the model's list as it stands at each step.
     static func generate(seed: UInt64) -> [Operation] {
         var random = SplitMix64(seed: seed)
-        var reference = Reference()
+        var model = PlayerModel(lengths: lengths)
         var operations: [Operation] = []
         func someItems(_ random: inout SplitMix64, max: Int) -> [String] {
             (0..<random.int(in: 1...max)).map { _ in
@@ -126,7 +113,7 @@ final class PlayerModelBasedTests: XCTestCase {
             Double(random.int(in: -2...7)) / 4
         }
         while operations.count < operationsPerSequence {
-            let count = reference.model.items.count
+            let count = model.items.count
             let operation: Operation
             switch random.int(in: 0..<100) {
             case 0..<6:
@@ -161,64 +148,16 @@ final class PlayerModelBasedTests: XCTestCase {
             default:
                 operation = .advance(quarters: random.int(in: 1...16))
             }
-            if reference.apply(operation, allowsLateChanges: false) { operations.append(operation) }
+            apply(operation, to: &model)
+            operations.append(operation)
         }
         return operations
-    }
-
-    /// The model, kept from changes to what follows the current item once decode may have passed
-    /// into the next: a known divergence (`testAChangeToWhatFollowsAfterDecodePassedTheJoinIsHonoured`).
-    @MainActor
-    struct Reference {
-        private(set) var model = PlayerModel(lengths: lengths)
-        /// Decode has come within reach of the next during this playback of the current item. A seek
-        /// back does not clear it: the transport keeps a next it decoded any of, wherever decode is now.
-        private var nextReached = false
-        private var playbacks = 0
-
-        /// Applies `operation` unless it is a late change; returns whether it applied.
-        mutating func apply(_ operation: Operation, allowsLateChanges: Bool) -> Bool {
-            var after = model
-            if case let .advance(quarters) = operation {
-                for _ in 0..<quarters {
-                    after.tick()
-                    observe(after)
-                }
-                model = after
-                return true
-            }
-            PlayerModelBasedTests.apply(operation, to: &after)
-            guard allowsLateChanges || !nextReached || !changesWhatFollows(from: model, to: after) else { return false }
-            model = after
-            observe(model)
-            return true
-        }
-
-        mutating func takeEvents() -> [PlayerModel.Event] {
-            model.takeEvents()
-        }
-
-        /// Decode runs up to three seconds ahead of what is heard: two in the output, one in its buffer.
-        private mutating func observe(_ model: PlayerModel) {
-            if model.playbacks != playbacks {
-                playbacks = model.playbacks
-                nextReached = false
-            }
-            if model.state != .idle, let upNext = model.upNext, upNext.remaining <= 3 { nextReached = true }
-        }
-
-        private func changesWhatFollows(from before: PlayerModel, to after: PlayerModel) -> Bool {
-            guard let was = before.upNext, let now = after.upNext else { return false }
-            let repeatsBefore = was.index == before.currentIndex
-            let repeatsAfter = now.index == after.currentIndex
-            return was.entry != now.entry || repeatsBefore != repeatsAfter
-        }
     }
 
     // MARK: Running
 
     /// Runs `operations` through a fresh player and model; nil if they agreed throughout.
-    static func run(_ operations: [Operation], allowsLateChanges: Bool = false) -> String? {
+    static func run(_ operations: [Operation]) -> String? {
         let rig = PlayerRig()
         for (name, length) in lengths { rig.factory.lengths[name] = Int64(length * 8) }
         rig.factory.lengths["y"] = 16
@@ -234,15 +173,15 @@ final class PlayerModelBasedTests: XCTestCase {
             default: break
             }
         }
-        var reference = Reference()
+        var model = PlayerModel(lengths: lengths)
         for (step, operation) in operations.enumerated() {
-            // A shrunk sequence may bring an index out of range, or a change into the late window.
-            guard operation.isValid(count: reference.model.items.count),
-                  reference.apply(operation, allowsLateChanges: allowsLateChanges) else { continue }
+            // A shrunk sequence may bring an index out of range.
+            guard operation.isValid(count: model.items.count) else { continue }
+            apply(operation, to: &model)
             apply(operation, to: player, rig: rig)
-            let expected = reference.model.snapshot
+            let expected = model.snapshot
             let actual = snapshot(of: player)
-            let expectedEvents = reference.takeEvents()
+            let expectedEvents = model.takeEvents()
             defer { sent = [] }
             if expected != actual || expectedEvents != sent {
                 return """

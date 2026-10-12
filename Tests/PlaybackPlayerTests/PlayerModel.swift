@@ -41,17 +41,12 @@ struct PlayerModel {
     let lengths: [String: TimeInterval]
 
     private(set) var items: [String] = []
-    /// One identity per entry, parallel to `items`, since a list may hold the same item twice.
-    private var ids: [Int] = []
-    private var lastID = 0
     private(set) var currentIndex: Int?
     private(set) var position: TimeInterval = 0
     private(set) var playWhenReady = false
     var repeatMode = RepeatMode.off
     var pauseAtEndOfItem = false
     private(set) var events: [Event] = []
-    /// Counts loads and item transitions, each a fresh start of the current item's playback.
-    private(set) var playbacks = 0
 
     /// Nothing prepared: never loaded, stopped, failed or emptied.
     private var prepared = false
@@ -85,18 +80,6 @@ struct PlayerModel {
         return prepared ? .ready : .idle
     }
 
-    /// What plays when the current item ends, and how long until it does.
-    var upNext: (entry: Int?, index: Int?, remaining: TimeInterval)? {
-        guard let current = currentIndex, !failed else { return nil }
-        let next = pauseAtEndOfItem ? nil : following(current)
-        return (next.map { ids[$0] }, next, length(of: current) - position)
-    }
-
-    private mutating func newIDs(_ count: Int) -> [Int] {
-        defer { lastID += count }
-        return (lastID ..< lastID + count).map { $0 }
-    }
-
     private var isPlaying: Bool {
         state == .ready && playWhenReady && !pausedAtEnd
     }
@@ -111,7 +94,6 @@ struct PlayerModel {
     mutating func setItems(_ newItems: [String], startIndex: Int, startPosition: TimeInterval) {
         guard !newItems.isEmpty else { return removeAll() }
         items = newItems
-        ids = newIDs(newItems.count)
         currentIndex = startIndex
         load(startIndex, at: startPosition)
     }
@@ -120,14 +102,12 @@ struct PlayerModel {
         guard !newItems.isEmpty else { return }
         guard let current = currentIndex else { return setItems(newItems, startIndex: 0, startPosition: 0) }
         items.insert(contentsOf: newItems, at: index)
-        ids.insert(contentsOf: newIDs(newItems.count), at: index)
         if index <= current { currentIndex = current + newItems.count }
     }
 
     mutating func move(from: Int, to: Int) {
         guard from != to, let current = currentIndex else { return }
         items.insert(items.remove(at: from), at: to)
-        ids.insert(ids.remove(at: from), at: to)
         if from == current {
             currentIndex = to
         } else if from < current, to >= current {
@@ -142,7 +122,6 @@ struct PlayerModel {
     mutating func remove(at index: Int) {
         guard let current = currentIndex, items.count > 1 else { return removeAll() }
         items.remove(at: index)
-        ids.remove(at: index)
         if index < current {
             currentIndex = current - 1
         } else if index == current {
@@ -166,7 +145,6 @@ struct PlayerModel {
     mutating func removeAll() {
         let previous = currentIndex
         items = []
-        ids = []
         currentIndex = nil
         failed = false
         prepared = false
@@ -274,7 +252,6 @@ struct PlayerModel {
             return
         }
         currentIndex = next
-        playbacks += 1
         events.append(.transition(from: current, to: next, reason: next == current ? .repeat : .auto))
         if lengths[items[next]] == nil {
             position = 0
@@ -309,7 +286,6 @@ struct PlayerModel {
 
     private mutating func load(_ index: Int, at seconds: TimeInterval) {
         position = max(seconds, 0)
-        playbacks += 1
         ended = false
         pausedAtEnd = false
         guard lengths[items[index]] != nil else {
