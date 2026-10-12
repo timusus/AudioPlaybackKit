@@ -220,8 +220,6 @@ private final class RecordingOutput: AudioOutput, @unchecked Sendable {
         return latency
     }
 
-    var isReadyForMoreData: Bool { base.isReadyForMoreData }
-
     func rebuild() throws {
         try base.rebuild()
     }

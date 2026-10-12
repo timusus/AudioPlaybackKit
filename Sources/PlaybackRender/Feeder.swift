@@ -7,7 +7,7 @@ enum UpstreamSupply: Sendable {
     case ended
 }
 
-/// What the feeder pulls from: the pipeline, later. Called on the feeder's queue.
+/// What the feeder pulls from, called on its queue.
 protocol FeederUpstream: AnyObject {
     func pull() -> UpstreamSupply
     /// Drop everything buffered and supply again from this point, sample-accurately (ADR-0009).

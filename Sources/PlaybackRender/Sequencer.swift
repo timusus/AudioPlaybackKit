@@ -402,8 +402,7 @@ final class Sequencer: @unchecked Sendable {
     }
 
     /// Locked. The one join: next starts from its first frame straight after the ended item's last,
-    /// and a format change falls here, between chunks. Crossfade replaces this with a `Transition`
-    /// that starts before the item ends, reading its tail and next's head to mix them.
+    /// and a format change falls here, between chunks.
     private func joinGapless(to next: Entry) {
         next.started = true
         // A source read before (a seek back replaying the window) is rewound to its start.

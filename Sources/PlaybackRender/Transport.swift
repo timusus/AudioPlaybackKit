@@ -87,8 +87,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     }
 
     /// Plays through the device's audio output (`AVSampleBufferAudioRenderer`). The transport never
-    /// touches `AVAudioSession`: on iOS the app sets the category and activates the session before
-    /// `play()`, and handles interruptions. `onEvent` is called on the transport's queue.
+    /// touches `AVAudioSession`; whatever drives it owns the session. `onEvent` is called on the transport's queue.
     ///
     /// `timePitchAlgorithm` is how speed keeps pitch: `.timeDomain` (the default) had the shortest
     /// dropout on a speed change on the iPhone probe (97 ms to 2x, 140 ms back); `.spectral` suits music.

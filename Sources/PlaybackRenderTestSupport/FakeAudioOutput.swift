@@ -50,12 +50,7 @@ public final class FakeAudioOutput: @unchecked Sendable {
     private var _events: [AudioOutputEvent] = []
     private var stepAfterRead: TimeInterval?
 
-    /// Ready for more while less than this much is queued ahead of the clock.
-    public let readyAhead: TimeInterval
-
-    public init(readyAhead: TimeInterval = 1) {
-        self.readyAhead = readyAhead
-    }
+    public init() {}
 
     public var enqueues: [Enqueue] { locked { _enqueues } }
     /// The clock time of each flush, injected auto-flushes included.
@@ -117,10 +112,6 @@ public final class FakeAudioOutput: @unchecked Sendable {
         }
         if let step { advance(by: step) }
         return time
-    }
-
-    public var isReadyForMoreData: Bool {
-        locked { (timelineEnd ?? clock) - clock < readyAhead }
     }
 
     /// A fresh renderer: nothing queued, the clock at 0 and stopped. The volume is kept, as the

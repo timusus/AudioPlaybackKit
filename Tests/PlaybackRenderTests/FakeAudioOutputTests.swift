@@ -111,16 +111,6 @@ final class FakeAudioOutputTests: XCTestCase {
             XCTAssertEqual($0 as? AudioOutputError, .formatRejected(surround))
         }
         XCTAssertEqual(output.enqueues, [])
-        XCTAssertTrue(output.isReadyForMoreData)
-    }
-
-    func testReadyForMoreWhileLessThanTheDepthIsQueuedAhead() throws {
-        let output = FakeAudioOutput(readyAhead: 1)
-        try output.enqueue([1, 2, 3, 4, 5, 6], format: mono, at: 0)
-        XCTAssertFalse(output.isReadyForMoreData)
-        output.setRate(1, at: 0)
-        output.advance(by: 0.75)
-        XCTAssertTrue(output.isReadyForMoreData)
     }
 
     func testAFormatChangeBetweenEnqueuesJoinsWithoutAGap() throws {

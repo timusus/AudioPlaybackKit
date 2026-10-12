@@ -17,7 +17,8 @@ public struct PCMFormat: Hashable, Sendable {
     /// output configuration changed so queued audio is stale; the caller re-feeds from that time.
     case autoFlushed(at: TimeInterval)
     /// The output stopped consuming audio until the next `flush()`; its clock no longer tracks
-    /// what is heard.
+    /// what is heard. `SampleBufferAudioOutput` cannot detect this, so only the fake sends it; the
+    /// feeder handles it for an output that can.
     case stalled
     /// The renderer failed: nothing queued will play and only `rebuild()` brings the output back.
     case failed(any Error)
@@ -60,7 +61,6 @@ public struct PCMFormat: Hashable, Sendable {
     func setVolume(_ volume: Float)
     func currentTime() -> TimeInterval
     var outputLatency: TimeInterval { get }
-    var isReadyForMoreData: Bool { get }
     /// Replaces a failed renderer with a fresh one, keeping volume and settings. Everything queued
     /// is gone and the clock starts again from 0 at rate 0. No event from before it is sent after it.
     func rebuild() throws

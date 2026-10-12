@@ -91,10 +91,6 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
         #endif
     }
 
-    var isReadyForMoreData: Bool {
-        renderer.isReadyForMoreMediaData
-    }
-
     /// A fresh renderer on a fresh synchronizer: Apple does not say whether a synchronizer survives
     /// a media-services reset, and a new one costs little.
     func rebuild() throws {
