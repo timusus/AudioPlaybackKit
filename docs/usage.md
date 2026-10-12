@@ -230,8 +230,12 @@ two seconds ahead of the join, and one removed, replaced or skipped while it ope
 `interrupt(through:)`.
 
 **Effects.** Skip-silence, Voice Boost, ReplayGain, EQ and limiters are `AudioProcessor`s passed to
-`setProcessors(_:)`. They run on interleaved Float32 PCM on the transport's queue, in order, and
-may drop frames (`ProcessorOutput.dropped`, so positions stay in media time) but never add them. A
+`setProcessors(_:)`. They run on interleaved Float32 PCM on the transport's queue, in order. A stage
+that keeps every frame (EQ, gain, a limiter without lookahead) implements `process(_:)` and rewrites
+the chunk's own buffer, so the chain copies nothing; one that drops frames (`ProcessorOutput.dropped`,
+so positions stay in media time), holds them back or changes the channel count is a
+`BufferingAudioProcessor` (ADR-0026). No stage adds frames. `configure(_:)` and `flush(_:)` may
+allocate; `process(_:)` and `queueInput(_:)` run per chunk and should not. A
 processor cannot change the sample rate; `configure(_:)` receives the item's format, so a filter that
 depends on the rate (an EQ) derives its coefficients there and again after each `flush(_:)`. The
 chain is drained and flushed at every item change, gapless joins included, at the start and after a

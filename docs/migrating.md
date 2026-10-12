@@ -67,7 +67,7 @@ Skip chime plays on its own `AVAudioPlayer` until the render layer mixes at the 
 | `EngineAudioPlayerBridge` (the `IosAudioPlayer` adapter) | `ShuttlePodcasts/Platform/Audio/AVAudioEnginePlaybackController+IosAudioPlayer.swift` | the adapter that remains: `load(url:episodeId:positionMs:playWhenReady:)` is `setItems([episode], startPosition:)` then `play()` if asked, `seek(positionMs:)` is `seek(to:)` over 1000, `setSpeed` is `rate`, `setVolume` is `volume` |
 | `PlaybackControlling`, `PlaybackControllerState`, `PlaybackControllerEvent` | `PlaybackControlling.swift` | the bridge publishes them from `Player` state and `events`, until nothing else reads them |
 | `StreamingPCMReader` | `StreamingPCMReader.swift` | `FFmpegItemSource(reader: GrowingFileByteSource(...))` in the `makeSource` closure, with the ad-skip scan's `GrowingFileListener` tap attached to the source |
-| `SilenceGate`, `VoiceEnhanceProcessor`, `LookaheadLimiter` | `Sources/SilenceGate/`, `Sources/VoiceEnhance/` | `AudioProcessor`s, in that order, passed to `setProcessors` |
+| `SilenceGate`, `VoiceEnhanceProcessor`, `LookaheadLimiter` | `Sources/SilenceGate/`, `Sources/VoiceEnhance/` | processors, in that order, passed to `setProcessors`: `VoiceEnhanceProcessor` in place, `SilenceGate` (drops) and `LookaheadLimiter` (delays) as `BufferingAudioProcessor`s |
 | `PlaybackEnhancementTracker` (reads `pref_skip_silence`, `pref_voice_enhance` per buffer) | `PlaybackEnhancementSettings.swift` | a processor flag read under the processor's lock; `setProcessors` only if `isActive` or the output format changes |
 | `SkipCueMixer` | `SkipCueMixer.swift` | chime on its own player; the duck is a `volume` ramp |
 | Sleep-timer fade, `SleepTimerManager.kt` | the controller, Kotlin | `volume` ramp; the timer calls `pause()`, or sets `pauseAtEndOfItem` for "end of episode" |
@@ -97,7 +97,7 @@ Details:
 | `MusicPlaybackController` and its `+Output`, `+Stream`, `+Timeline`, `+Underrun`, `+Opening` extensions, `PreopenLead`, `UnderrunResumeRule` | `Playback/Sources/S2Playback/Engine/` | deleted; one `Player<PlaybackTrack>` |
 | `PlaybackTrack` (`uid`, `gainDb`, `makeSource`) | `PlaybackTrack.swift` | the `Item`; `makeSource` is the `makeSource` closure |
 | `TrackPCMSource`, `FFmpegTrackSource` | `TrackPCMSource.swift` | `FFmpegItemSource(reader:)`; no conversion to a fixed output format. A progressive transcode is the app's own `ItemSource`, below |
-| `PCMProcessor`: ReplayGain, `EqualizerSettings`, `LimiterSettings` | `DSP/PCMProcessor.swift` | `AudioProcessor`s: ReplayGain first, picking the gain in `flush(_:)` (ADR-0021), then EQ and limiter |
+| `PCMProcessor`: ReplayGain, `EqualizerSettings`, `LimiterSettings` | `DSP/PCMProcessor.swift` | in-place `AudioProcessor`s: ReplayGain first, picking the gain in `flush(_:)` (ADR-0021), then EQ and limiter, each in `process(_:)` (ADR-0026) |
 | Short-end re-open (an item ending before its duration is re-opened at the position, up to 3 tries) | `Engine/` | app-owned: the package plays a short end as the end, so the app re-opens from its `itemTransition` handler and counts the tries |
 | Start-up timing logs | `Engine/` | app-owned, timed from `events` and the observed `state` |
 | `+Reporting`, `+Slot`, `+StartTiming` controller extensions | `Engine/` | deleted with the controller; what the app still reports it reads from `events` |
@@ -120,7 +120,9 @@ Details:
    gets the item's rate and must ask for coefficients for it, again after each `flush(_:)` that follows a
    rate change. Never cache a 44.1 kHz set.
 4. **Limiter and EQ state across a join.** Every join drains, re-configures and flushes the pipeline,
-   so filter memory and the limiter envelope reset there, whatever the format.
+   so filter memory and the limiter envelope reset there, whatever the format. Both run in place:
+   `process(_:)` filters the lent buffer instead of returning a copy. A limiter with lookahead delays
+   audio, so it is a `BufferingAudioProcessor` instead.
 5. **Remove the fixed output format.** Each item plays at its own sample rate and channel count, so
    `PCMProcessor` loses its assumption of stereo at `outputSampleRate`.
 6. **Progressive transcodes** (`onSeekUnsupported` today): the app's `ItemSource` streams the transcode
@@ -160,6 +162,12 @@ Each step ships on its own. Put the new path behind a flag until step 4; the ada
 - `configure(_:)` only stages and `flush(_:)` applies, so a rate-dependent filter rebuilds in `flush(_:)`,
   which also names the item whose frames follow. A
   toggle or gain the app changes while playing is read under the processor's own lock.
+- A stage that keeps every frame where it is conforms to `AudioProcessor` and rewrites the buffer
+  `process(_:)` lends it, for that call only. A stage that drops or delays frames, or changes the
+  channel count, conforms to `BufferingAudioProcessor` (`queueInput`, `getOutput`, `queueEndOfStream`,
+  `isEnded`) (ADR-0026).
+- Allocate in `configure(_:)` and `flush(_:)` (filter state, coefficients, a delay line), never per chunk
+  in `process(_:)` or `queueInput(_:)`. All run on the transport's queue, not the render thread.
 - A stage that removes audio (a silence gate) reports each removal as `DroppedFrames`, in input frames, at
   the output frame it precedes. Positions then stay in media time, which is what the ad-skip arithmetic and
   the saved resume point use.
