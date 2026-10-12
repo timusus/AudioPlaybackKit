@@ -155,6 +155,31 @@ extension GrowingFileByteSourceTests {
             task.cancel()
         }
     }
+
+    func testACrossOriginRedirectKeepsThePackagesRangeWhenTheAppSendsItsOwn() throws {
+        let from = "http://host.example/a.mp3", to = "https://other.example/b.mp3"
+        let source = makeSource(
+            URL(string: from)!, authHeaders: ["Range": "bytes=0-", "Authorization": "Basic c2VjcmV0"]
+        )
+        var original = URLRequest(url: URL(string: from)!)
+        original.setValue("bytes=500-", forHTTPHeaderField: "Range")
+        let task = Self.testSession.dataTask(with: original)
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: URL(string: from)!, statusCode: 302, httpVersion: nil, headerFields: ["Location": to]
+        ))
+
+        var next: URLRequest?
+        source.urlSession(
+            Self.testSession, task: task, willPerformHTTPRedirection: response,
+            newRequest: URLRequest(url: URL(string: to)!)
+        ) {
+            next = $0
+        }
+        let hop = try XCTUnwrap(next)
+        XCTAssertEqual(hop.value(forHTTPHeaderField: "Range"), "bytes=500-")
+        XCTAssertNil(hop.value(forHTTPHeaderField: "Authorization"))
+        task.cancel()
+    }
 }
 
 private final class WeakSourceBox: @unchecked Sendable {
