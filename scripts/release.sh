@@ -80,12 +80,19 @@ echo "release.sh: swift test"
 swift test
 
 # The byte source runs on iOS URLSession in the apps, so its tests also run on a simulator,
-# picked by UDID (IOS_SIM_UDID, else the first available iPhone). Give it a simulator no other
-# run uses: a parallel-testing xcodebuild clones its device, shutting it down mid-suite.
-udid="${IOS_SIM_UDID:-$(xcrun simctl list devices available | grep -E '^ +iPhone' | head -1 | grep -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}')}"
+# on a device of its own (IOS_SIM_UDID overrides): another repo's parallel-testing xcodebuild clones
+# the shared iPhone, which shuts it down mid-suite (timusus/devtools#23).
+sim_name="AudioPlaybackKit Verify"
+devices="$(xcrun simctl list devices available -j)"
+udid="${IOS_SIM_UDID:-$(jq -r --arg n "$sim_name" '[.devices[][] | select(.name == $n)][0].udid // empty' <<<"$devices")}"
 if [[ -z "$udid" ]]; then
-    echo "release.sh: no available iPhone simulator; set IOS_SIM_UDID" >&2
-    exit 1
+    read -r runtime devtype < <(jq -r '[.devices | to_entries[] | select(.key | test("iOS")) | .key as $r
+        | .value[] | select(.name | startswith("iPhone")) | "\($r) \(.deviceTypeIdentifier)"] | last // empty' <<<"$devices")
+    if [[ -z "${runtime:-}" ]]; then
+        echo "release.sh: no iPhone simulator to model '$sim_name' on; set IOS_SIM_UDID" >&2
+        exit 1
+    fi
+    udid="$(xcrun simctl create "$sim_name" "$devtype" "$runtime")"
 fi
 echo "release.sh: PlaybackStreamingTests on iOS simulator $udid"
 xcodebuild test -scheme AudioPlaybackKit-Package -only-testing:PlaybackStreamingTests \
