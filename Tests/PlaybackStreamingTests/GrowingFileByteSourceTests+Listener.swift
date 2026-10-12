@@ -8,19 +8,19 @@ import PlaybackDecode
 private final class RecordingListener: GrowingFileListener, @unchecked Sendable {
     private let lock = NSLock()
     private var _started: [(file: any GrowingFileSnapshotSource, position: () -> Int64)] = []
-    private var _seeks: [(ms: Int64, generation: Int)] = []
+    private var _seeks: [(time: TimeInterval, generation: Int)] = []
     private var _received: [(event: GrowingFileEvent, snapshot: GrowingFileSnapshot, fileBytes: Data?)] = []
 
     var started: [(file: any GrowingFileSnapshotSource, position: () -> Int64)] { lock.withLock { _started } }
-    var seeks: [(ms: Int64, generation: Int)] { lock.withLock { _seeks } }
+    var seeks: [(time: TimeInterval, generation: Int)] { lock.withLock { _seeks } }
     var received: [(event: GrowingFileEvent, snapshot: GrowingFileSnapshot, fileBytes: Data?)] { lock.withLock { _received } }
 
     func playbackDidStart(file: any GrowingFileSnapshotSource, decoderPosition: @escaping () -> Int64) {
         lock.withLock { _started.append((file, decoderPosition)) }
     }
 
-    func playerWillSeek(toMs ms: Int64, generation: Int) {
-        lock.withLock { _seeks.append((ms, generation)) }
+    func playerWillSeek(to time: TimeInterval, generation: Int) {
+        lock.withLock { _seeks.append((time, generation)) }
     }
 
     func growingFile(_ event: GrowingFileEvent, snapshot: GrowingFileSnapshot) {
@@ -55,8 +55,8 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(listener.started.count, 1)
         XCTAssertEqual(listener.started[0].position(), 0)
         XCTAssertTrue(listener.started[0].file === source)
-        listener.playerWillSeek(toMs: 1500, generation: 4)
-        XCTAssertEqual(listener.seeks.first?.ms, 1500)
+        listener.playerWillSeek(to: 1.5, generation: 4)
+        XCTAssertEqual(listener.seeks.first?.time, 1.5)
         XCTAssertEqual(listener.seeks.first?.generation, 4)
 
         XCTAssertEqual(try readToEnd(source), body)

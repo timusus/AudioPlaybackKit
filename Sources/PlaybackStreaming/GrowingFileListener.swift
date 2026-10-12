@@ -13,10 +13,10 @@ public protocol GrowingFileListener: AnyObject {
     /// position (its absolute byte offset). Hold `file` weakly: the source owns it.
     func playbackDidStart(file: any GrowingFileSnapshotSource, decoderPosition: @escaping () -> Int64)
 
-    /// The player is about to move the decoder to `ms`. Announced before the decoder is told, so
-    /// a transaction the seek opens (its snapshot's `seekGeneration` equals `generation`) can be
-    /// paired with the target.
-    func playerWillSeek(toMs ms: Int64, generation: Int)
+    /// The player is about to move the decoder to `time`, in seconds. Announced before the decoder
+    /// is told, so a transaction the seek opens (its snapshot's `seekGeneration` equals
+    /// `generation`) can be paired with the target.
+    func playerWillSeek(to time: TimeInterval, generation: Int)
 
     /// A transaction was accepted or the download moved; `snapshot` was taken just after.
     func growingFile(_ event: GrowingFileEvent, snapshot: GrowingFileSnapshot)

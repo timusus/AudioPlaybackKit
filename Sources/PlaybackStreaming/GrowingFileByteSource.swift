@@ -65,8 +65,7 @@ import PlaybackDecode
 ///
 /// **``cancel()`` must be called**: a running task retains its delegate, this object. Handed to an
 /// `FFmpegItemSource`, the transport's `ItemSource.release()` calls it once it lets go of the item.
-public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFileSnapshotSource,
-    URLSessionDataDelegate {
+public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFileSnapshotSource {
 
     /// The window, in seconds, over which ``GrowingFileSnapshot/downloadBytesPerSecond`` is
     /// averaged. A constant consumers may read.
@@ -433,7 +432,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
                 let task = session.dataTask(with: request)
                 self.task = task
                 attempt = send.attempt
-                task.delegate = self
+                task.delegate = SessionDelegate(self)
                 requestsSent += 1
                 task.resume()
             case .schedule(let timer, let seconds):
@@ -559,9 +558,9 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         return attempt
     }
 
-    // MARK: - URLSessionDataDelegate (the session's serial delegate queue)
+    // MARK: - URLSessionDataDelegate (the session's serial delegate queue; see ``SessionDelegate``)
 
-    public func urlSession(
+    func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
         willPerformHTTPRedirection response: HTTPURLResponse,
@@ -586,7 +585,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         completionHandler(next)
     }
 
-    public func urlSession(
+    func urlSession(
         _ session: URLSession,
         task: URLSessionTask,
         didReceive challenge: URLAuthenticationChallenge,
@@ -637,7 +636,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         })
     }
 
-    public func urlSession(
+    func urlSession(
         _ session: URLSession,
         dataTask: URLSessionDataTask,
         didReceive response: URLResponse,
@@ -663,7 +662,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         perform(deferred.filter { if case .makeRoom = $0 { return false } else { return true } })
     }
 
-    public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         let claim = locked { () -> (file: SessionFile, attempt: Int, parts: [GrowingFileDownload.ChunkPart])? in
             guard let attempt = attemptLocked(dataTask), let file,
                   let parts = machine.chunkParts(attempt: attempt, count: data.count) else { return nil }
@@ -694,7 +693,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         })
     }
 
-    public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         perform(locked { () -> [Deferred] in
             guard let attempt = attemptLocked(task) else { return [] }
             let nsError = error.map { $0 as NSError }

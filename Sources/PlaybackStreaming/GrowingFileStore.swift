@@ -27,7 +27,7 @@ public final class GrowingFileStore {
     static let headroomBytes: Int64 = 200 * 1024 * 1024
 
     /// `pwrite`'s shape: bytes written, or -1 with `errno` set.
-    public typealias WriteFunction = (_ descriptor: Int32, _ bytes: UnsafeRawPointer, _ count: Int, _ offset: off_t) -> Int
+    @_spi(Testing) public typealias WriteFunction = (_ descriptor: Int32, _ bytes: UnsafeRawPointer, _ count: Int, _ offset: off_t) -> Int
 
     public static let shared: GrowingFileStore = {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
@@ -43,19 +43,24 @@ public final class GrowingFileStore {
 
     public let directory: URL
     /// This store's complete-file ceiling; ``budgetBytes`` unless set at init.
-    public let budget: Int64
+    let budget: Int64
     let write: WriteFunction
     private let availableCapacity: () -> Int64?
 
+    /// - Parameter budgetBytes: the ceiling of this store's complete-file cache. Give each owner (a
+    ///   podcast library, a music library) a store of its own directory and budget so one cannot
+    ///   evict the other.
+    public convenience init(directory: URL, budgetBytes: Int64 = GrowingFileStore.budgetBytes) {
+        self.init(directory: directory, budgetBytes: budgetBytes, write: { Foundation.pwrite($0, $1, $2, $3) })
+    }
+
     /// - Parameters:
-    ///   - budgetBytes: the ceiling of this store's complete-file cache. Give each owner (a podcast
-    ///     library, a music library) a store of its own directory and budget so one cannot evict the other.
     ///   - write: how body bytes reach the disk; `pwrite` but in a test.
     ///   - availableCapacity: free bytes for important usage on the volume; the real query when nil.
-    public init(
+    @_spi(Testing) public init(
         directory: URL,
         budgetBytes: Int64 = GrowingFileStore.budgetBytes,
-        write: @escaping WriteFunction = { Foundation.pwrite($0, $1, $2, $3) },
+        write: @escaping WriteFunction,
         availableCapacity: (() -> Int64?)? = nil
     ) {
         self.directory = directory
@@ -107,41 +112,6 @@ public final class GrowingFileStore {
         let partials = files(withExtension: "partial")
         for file in partials { try? FileManager.default.removeItem(at: file.url) }
         return partials.count
-    }
-
-    // MARK: - Retired run cache
-
-    /// The removed `CachedRunStore`'s folder: up to ``budgetBytes`` under
-    /// `Application Support/streamed-runs`, which iOS never purges and, its writer gone, nothing
-    /// else touches either. Housekeeping for the launch path: call once, off the main thread (the
-    /// delete can touch a gigabyte); a missing folder is a no-op, and any error is logged and
-    /// swallowed rather than allowed to disturb a launch.
-    public static func removeRetiredRunCache(applicationSupport: URL) {
-        let retired = applicationSupport.appendingPathComponent("streamed-runs", isDirectory: true)
-        let files = FileManager.default
-        var isDirectory: ObjCBool = false
-        guard files.fileExists(atPath: retired.path, isDirectory: &isDirectory), isDirectory.boolValue else { return }
-        let bytes = directoryBytes(retired)
-        do {
-            try files.removeItem(at: retired)
-            if bytes > 0 {
-                downloadLog.info("download: removed the retired streamed-runs cache bytes=\(bytes)")
-            }
-        } catch {
-            downloadLog.error("download: removing the retired streamed-runs cache failed \(error.localizedDescription, privacy: .public)")
-        }
-    }
-
-    /// What ``removeRetiredRunCache(applicationSupport:)`` frees, for the one log line. Zero when
-    /// the folder cannot be read: the delete still goes ahead.
-    private static func directoryBytes(_ directory: URL) -> Int64 {
-        let keys: [URLResourceKey] = [.fileSizeKey]
-        guard let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: keys) else { return 0 }
-        var total: Int64 = 0
-        for case let url as URL in enumerator {
-            total += Int64((try? url.resourceValues(forKeys: Set(keys)))?.fileSize ?? 0)
-        }
-        return total
     }
 
     // MARK: - Complete files

@@ -183,7 +183,8 @@ and `isComplete` says it reaches the end. `readWaitingSince` is the source clock
 parked for bytes (nil when none waits), and `now - readWaitingSince` is the stall. `onEvent` delivers changes without polling: `.readWaiting(since:)` when the decoder's read parks for bytes and `.readResumed` when it ends (once per stall, on the decoder's thread outside the source's lock), `.transaction` when a
 response is accepted, `.download` at most once a second, `.seekLanded` when a seek was served from the
 file already on disk. A host that wants protocol-shaped callbacks implements `GrowingFileListener` and
-calls it from `onEvent`; the source does not take a listener. A listener reads the file back through
+calls it from `onEvent`; the source does not take a listener. `playerWillSeek(to:generation:)` takes the
+target in seconds, like every time in this module. A listener reads the file back through
 `fileURL`, so it never sees a byte the decoder did not have.
 
 ## Play through the render layer

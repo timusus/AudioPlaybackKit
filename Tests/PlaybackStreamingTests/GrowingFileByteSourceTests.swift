@@ -1,5 +1,5 @@
 import XCTest
-@testable import PlaybackStreaming
+@testable @_spi(Testing) import PlaybackStreaming
 import PlaybackStreamingTestSupport
 import PlaybackDecode
 
