@@ -4,7 +4,7 @@ import Observation
 import PlaybackDecode
 import UIKit
 import XCTest
-@testable import PlaybackNowPlaying
+@_spi(Testing) @testable import PlaybackNowPlaying
 @_spi(Testing) @testable import PlaybackPlayer
 @_spi(Testing) @testable import PlaybackRender
 
