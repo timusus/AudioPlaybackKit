@@ -59,25 +59,3 @@ Public, unused by either app, kept: `streamProbed(duration:)` and `GrowingFileRe
 (the time-based read-ahead; both apps pass bytes), `untrustedCertificateReason`, `leafSHA256(of:)` (an app
 pinning a certificate needs it to compute the hash), `GrowingFileStore.directory` (used in P tests),
 `fetchedEnd` (a `StreamByteReader` requirement). The `PlaybackStreamingTestSupport` surface is unchanged.
-
-## Removed
-
-### `GrowingFileStore.removeRetiredRunCache(applicationSupport:)`
-
-Pure file-system cleanup of an app's old `streamed-runs` folder; it used nothing of the package.
-
-- P `ShuttlePodcasts/KMP/IosAppDependencies.swift:104`
-- S `Playback/Sources/S2Playback/Streaming/StreamStore.swift:24` (called for both Caches and Application Support)
-
-Replacement to paste into each app (rename the log subsystem as needed), then delete it once no install
-predates the cleanup:
-
-```swift
-func removeRetiredRunCache(in directory: URL) {
-    let retired = directory.appendingPathComponent("streamed-runs", isDirectory: true)
-    try? FileManager.default.removeItem(at: retired)  // a missing folder is a no-op
-}
-```
-
-Keep the existing call off the main thread (Podcasts already uses `Task.detached`); the delete can touch a
-gigabyte. The old function also logged the freed byte count; drop that unless wanted.

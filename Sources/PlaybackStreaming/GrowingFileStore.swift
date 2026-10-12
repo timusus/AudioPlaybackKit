@@ -114,6 +114,41 @@ public final class GrowingFileStore {
         return partials.count
     }
 
+    // MARK: - Retired run cache
+
+    /// The removed `CachedRunStore`'s folder: up to ``budgetBytes`` under
+    /// `Application Support/streamed-runs`, which iOS never purges and, its writer gone, nothing
+    /// else touches either. Housekeeping for the launch path: call once, off the main thread (the
+    /// delete can touch a gigabyte); a missing folder is a no-op, and any error is logged and
+    /// swallowed rather than allowed to disturb a launch.
+    public static func removeRetiredRunCache(applicationSupport: URL) {
+        let retired = applicationSupport.appendingPathComponent("streamed-runs", isDirectory: true)
+        let files = FileManager.default
+        var isDirectory: ObjCBool = false
+        guard files.fileExists(atPath: retired.path, isDirectory: &isDirectory), isDirectory.boolValue else { return }
+        let bytes = directoryBytes(retired)
+        do {
+            try files.removeItem(at: retired)
+            if bytes > 0 {
+                downloadLog.info("download: removed the retired streamed-runs cache bytes=\(bytes)")
+            }
+        } catch {
+            downloadLog.error("download: removing the retired streamed-runs cache failed \(error.localizedDescription, privacy: .public)")
+        }
+    }
+
+    /// What ``removeRetiredRunCache(applicationSupport:)`` frees, for the one log line. Zero when
+    /// the folder cannot be read: the delete still goes ahead.
+    private static func directoryBytes(_ directory: URL) -> Int64 {
+        let keys: [URLResourceKey] = [.fileSizeKey]
+        guard let enumerator = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: keys) else { return 0 }
+        var total: Int64 = 0
+        for case let url as URL in enumerator {
+            total += Int64((try? url.resourceValues(forKeys: Set(keys)))?.fileSize ?? 0)
+        }
+        return total
+    }
+
     // MARK: - Complete files
 
     /// The cached complete file for `url`, touched as just played; nil when there is none. A
