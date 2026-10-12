@@ -152,6 +152,22 @@ final class PlayerErrorTests: XCTestCase {
         XCTAssertEqual(PlayerRig.failedIndices(events), [2, 0])
     }
 
+    // Removing a failed current loads its successor however the item failed, even from the last.
+    func testRemovingACurrentThatFailedToOpenPlaysItsSuccessor() {
+        rig.factory.unopenable = ["b"]
+        player.setItems(["a", "b"], startIndex: 1)
+        player.play()
+        rig.pump()
+        XCTAssertEqual(player.error?.kind, .source)
+
+        player.remove(at: 1)
+        rig.run(for: 1)
+        XCTAssertNil(player.error)
+        XCTAssertEqual(player.currentItem, "a")
+        XCTAssertEqual(player.state, .ready)
+        XCTAssertEqual(player.position, 1)
+    }
+
     func testAFailedNextTheAppRemovesIsNeverReported() async {
         rig.factory.unopenable = ["b"]
         player.setItems(["a", "b", "c"])

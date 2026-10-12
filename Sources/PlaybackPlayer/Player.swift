@@ -205,7 +205,8 @@ public final class Player<Item: Hashable & Sendable> {
             currentIndex = successor
             movePosition(to: 0)
             forgetSource()
-            let ends = loadedKey != nil && (repeatMode == .one || (index == entries.count && repeatMode == .off))
+            // A failure that opened its source still holds a key, yet nothing plays to reach an end.
+            let ends = loadedKey != nil && error == nil && (repeatMode == .one || (index == entries.count && repeatMode == .off))
             if ends { unload(as: .ended) }
             // Before the load, whose failure to make a source is reported after the transition.
             send(.itemTransition(from: current, to: successor, reason: .seek))
