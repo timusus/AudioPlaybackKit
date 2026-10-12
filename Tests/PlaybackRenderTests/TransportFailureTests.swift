@@ -76,7 +76,7 @@ final class TransportFailureTests: XCTestCase {
 
     private var positions: [String] {
         recorder.events.compactMap {
-            guard case let .position(item, seconds, _) = $0 else { return nil }
+            guard case let .position(item, seconds, _, _) = $0 else { return nil }
             return "\(item) \(seconds)"
         }
     }

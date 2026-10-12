@@ -22,7 +22,7 @@ final class TransportSecondsTests: XCTestCase {
 
         var positions: [(item: String, seconds: TimeInterval, duration: TimeInterval?)] {
             recorder.events.compactMap {
-                guard case let .position(item, seconds, duration) = $0 else { return nil }
+                guard case let .position(item, seconds, duration, _) = $0 else { return nil }
                 return (item, seconds, duration)
             }
         }
@@ -113,7 +113,7 @@ final class TransportSecondsTests: XCTestCase {
         let events = rig.recorder.events.compactMap { event -> String? in
             switch event {
             case let .sought(item, seconds, applied): "sought \(item) \(seconds)\(applied ? "" : " ignored")"
-            case let .position(item, seconds, _): "position \(item) \(seconds)"
+            case let .position(item, seconds, _, _): "position \(item) \(seconds)"
             case .crossed, .status, .failed, .recovered: nil
             }
         }

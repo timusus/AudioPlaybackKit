@@ -14,8 +14,8 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     /// pump; frames a processor dropped are skipped when they would have played. Within an item it
     /// never goes back except on a `seek` or `setCurrent`, so position deltas are listening time.
     /// `duration` is the item's length as its source probed it, for the progress bar and Now
-    /// Playing; nil when unknown (a live stream).
-    case position(item: Item, seconds: TimeInterval, duration: TimeInterval?)
+    /// Playing; nil when unknown. `isSeekable` is the source's `ItemSource.isSeekable`.
+    case position(item: Item, seconds: TimeInterval, duration: TimeInterval?, isSeekable: Bool)
     /// `item` is now the one at the playhead: the gapless join reached the speaker, or the first
     /// item's audio was written there, playing or paused.
     case crossed(item: Item)
@@ -230,7 +230,8 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private func report(_ position: MediaPositionMap.Position) {
         guard let item = ids[position.item], let rate = upstream.sampleRates[position.item] else { return }
         let duration = sequencer.duration(of: position.item).map { Double($0) / rate }
-        onEvent(.position(item: item, seconds: Double(position.mediaFrame) / rate, duration: duration))
+        let isSeekable = sequencer.isSeekable(position.item)
+        onEvent(.position(item: item, seconds: Double(position.mediaFrame) / rate, duration: duration, isSeekable: isSeekable))
     }
 
     private func forget(_ change: Sequencer.TailChange) {

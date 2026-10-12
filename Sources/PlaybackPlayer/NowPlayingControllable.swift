@@ -52,7 +52,7 @@ public protocol NowPlayingControllable<Item>: AnyObject {
     var position: TimeInterval { get }
     /// Moves on every jump of `position`, as `Player.discontinuityCount`.
     var discontinuityCount: Int { get }
-    /// Nil until the item has opened, and for a live stream.
+    /// Nil until the item has opened, and whenever its source does not know it.
     var duration: TimeInterval? { get }
     var isLive: Bool { get }
     var rate: Double { get set }
@@ -110,7 +110,7 @@ extension Player: NowPlayingControllable {
         var commands: PlayerCommands = [.playPause, .setRate]
         if hasNext { commands.insert(.seekToNext) }
         if hasPrevious || (currentItem != nil && !isLive) { commands.insert(.seekToPrevious) }
-        if duration != nil { commands.formUnion([.seekInCurrentItem, .seekForward, .seekBack]) }
+        if isSeekable { commands.formUnion([.seekInCurrentItem, .seekForward, .seekBack]) }
         return commands
     }
 

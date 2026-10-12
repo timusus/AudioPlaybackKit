@@ -15,8 +15,12 @@ public protocol ItemSource: AnyObject, Sendable {
     /// it runs once decode of the item before has ended, about two seconds ahead of the join, so
     /// a slow resolve overlaps that tail. Once interrupted it may return early or throw.
     func open() throws -> PCMFormat
-    /// The item's length in frames, read once `open()` returns; nil when unknown (a live stream).
+    /// The item's length in frames, read once `open()` returns; nil when unknown.
     var duration: Int64? { get }
+    /// Whether `seek(toFrame:)` can move within the item, read once `open()` returns. A source that
+    /// re-opens at a time offset is seekable with no duration; an item neither seekable nor of known
+    /// duration is live (ADR-0022). Defaults to a known duration.
+    var isSeekable: Bool { get }
     /// Sample-accurate (ADR-0009); returns the media frame it landed on, which reads continue from.
     func seek(toFrame frame: Int64) throws -> Int64
     /// Interleaved PCM, nil at the item's end. A failure throws, so it is never mistaken for an end.
@@ -28,6 +32,7 @@ public protocol ItemSource: AnyObject, Sendable {
 
 public extension ItemSource {
     var duration: Int64? { nil }
+    var isSeekable: Bool { duration != nil }
 }
 
 /// `FFmpegStreamDecoder` as an item source. The decoder already trims encoder delay and padding
@@ -43,6 +48,8 @@ public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
     private var sampleRate: Double = 0
     /// As the container states it once probed (an MP3's Xing or Info frame, MP4's sample table).
     public private(set) var duration: Int64?
+    /// ADR-0017's rule: only a stream with neither a byte length nor a container duration is live.
+    public private(set) var isSeekable = false
 
     /// The source owns `reader` from here on: only the transport's decode executor reads it.
     public init(reader: StreamByteReader) {
@@ -70,6 +77,7 @@ public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
             let format = try decoder.open()
             sampleRate = format.sampleRate
             duration = format.duration.map { Int64(($0 * format.sampleRate).rounded()) }
+            isSeekable = duration != nil || reader.totalLength != nil
             return PCMFormat(sampleRate: format.sampleRate, channelCount: format.channelCount)
         } catch {
             lock.withLock { self.decoder = nil }

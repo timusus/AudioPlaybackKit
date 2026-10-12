@@ -31,7 +31,7 @@ final class ExternalConsumerTests: XCTestCase {
         timer.fire()
 
         let seconds = events.all.compactMap { event -> TimeInterval? in
-            guard case let .position(item, seconds, _) = event, item == "a" else { return nil }
+            guard case let .position(item, seconds, _, _) = event, item == "a" else { return nil }
             return seconds
         }
         XCTAssertEqual(seconds.last, 1)

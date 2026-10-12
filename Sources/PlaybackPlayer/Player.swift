@@ -33,9 +33,14 @@ public final class Player<Item: Hashable & Sendable> {
     /// repeat, as media3's `onPositionDiscontinuity`. It changes with the call, alongside the new
     /// `position`, so a reader never pairs it with the old one. Compare it; it may move more than once.
     public private(set) var discontinuityCount = 0
-    /// Nil until the item's source has opened, and for a live stream.
+    /// Nil until the item's source has opened, and when the source does not know it.
     public private(set) var duration: TimeInterval?
-    public private(set) var isLive = false
+    /// media3 `isCurrentMediaItemSeekable`: the source said so once it opened (ADR-0022).
+    public var isSeekable: Bool { seekable == true }
+    /// Neither seekable nor of known duration once opened (ADR-0022).
+    public var isLive: Bool { seekable == false && duration == nil }
+    /// The source's `isSeekable`, nil until it has opened.
+    private var seekable: Bool?
 
     @ObservationIgnored public let events: AsyncStream<PlayerEvent<Item>>
 
@@ -185,7 +190,7 @@ public final class Player<Item: Hashable & Sendable> {
             let successor = index < entries.count ? index : 0
             currentIndex = successor
             movePosition(to: 0)
-            duration = nil
+            forgetSource()
             let ends = loadedKey != nil && (repeatMode == .one || (index == entries.count && repeatMode == .off))
             if ends { unload(as: .ended) }
             // Before the load, whose failure to make a source is reported after the transition.
@@ -202,8 +207,7 @@ public final class Player<Item: Hashable & Sendable> {
         error = nil
         unload(as: .idle)
         movePosition(to: 0)
-        duration = nil
-        isLive = false
+        forgetSource()
         if previous != nil { send(.itemTransition(from: previous, to: nil, reason: .seek)) }
     }
 
@@ -277,10 +281,15 @@ public final class Player<Item: Hashable & Sendable> {
 
     // MARK: Position
 
-    /// Clamped to `0...duration` when the duration is known; ignored for a live item.
+    /// Clamped to `0...duration` when the duration is known. Refused once the item's source has said
+    /// it cannot seek. A clamp or refusal is reported as `.seekAdjusted`, never dropped silently.
     public func seek(to position: TimeInterval) {
-        guard let current = currentIndex, !isLive, position.isFinite else { return }
+        guard let current = currentIndex, position.isFinite else { return }
+        guard seekable != false else {
+            return send(.seekAdjusted(index: current, requested: position, position: self.position))
+        }
         let target = min(max(position, 0), duration ?? .infinity)
+        defer { if target != position { send(.seekAdjusted(index: current, requested: position, position: target)) } }
         if let loadedKey, error == nil {
             seekTransport(item: loadedKey, to: target)
             movePosition(to: target)
@@ -304,8 +313,7 @@ public final class Player<Item: Hashable & Sendable> {
         let idle = error != nil || (loadedKey == nil && unloadedState == .idle)
         currentIndex = index
         movePosition(to: seconds)
-        duration = nil
-        isLive = false
+        forgetSource()
         // Before the load, whose failure to make a source is reported after the transition.
         send(.itemTransition(from: current, to: index, reason: .seek))
         if !idle { jump(to: index, at: seconds) }
@@ -456,15 +464,15 @@ public final class Player<Item: Hashable & Sendable> {
 
     private func apply(_ event: TransportEvent<Int>) {
         switch event {
-        case let .position(key, seconds, duration):
+        case let .position(key, seconds, duration, isSeekable):
             guard key == loadedKey, let current = currentIndex else { return }
             position = seconds
             self.duration = duration
-            // The source has opened by the time audio is reported, so no duration means live.
-            isLive = duration == nil
-            if seekTarget != nil {
+            seekable = isSeekable
+            if let target = seekTarget {
                 seekTarget = nil
                 send(.seekLanded(index: current, position: seconds))
+                landed(at: seconds, seekingTo: target, index: current)
             }
         case let .status(status):
             transportStatus = status
@@ -518,8 +526,7 @@ public final class Player<Item: Hashable & Sendable> {
         self.armedKey = nil
         seekTarget = nil
         movePosition(to: seconds)
-        duration = nil
-        isLive = false
+        forgetSource()
         armNext()
     }
 
@@ -527,6 +534,21 @@ public final class Player<Item: Hashable & Sendable> {
     private func movePosition(to seconds: TimeInterval) {
         position = seconds
         discontinuityCount += 1
+    }
+
+    /// A source that lands away from the target (a keyframe, a time-offset URL) moves `position`
+    /// again, as media3's `DISCONTINUITY_REASON_SEEK_ADJUSTMENT`. Rounding to a frame moves it under
+    /// a millisecond at any real sample rate, which is no adjustment.
+    private func landed(at seconds: TimeInterval, seekingTo target: TimeInterval, index: Int) {
+        guard abs(seconds - target) > 0.001 else { return }
+        discontinuityCount += 1
+        send(.seekAdjusted(index: index, requested: target, position: seconds))
+    }
+
+    /// What a load, skip or edit leaves until the next item's source opens.
+    private func forgetSource() {
+        duration = nil
+        seekable = nil
     }
 
     private func seekTransport(item key: Int, to seconds: TimeInterval) {
@@ -545,8 +567,7 @@ public final class Player<Item: Hashable & Sendable> {
         if key == armedKey { armedKey = nil }
         seekTarget = nil
         movePosition(to: 0)
-        duration = nil
-        isLive = false
+        forgetSource()
         guard let index = index(of: entryID) else {
             // Removed since it was armed, so the current has ended: on to what the list armed after
             // it, else as at the end of the current (a failed next, pause at end, or the list's end).
@@ -576,8 +597,7 @@ public final class Player<Item: Hashable & Sendable> {
             self.failedNext = nil
             currentIndex = index
             movePosition(to: 0)
-            duration = nil
-            isLive = false
+            forgetSource()
             unload(as: .idle)
             send(.itemTransition(from: current, to: index, reason: index == current ? .repeat : .auto))
             reportFailure(at: index, failedNext.error)
@@ -592,8 +612,7 @@ public final class Player<Item: Hashable & Sendable> {
         pauseByPlayer(.endOfItem)
         currentIndex = next
         movePosition(to: 0)
-        duration = nil
-        isLive = false
+        forgetSource()
         send(.itemTransition(from: current, to: next, reason: next == current ? .repeat : .auto))
         load(next, at: 0)
         return true
@@ -610,8 +629,7 @@ public final class Player<Item: Hashable & Sendable> {
     private func load(_ index: Int, at seconds: TimeInterval) {
         let entry = entries[index]
         movePosition(to: max(seconds, 0))
-        duration = nil
-        isLive = false
+        forgetSource()
         armedKey = nil
         seekTarget = nil
         let source: any ItemSource

@@ -100,7 +100,7 @@ final class TransportTests: XCTestCase {
 
     private var positions: [Heard] {
         recorder.events.compactMap {
-            guard case let .position(item, seconds, _) = $0 else { return nil }
+            guard case let .position(item, seconds, _, _) = $0 else { return nil }
             return Heard(item: item, frame: Int64(seconds * 8))
         }
     }
@@ -353,8 +353,10 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(statuses.last, .ended)
     }
 
-    func testEachPositionCarriesItsItemsDurationOrNilWhenTheSourceDoesNotKnowIt() {
+    func testEachPositionCarriesItsSourcesDurationAndSeekability() {
+        a.seekable = false
         b.duration = nil
+        b.seekable = true
         transport.setCurrent(item: "a", source: a)
         transport.setNext(item: "b", source: b)
         transport.play()
@@ -362,10 +364,10 @@ final class TransportTests: XCTestCase {
         run(for: 6)
 
         let durations = recorder.events.compactMap { event -> String? in
-            guard case let .position(item, _, duration) = event else { return nil }
-            return "\(item) \(duration.map { "\($0)" } ?? "nil")"
+            guard case let .position(item, _, duration, isSeekable) = event else { return nil }
+            return "\(item) \(duration.map { "\($0)" } ?? "nil") \(isSeekable)"
         }
-        XCTAssertEqual(Set(durations), ["a 3.0", "b nil"])
+        XCTAssertEqual(Set(durations), ["a 3.0 false", "b nil true"])
     }
 
     func testAStartIsReportedOnceItsFirstAudioGivesTheFrame() {

@@ -24,6 +24,7 @@ final class PlayerRig {
 
     var output: FakeAudioOutput { base.output }
     var timer: ManualPumpTimer { base.timer }
+    var executor: ManualExecutor { base.executor }
     var session: FakeAudioSession { base.session }
     var player: Player<String>! { base.player }
 
@@ -40,7 +41,7 @@ final class PlayerRig {
     }
 
     enum Kind: Equatable {
-        case itemTransition, itemFailed, seekLanded, recoveredPaused, playWhenReadyChanged
+        case itemTransition, itemFailed, seekLanded, seekAdjusted, recoveredPaused, playWhenReadyChanged
     }
 
     /// Each event's case, in the order sent.
@@ -50,6 +51,7 @@ final class PlayerRig {
             case .itemTransition: .itemTransition
             case .itemFailed: .itemFailed
             case .seekLanded: .seekLanded
+            case .seekAdjusted: .seekAdjusted
             case .recoveredPaused: .recoveredPaused
             case .playWhenReadyChanged: .playWhenReadyChanged
             }
@@ -77,6 +79,13 @@ final class PlayerRig {
         }
     }
 
+    static func seeksAdjusted(_ events: [PlayerEvent<String>]) -> [Adjustment] {
+        events.compactMap {
+            guard case let .seekAdjusted(index, requested, position) = $0 else { return nil }
+            return Adjustment(index: index, requested: requested, position: position)
+        }
+    }
+
     static func playWhenReadyChanges(_ events: [PlayerEvent<String>]) -> [PlayWhenReadyChange] {
         events.compactMap {
             guard case let .playWhenReadyChanged(value, reason) = $0 else { return nil }
@@ -91,6 +100,12 @@ final class PlayerRig {
 
     struct Landing: Equatable {
         var index: Int
+        var position: TimeInterval
+    }
+
+    struct Adjustment: Equatable {
+        var index: Int
+        var requested: TimeInterval
         var position: TimeInterval
     }
 }

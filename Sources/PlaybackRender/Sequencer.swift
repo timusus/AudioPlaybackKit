@@ -85,6 +85,7 @@ final class Sequencer: @unchecked Sendable {
         var started = false
         // Locked: the source's, copied at open so the transport never calls a source.
         var duration: Int64?
+        var isSeekable = false
 
         init(item: Int, source: any ItemSource) {
             self.item = item
@@ -224,6 +225,11 @@ final class Sequencer: @unchecked Sendable {
         lock.withLock { window.first { $0.item == item }?.duration }
     }
 
+    /// Known when `duration(of:)` is.
+    func isSeekable(_ item: Int) -> Bool {
+        lock.withLock { window.first { $0.item == item }?.isSeekable ?? false }
+    }
+
     /// Never blocks on decode.
     func pull() -> Pull {
         lock.withLock {
@@ -316,6 +322,8 @@ final class Sequencer: @unchecked Sendable {
                 entry.format = try entry.source.open()
                 let duration = entry.source.duration
                 lock.withLock { entry.duration = duration }
+                let isSeekable = entry.source.isSeekable
+                lock.withLock { entry.isSeekable = isSeekable }
             }
             let sampleRate = entry.format!.sampleRate
             let landed = try cursor.seekTo.map { try entry.source.seek(toFrame: $0.frame(at: sampleRate)) }

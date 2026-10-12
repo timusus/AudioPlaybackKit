@@ -17,6 +17,9 @@ public final class FakeItemSource: ItemSource, @unchecked Sendable {
     public var interrupts: Int { lock.withLock { _interrupts } }
     /// The item's length unless a test makes it unknown.
     public var duration: Int64?
+    /// Overrides `ItemSource`'s default, seekable while the duration is known.
+    public var seekable: Bool?
+    public var isSeekable: Bool { seekable ?? (duration != nil) }
 
     public init(format: PCMFormat, frames: Int64, chunkFrames: Int64 = 100, base: Float = 0) {
         self.format = format
