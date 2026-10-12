@@ -203,11 +203,27 @@ final class PlayerTelemetryEventTests: XCTestCase {
         XCTAssertEqual(telemetry, ["bufferingStarted", "bufferingEnded"])
     }
 
-    func testAnItemFailureEndsAStallOnce() {
+    func testARendererFailureEndsAStallOnce() {
         stallInProgress()
         rig.output.injectFailure()
         rig.run(for: 2)
         XCTAssertEqual(names, ["bufferingStarted", "bufferingEnded", "recoveredPaused"])
+    }
+
+    // The stall straddles the end of a, so b's source failing is what moves on and fails the item.
+    func testAnItemFailureEndsAStallBeforeItReports() {
+        rig.factory.failing = ["b"]
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 9.5)
+        events = []
+        rig.output.injectStall()
+        rig.pump()
+        XCTAssertEqual(telemetry, ["bufferingStarted"])
+
+        rig.run(for: 2)
+
+        XCTAssertEqual(names, ["bufferingStarted", "bufferingEnded", "itemTransition", "itemFailed"])
     }
 
     func testAnInterruptionEndsAStallOnce() {
