@@ -223,6 +223,8 @@ the source's `ItemSource.isSeekable`. `.ended` is not final: a
 has no `setNext`; it arms the next item of its list itself.)
 `setCurrent` replaces everything set, so it is also how a skip or a track change by the user works.
 A source belongs to one `setCurrent` or `setNext`; make a new `FFmpegItemSource` each time.
+A source of your own must implement `release()`, which has no default: a wrapper forwards it to the
+source it wraps, and a source holding nothing beyond memory leaves it empty.
 
 **Gapless.** Call `setNext(item:source:)` for the track after the current one as soon as the app
 knows it, and again when the queue changes (the last next item is replaced if decode has not reached it;
