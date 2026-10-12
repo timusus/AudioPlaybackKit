@@ -1,6 +1,6 @@
 # ADR-0017: Live streams of unknown length
 
-Status: Accepted, amends ADR-0004 and ADR-0014
+Status: Accepted, amends ADR-0004 and ADR-0014; amended by ADR-0022
 Date: 2026-10-10
 
 ## Context
@@ -28,6 +28,8 @@ restart a live body learns it through one optional requirement, `streamIsLive()`
 
 **No seeking.** A live decoder's `seek(to:)` throws `unseekable`; the host disables its scrubber from
 `isLive`. The byte source's `seek` already throws `unseekable` for a position outside the window.
+In the player, live is what a source neither seeks nor knows the duration of (ADR-0022): a source
+that re-opens at a time offset is seekable with no duration and is not live.
 
 **Recovery is a restart, not a resume.** A live transaction that drops, goes silent (ADR-0004's 6 s)
 or follows a path change opens a new request with no `Range` and no `If-Range`, spends the same retry

@@ -215,7 +215,8 @@ Every method returns at once and runs in call order on the transport's queue. `I
 `Hashable & Sendable` name for a queue entry. Positions are seconds of the item's media time; a start or
 seek lands on the nearest frame, so a stored resume point seeks back to the frame it was reported at. Use
 the `position` events for the UI and for `MPNowPlayingInfoCenter`; their `duration` is the item's length
-in seconds as FFmpeg probed it, nil for a live stream or a body of unknown length. `.ended` is not final, a later `setNext` plays on.
+in seconds as FFmpeg probed it, nil for a live stream or a body of unknown length, and `isSeekable` is
+the source's `ItemSource.isSeekable`. `.ended` is not final, a later `setNext` plays on.
 `setCurrent` replaces everything set, so it is also how a skip or a track change by the user works.
 A source belongs to one `setCurrent` or `setNext`; make a new `FFmpegItemSource` each time.
 
@@ -329,7 +330,7 @@ struct NowPlayingBar: View {
             if player.state == .buffering { ProgressView() }
             if player.suppression == .interruption { Text("Paused by another app") }
             Slider(value: Binding(get: { player.position }, set: { player.seek(to: $0) }),
-                   in: 0...(player.duration ?? 1)).disabled(player.isLive)
+                   in: 0...(player.duration ?? 1)).disabled(!player.isSeekable)
         }
     }
 }
@@ -340,7 +341,12 @@ struct NowPlayingBar: View {
   `isPlaying` is `state == .ready && playWhenReady && suppression == .none`. Show a play button from
   `playWhenReady`, not from `isPlaying`, or the button flickers while buffering.
 - **`position`** is what is heard, in seconds of the current item's media time, written on every pump
-  while it changes. `duration` is nil until the item opens and for a live stream (`isLive`).
+  while it changes. `duration` is nil until the item opens and whenever the source does not know it.
+  `isSeekable` is the source's, known once it opens; a server transcode seeks with no duration.
+  `isLive` is an opened item that neither seeks nor has a duration (ADR-0022).
+- **A seek not made as asked** is reported as `seekAdjusted(index:requested:position:)`: a target
+  clamped to `0...duration`, a seek an unseekable item refused (it stays put), or a source that landed
+  elsewhere, as on a keyframe (sent after `seekLanded`). An unseekable item never fails for a seek.
 - **`discontinuityCount`** changes when `position` jumps instead of playing on: a seek, skip, load,
   transition or repeat. Compare it to its last value to tell a jump from listening; a position saver counts
   deltas only while it is unchanged. It may move more than once for one call.
@@ -368,6 +374,7 @@ Task {
         case .itemTransition(let from, let to, let reason): break   // .auto, .seek or .repeat
         case .itemFailed(let index, let error): break               // error.kind: .source, .output, .session
         case .seekLanded(let index, let position): break            // the seek's audio reached the speaker
+        case .seekAdjusted(let index, let requested, let position): break  // clamped, refused or landed elsewhere
         case .recoveredPaused: break                                // see Errors and recovery
         case .playWhenReadyChanged(let value, let reason): break    // the player changed intent: .routeLost, .interruptionEnded, .endOfItem
         }
@@ -441,7 +448,8 @@ extrapolates between them. They are written again if what is heard strays more t
 extrapolation, as when the output starts late after a play. A remote command is enabled only while the
 player's `availableCommands` has it. A `Player`'s are media3's: next while there is a next item (repeat
 `.all` wraps), previous on any item but a live one with nothing before it (with nothing before, it
-restarts the item), skips and scrubbing once the item's duration is known, play and pause always.
+restarts the item), skips and scrubbing once the item has opened seekable, play and pause always. An
+item of unknown length that seeks is not shown live and shows the metadata's duration, if any.
 `release()` disables every command and clears the info, the playback rates and the skip intervals.
 
 **Your own policy.** The session drives `NowPlayingControllable`, as a media3 session drives a

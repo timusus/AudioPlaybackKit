@@ -253,7 +253,7 @@ personal output. `PlayerSessionTests` drives them through `FakeAudioSession`.
 | `isCommandAvailable_withDeviceVolumeControlEnabled_isTrueForDeviceVolumeCommands` | n/a: API |
 | `isCommandAvailable_withoutDeviceVolumeControlEnabled_isFalseForDeviceVolumeCommands` | n/a: API |
 | `isCommandAvailable_duringAd_isFalseForSeekCommands` | n/a: ads |
-| `isCommandAvailable_duringUnseekableItem_isFalseForSeekInCurrentCommands` | `NowPlayingCommandTests.testSeekingIsUnavailableForALiveItem`; an item without a duration is the unseekable one |
+| `isCommandAvailable_duringUnseekableItem_isFalseForSeekInCurrentCommands` | `NowPlayingCommandTests.testSeekingIsUnavailableForALiveItem`, `testAScrubOnASeekableItemOfUnknownLengthSeeks`: seekability is the source's, not its duration (ADR-0022) |
 | `isCommandAvailable_duringUnseekableLiveItem_isFalseForSeekToPrevious` | `NowPlayingCommandTests.testPreviousOnALiveItemNeedsAPreviousItem`; `previousTrack` is `SEEK_TO_PREVIOUS` |
 | `isCommandAvailable_duringUnseekableLiveItemWithPreviousWindow_isTrueForSeekToPrevious` | `NowPlayingCommandTests.testPreviousOnALiveItemNeedsAPreviousItem` |
 | `isCommandAvailable_duringLiveItem_isTrueForSeekToNext` | n/a: API, `nextTrack` is `SEEK_TO_NEXT_MEDIA_ITEM` |
