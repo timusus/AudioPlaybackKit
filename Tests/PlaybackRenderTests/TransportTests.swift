@@ -282,6 +282,28 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(statuses.last, .ended)
     }
 
+    // #127: a tick queued before the seek ran after `seek()` returned and sent the pre-seek position.
+    func testNoPositionFromBeforeASeekArrivesAfterTheSeekReturns() {
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        pump()
+        run(for: 0.5)
+        output.advance(by: 0.25)
+
+        let release = timer.fireHeld()
+        transport.seek(item: "a", toSeconds: 2)
+        let returned = recorder.events.count
+        release()
+        pump()
+        run(for: 0.25)
+
+        let after = recorder.events[returned...].compactMap { event -> Heard? in
+            guard case let .position(item, seconds, _, _) = event else { return nil }
+            return Heard(item: item, frame: Int64(seconds * 8))
+        }
+        XCTAssertEqual(after, [Heard(item: "a", frame: 16), Heard(item: "a", frame: 18)])
+    }
+
     func testASeekToAnItemAlreadyPassedIsIgnored() {
         transport.setCurrent(item: "a", source: short)
         transport.setNext(item: "b", source: b8)

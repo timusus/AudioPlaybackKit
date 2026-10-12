@@ -14,6 +14,7 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     /// What is heard now, in seconds of `item`'s media time. Sent when it changes, at most once a
     /// pump; frames a processor dropped are skipped when they would have played. Within an item it
     /// never goes back except on a `seek` or `setCurrent`, so position deltas are listening time.
+    /// None computed before a `seek` or `setCurrent` is sent once that call has returned.
     /// `duration` is the item's length as its source probed it, for the progress bar and Now
     /// Playing; nil when unknown. `isSeekable` is the source's `ItemSource.isSeekable`.
     case position(item: Item, seconds: TimeInterval, duration: TimeInterval?, isSeekable: Bool)
@@ -62,6 +63,10 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private let onEvent: @Sendable (TransportEvent<Item>) -> Void
     private var upstream: SequencedUpstream!
     private var feeder: Feeder!
+    /// `setCurrent` and `seek` calls made, counted on the caller's thread; the queue counts those it has
+    /// taken in `takenDiscontinuities`, and a position computed while they differ predates a call.
+    private let discontinuityLock = NSLock()
+    private var calledDiscontinuities = 0
 
     // Confined to `queue`.
     private var lastID = 0
@@ -69,6 +74,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// reports and never holds an item the sequencer has dropped, so a seek to one is always valid.
     private var ids: [Int: Item] = [:]
     private var failed = false
+    private var takenDiscontinuities = 0
 
     /// Plays through the device's audio output (`AVSampleBufferAudioRenderer`). The transport never
     /// touches `AVAudioSession`: on iOS the app sets the category and activates the session before
@@ -137,7 +143,9 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// playing. Audio queued from the item before is dropped.
     public func setCurrent(item: Item, source: any ItemSource, startSeconds: TimeInterval = 0) {
         precondition(startSeconds >= 0 && startSeconds.isFinite)
+        callDiscontinuity()
         queue.async { [self] in
+            takenDiscontinuities += 1
             let id = newID()
             ids = [id: item]
             failed = false
@@ -188,7 +196,9 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// seek to an item already passed (a `crossed` raced the call) is ignored.
     public func seek(item: Item, toSeconds seconds: TimeInterval) {
         precondition(seconds >= 0 && seconds.isFinite)
+        callDiscontinuity()
         queue.async { [self] in
+            takenDiscontinuities += 1
             let id = ids.filter { $0.value == item }.keys.min()
             onEvent(.sought(item: item, seconds: seconds, applied: id != nil))
             guard let id else { return }
@@ -217,6 +227,10 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         }
     }
 
+    private func callDiscontinuity() {
+        discontinuityLock.withLock { calledDiscontinuities += 1 }
+    }
+
     // MARK: Private, on the queue
 
     private func newID() -> Int {
@@ -228,9 +242,11 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         feeder.pump()
     }
 
-    /// Every frame position comes from audio already pulled, so its item's rate is known.
+    /// Every frame position comes from audio already pulled, so its item's rate is known. One computed
+    /// while a `setCurrent` or `seek` is still queued is dropped: its caller has moved past it.
     private func report(_ position: MediaPositionMap.Position) {
-        guard let item = ids[position.item], let rate = upstream.formats[position.item]?.sampleRate else { return }
+        guard discontinuityLock.withLock({ calledDiscontinuities }) == takenDiscontinuities,
+              let item = ids[position.item], let rate = upstream.formats[position.item]?.sampleRate else { return }
         let duration = sequencer.duration(of: position.item).map { Double($0) / rate }
         let isSeekable = sequencer.isSeekable(position.item)
         onEvent(.position(item: item, seconds: Double(position.mediaFrame) / rate, duration: duration, isSeekable: isSeekable))

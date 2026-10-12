@@ -32,6 +32,15 @@ public final class ManualPumpTimer: @unchecked Sendable {
         queue.sync(execute: tick)
     }
 
+    /// Queues one pump, as a real timer tick lands, and holds it until the returned release is called,
+    /// so a call made in between queues behind a tick that fired first.
+    public func fireHeld() -> () -> Void {
+        let (queue, tick) = lock.withLock { (queue!, tick!) }
+        queue.suspend()
+        queue.async(execute: tick)
+        return { queue.resume() }
+    }
+
     /// Waits for every call already made, without pumping.
     public func sync() {
         lock.withLock { queue! }.sync {}
