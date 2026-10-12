@@ -51,7 +51,8 @@ extension SeekTarget {
 ///
 /// Every `setCurrent` and `seek` starts a new epoch: the buffer is emptied, the source in flight is
 /// interrupted, and whatever an older job decodes is dropped. `setNext` and `clearNext` change only
-/// the window's unstarted tail, so they cannot remove audio already decoded; the transport seeks for that.
+/// a tail decode has tagged nothing of, so they cannot remove audio already decoded; the transport
+/// seeks for that.
 final class Sequencer: @unchecked Sendable {
     enum Pull {
         case chunk(TaggedChunk)
@@ -80,7 +81,7 @@ final class Sequencer: @unchecked Sendable {
         let source: any ItemSource
         // Executor-only: set once the source is opened.
         var format: PCMFormat?
-        // Locked: decode has reached it, so `setNext` and `clearNext` leave it alone.
+        // Locked: decode has reached it, so `setNext` and `clearNext` leave it alone once it has tagged.
         var started = false
         // Locked: the source's, copied at open so the transport never calls a source.
         var duration: Int64?
@@ -98,6 +99,8 @@ final class Sequencer: @unchecked Sendable {
         var nextFrame: Int64 = 0
         var tagged = false
         var ended = false
+        /// Reached by the join rather than a seek or `setCurrent`, so it is still the next item.
+        var joined = false
     }
 
     private let executor: any SequencerExecutor
@@ -133,31 +136,32 @@ final class Sequencer: @unchecked Sendable {
     /// not reached it, else appends.
     @discardableResult
     func setNext(item: Int, source: any ItemSource) -> TailChange {
-        lock.withLock {
+        let (change, interruptOpen) = lock.withLock {
             // A second entry with the same number would make seeks and releases ambiguous.
             precondition(!window.contains { $0.item == item }, "item \(item) is already in the window")
-            let entry = Entry(item: item, source: source)
-            let change: TailChange
-            if let last = window.last, !last.started {
-                window[window.count - 1] = entry
+            var change = TailChange.appended
+            var interruptOpen: () -> Void = {}
+            if let last = window.last, tailIsUnplayed {
+                interruptOpen = removeLast()
                 change = .replaced(last.item)
-            } else {
-                window.append(entry)
-                change = .appended
             }
+            window.append(Entry(item: item, source: source))
             schedule()
-            return change
+            return (change, interruptOpen)
         }
+        interruptOpen()
+        return change
     }
 
-    /// Removes the window's last item if decode has not reached it.
+    /// Removes the window's last item if decode has not reached it or is still opening it.
     @discardableResult
     func clearNext() -> TailChange {
-        lock.withLock {
-            guard let last = window.last, !last.started else { return .unchanged }
-            window.removeLast()
-            return .removed(last.item)
+        let (change, interruptOpen) = lock.withLock { () -> (TailChange, () -> Void) in
+            guard let last = window.last, tailIsUnplayed else { return (.unchanged, {}) }
+            return (.removed(last.item), removeLast())
         }
+        interruptOpen()
+        return change
     }
 
     /// Empties the window and interrupts the source in flight; `pull` returns `.pending` from here until a new item is set.
@@ -262,6 +266,28 @@ final class Sequencer: @unchecked Sendable {
         executor.run { [self] in step(epoch) }
     }
 
+    /// Locked. No audio of the window's last item can be out: decode has not reached it, or is
+    /// still opening it, as it does a feeder depth ahead of the join so a slow open hides there.
+    private var tailIsUnplayed: Bool {
+        guard let last = window.last, window.count > 1 else { return false }
+        guard last.started else { return true }
+        guard let cursor else { return false }
+        return cursor.entry === last && cursor.joined && !cursor.tagged && !cursor.ended
+    }
+
+    /// Locked. Returns the interrupt for an open in flight: decode goes back to the ended item
+    /// before, in a new epoch so the open's outcome is dropped, as media3 releases a removed period.
+    private func removeLast() -> () -> Void {
+        let last = window.removeLast()
+        guard let cursor, cursor.entry === last else { return {} }
+        self.cursor = Cursor(entry: window[window.count - 1], seekTo: nil, tagged: true, ended: true)
+        let staleEpoch = epoch
+        epoch &+= 1
+        failure = nil
+        scheduled = false
+        return { last.source.interrupt(through: staleEpoch) }
+    }
+
     /// Locked.
     private func entry(after entry: Entry) -> Entry? {
         guard let index = window.firstIndex(where: { $0 === entry }), index + 1 < window.count else { return nil }
@@ -334,6 +360,6 @@ final class Sequencer: @unchecked Sendable {
     private func joinGapless(to next: Entry) {
         next.started = true
         // A source read before (a seek back replaying the window) is rewound to its start.
-        cursor = Cursor(entry: next, seekTo: next.format == nil ? nil : .frame(0))
+        cursor = Cursor(entry: next, seekTo: next.format == nil ? nil : .frame(0), joined: true)
     }
 }

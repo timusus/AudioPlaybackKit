@@ -146,7 +146,8 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     }
 
     /// Follows the last item set with no gap. Replaces the last next item if decode has not reached
-    /// it yet; once it has (decode runs a few seconds ahead), `item` is queued after it instead.
+    /// it yet or is still opening it (interrupting the open); once it has decoded some (decode runs a
+    /// few seconds ahead), `item` is queued after it instead.
     /// Never flushes: near the end it joins gaplessly, and after `.ended` it plays on from where the
     /// output stopped. Ignored before a `setCurrent`.
     public func setNext(item: Item, source: any ItemSource) {
@@ -158,7 +159,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         }
     }
 
-    /// Removes the last next item unless decode has already reached it; then it still plays, and
+    /// Removes the last next item unless decode has already decoded some of it; then it still plays, and
     /// the app seeks or calls `setCurrent` to drop it.
     public func clearNext() {
         queue.async { [self] in forget(sequencer.clearNext()) }
