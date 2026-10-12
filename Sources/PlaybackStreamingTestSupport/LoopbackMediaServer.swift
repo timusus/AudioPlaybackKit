@@ -52,6 +52,7 @@ public final class LoopbackMediaServer: @unchecked Sendable {
     var _lowercasesHeaders = false
     var _usesChunkedEncoding = false
     var _htmlErrorBodies = false
+    var _chaos: ChaosPlan?
     var _etag: String?
     var _etags: [String]?
     private var connections: [NWConnection] = []

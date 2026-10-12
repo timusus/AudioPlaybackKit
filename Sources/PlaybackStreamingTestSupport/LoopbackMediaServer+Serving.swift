@@ -208,9 +208,13 @@ extension LoopbackMediaServer {
     }
 
     /// How long a body that ends short stays open after its last byte; see `sendBody`.
-    private static let shortBodyCloseDelay: TimeInterval = 0.3
+    static let shortBodyCloseDelay: TimeInterval = 0.3
 
     private func sendBody(header: String, slice: Data, chunks: Bool, stallAfter: Int?, delay: TimeInterval, on connection: NWConnection) {
+        if let chaos = nextChaos(bodyBytes: slice.count) {
+            sendChaotic(header: header, slice: slice, random: chaos.random, fault: chaos.fault, on: connection)
+            return
+        }
         lock.lock()
         let closeAfter = _closesAfterBodyBytes
         _closesAfterBodyBytes = nil
