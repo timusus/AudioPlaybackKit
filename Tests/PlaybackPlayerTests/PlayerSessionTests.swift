@@ -151,14 +151,14 @@ final class PlayerSessionTests: XCTestCase {
         XCTAssertEqual(session.activations, 2, "the interruption deactivated the session")
     }
 
-    func testAReactivationThatThrowsStaysSuppressedUntilTheNextPlay() {
+    func testAReactivationThatThrowsSetsASessionErrorAndTheNextPlayTriesAgain() {
         startPlaying()
         session.interruptionBegan()
         session.activationError = SessionError()
         session.interruptionEnded(shouldResume: true)
-        XCTAssertEqual(player.suppression, .interruption)
+        XCTAssertEqual(player.suppression, .none)
         XCTAssertTrue(player.playWhenReady)
-        XCTAssertNil(player.error)
+        XCTAssertEqual(player.error?.kind, .session)
         XCTAssertFalse(isHeard())
 
         session.activationError = nil

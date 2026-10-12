@@ -448,7 +448,8 @@ The player owns the session; the app does not observe interruptions or route cha
   transport is paused, `playWhenReady` stays true. Paused or stopped, nothing happens, so a stopped
   player never shows "paused by another app".
 - **Interruption ended** with `shouldResume`: the session is activated, playback resumes, `suppression`
-  clears. Without it: `playWhenReady` becomes false (reason `.interruptionEnded`). If the user pressed
+  clears. If the activation is refused, `suppression` clears anyway and `error.kind == .session` is set
+  (see recovery above); the next `play()` tries again. Without `shouldResume`: `playWhenReady` becomes false (reason `.interruptionEnded`). If the user pressed
   pause during the interruption, nothing resumes. A `play()` during an interruption takes the session back at once.
 - **Route lost.** Unplugging headphones, or losing Bluetooth, USB, line out, a car or AirPlay with none of
   that kind left, pauses (`playWhenReady` false, reason `.routeLost`). A Bluetooth profile switch does not.

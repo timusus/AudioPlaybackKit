@@ -470,7 +470,11 @@ public final class Player<Item: Hashable & Sendable> {
         case let .interruptionEnded(shouldResume):
             // Only an interruption that paused us resumes: an app pause or a route loss cleared it.
             guard suppression == .interruption else { return }
-            if shouldResume { return activate() }
+            if shouldResume {
+                // Over, so a refused activation is a session error for the app, not a held interruption.
+                suppression = .none
+                return activate()
+            }
             suppression = .none
             intent = false
             send(.playWhenReadyChanged(false, reason: .interruptionEnded))
