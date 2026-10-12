@@ -79,8 +79,17 @@ final class NowPlayingRig {
         let factory = FakeItemFactory<String>(format: Self.format)
         (factory.live, factory.unknownLength) = (live, unknownLength)
         base = PlayerTestRig { try factory.make($0) }
-        session = NowPlayingSession(
-            player: wrap(base.player),
+        controlled = wrap(base.player)
+        self.supportedRates = supportedRates
+        session = makeSession()
+    }
+
+    private let controlled: any NowPlayingControllable<String>
+    private let supportedRates: [Double]
+
+    private func makeSession() -> NowPlayingSession<String> {
+        NowPlayingSession(
+            player: controlled,
             supportedRates: supportedRates,
             metadata: { NowPlayingMetadata(title: $0.uppercased(), artist: "Artist \($0)", album: "Album", duration: 99) },
             artwork: { [weak self] in await self?.loadArtwork($0) },
@@ -88,6 +97,15 @@ final class NowPlayingRig {
             commandCenter: commands,
             now: { [weak self] in self?.wall ?? 0 }
         )
+    }
+
+    /// Replaces the session with a new one over the same centres, as `self.session = NowPlayingSession(...)`
+    /// in an app, and returns the old one.
+    @discardableResult
+    func replaceSession() -> NowPlayingSession<String> {
+        let old = session!
+        session = makeSession()
+        return old
     }
 
     /// Drops the only reference to the session; `settle` and `run` need it afterwards. The release hops

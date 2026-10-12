@@ -8,6 +8,11 @@ import PlaybackPlayer
 /// lost about 0.1 s on a rate change; a resume of a running renderer lost 0.04 s, left unwritten.
 private let maxDrift: TimeInterval = 0.05
 
+/// The latest session to take each info centre, keyed by the centre's identity: the system's is one
+/// object, and a test's fake centres are its own, so parallel tests never share a claim.
+@MainActor private var centreClaims: [ObjectIdentifier: Int] = [:]
+@MainActor private var claims = 0
+
 /// What the lock screen, Control Centre and CarPlay show for an item.
 public struct NowPlayingMetadata: Sendable {
     public var title: String
@@ -41,6 +46,8 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     private let commandCenter: any RemoteCommandCenter
     /// Seconds on a monotonic clock, to tell how far the system has extrapolated elapsed time.
     private let now: () -> TimeInterval
+    /// This session's entry in `centreClaims`, so a clear from it cannot undo a newer session's install.
+    private let claim: Int
 
     @_spi(Testing) public private(set) var pendingRefresh: Task<Void, Never>?
     private(set) var artworkLoad: Task<Void, Never>?
@@ -108,6 +115,9 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         self.artwork = artwork
         self.infoCenter = infoCenter
         self.commandCenter = commandCenter
+        claims += 1
+        claim = claims
+        centreClaims[ObjectIdentifier(infoCenter)] = claim
         if !supportedRates.isEmpty { commandCenter.setSupportedRates(supportedRates) }
         observe()
     }
@@ -117,21 +127,25 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     // captures them, not `self`. The pending tasks hold `self` weakly and end with it.
     deinit {
         guard !released else { return }
-        let commandCenter = commandCenter, infoCenter = infoCenter
-        Task { @MainActor in Self.clear(commandCenter, infoCenter) }
+        let commandCenter = commandCenter, infoCenter = infoCenter, claim = claim
+        Task { @MainActor in Self.clear(commandCenter, infoCenter, claim: claim) }
     }
 
     /// Disables every command and clears the info, rates and skip intervals, as media3's
     /// `MediaSession.release`. Final. Dropping the session does the same, one main-actor turn later.
+    /// Either leaves the centres alone once a newer session has taken them.
     public func release() {
         guard !released else { return }
         released = true
         pendingRefresh?.cancel()
         artworkLoad?.cancel()
-        Self.clear(commandCenter, infoCenter)
+        Self.clear(commandCenter, infoCenter, claim: claim)
     }
 
-    private static func clear(_ commandCenter: any RemoteCommandCenter, _ infoCenter: any NowPlayingInfoCenter) {
+    private static func clear(_ commandCenter: any RemoteCommandCenter, _ infoCenter: any NowPlayingInfoCenter, claim: Int) {
+        let key = ObjectIdentifier(infoCenter)
+        guard centreClaims[key] == claim else { return }
+        centreClaims[key] = nil
         for command in RemoteCommand.allCases { commandCenter.setHandler(for: command, nil) }
         commandCenter.setSupportedRates([])
         commandCenter.setSkipIntervals(nil)

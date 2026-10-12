@@ -455,6 +455,31 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertEqual(rig.info.playbackState, .stopped)
     }
 
+    func testADroppedSessionLeavesItsSuccessorInstalled() async {
+        await opened()
+        let shown = enabled
+
+        rig.replaceSession()
+        await Task { @MainActor in }.value
+
+        XCTAssertEqual(enabled, shown)
+        XCTAssertEqual(rig.info[MPMediaItemPropertyTitle], "A")
+        XCTAssertEqual(rig.info.playbackState, .paused)
+    }
+
+    func testReleasingAReplacedSessionLeavesItsSuccessorInstalled() async {
+        await opened()
+        let shown = enabled
+
+        let old = rig.replaceSession()
+        old.release()
+        await Task { @MainActor in }.value
+
+        XCTAssertEqual(enabled, shown)
+        XCTAssertEqual(rig.info[MPMediaItemPropertyTitle], "A")
+        XCTAssertEqual(rig.info.playbackState, .paused)
+    }
+
     func testReleaseClearsTheRatesAndSkipIntervalsItSet() async {
         rig = NowPlayingRig(supportedRates: [1, 2]) { PolicyPlayer($0, intervals: SkipIntervals(forward: 15, backward: 30)) }
         await opened()
