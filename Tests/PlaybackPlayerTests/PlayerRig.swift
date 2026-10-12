@@ -46,9 +46,10 @@ final class PlayerRig {
         case itemTransition, itemFailed, seekLanded, seekAdjusted, recoveredPaused, playWhenReadyChanged
     }
 
-    /// Each event's case, in the order sent.
+    /// Each event's case, in the order sent. The telemetry events are left out: they follow the
+    /// audio, not the calls, and `PlayerTelemetryEventTests` pins them.
     static func kinds(_ events: [PlayerEvent<String>]) -> [Kind] {
-        events.map {
+        events.compactMap {
             switch $0 {
             case .itemTransition: .itemTransition
             case .itemFailed: .itemFailed
@@ -56,6 +57,7 @@ final class PlayerRig {
             case .seekAdjusted: .seekAdjusted
             case .recoveredPaused: .recoveredPaused
             case .playWhenReadyChanged: .playWhenReadyChanged
+            case .firstAudioRendered, .bufferingStarted, .bufferingEnded: nil
             }
         }
     }

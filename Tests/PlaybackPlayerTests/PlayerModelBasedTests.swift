@@ -165,11 +165,21 @@ final class PlayerModelBasedTests: XCTestCase {
         rig.factory.unopenable = ["y"]
         let player = rig.player!
         var sent: [PlayerModel.Event] = []
+        // The model knows no decode or flushes, so it cannot place buffering events; it checks only
+        // that each start is ended before the next.
+        var buffering = false
+        var unpaired: String?
         player.onEvent = { event in
             switch event {
             case let .itemTransition(from, to, reason): sent.append(.transition(from: from, to: to, reason: reason))
             case let .itemFailed(index, _): sent.append(.failed(index: index))
             case .playWhenReadyChanged(false, .endOfItem): sent.append(.pausedAtEndOfItem)
+            case .bufferingStarted:
+                if buffering { unpaired = "bufferingStarted twice" }
+                buffering = true
+            case .bufferingEnded:
+                if !buffering { unpaired = "bufferingEnded with none started" }
+                buffering = false
             default: break
             }
         }
@@ -183,9 +193,9 @@ final class PlayerModelBasedTests: XCTestCase {
             let actual = snapshot(of: player)
             let expectedEvents = model.takeEvents()
             defer { sent = [] }
-            if expected != actual || expectedEvents != sent {
+            if expected != actual || expectedEvents != sent || unpaired != nil {
                 return """
-                after step \(step), \(operation):
+                after step \(step), \(operation): \(unpaired ?? "")
                   model  \(expected)
                   player \(actual)
                   model events  \(expectedEvents)

@@ -21,8 +21,12 @@ public final class Player<Item: Hashable & Sendable> {
     public private(set) var currentIndex: Int?
     public var currentItem: Item? { currentIndex.map { items[$0] } }
 
-    public private(set) var state = PlaybackState.idle
-    public private(set) var suppression = PlaybackSuppression.none
+    public private(set) var state = PlaybackState.idle {
+        didSet { updateRebuffering() }
+    }
+    public private(set) var suppression = PlaybackSuppression.none {
+        didSet { updateRebuffering() }
+    }
     public var isPlaying: Bool { Self.isPlaying(state: state, playWhenReady: playWhenReady, suppression: suppression) }
     public private(set) var error: PlaybackError?
 
@@ -52,7 +56,9 @@ public final class Player<Item: Hashable & Sendable> {
     /// Each event as it is sent, before `events` yields it: a test sees it without awaiting the stream.
     @_spi(Testing) @ObservationIgnored public var onEvent: ((PlayerEvent<Item>) -> Void)?
 
-    private var intent = false
+    private var intent = false {
+        didSet { updateRebuffering() }
+    }
     private var storedRate: Double = 1
     private var storedVolume: Float = 1
 
@@ -87,6 +93,12 @@ public final class Player<Item: Hashable & Sendable> {
     /// Where a load asked its item to start, until the item is heard: a source that cannot seek
     /// lands elsewhere, which is an adjustment but no `seekLanded`.
     @ObservationIgnored private var startTarget: TimeInterval?
+    /// A load, seek or transition whose audio has not been heard playing; until then a wait is the
+    /// join, not a rebuffer.
+    @ObservationIgnored private var awaitingFirstAudio = false {
+        didSet { updateRebuffering() }
+    }
+    @ObservationIgnored private var rebuffering = false
     /// The transport heard the end of the list; nothing is armed until a seek or load restarts it.
     @ObservationIgnored private var atEnd = false
     /// Paused by `pauseAtEndOfItem` at the end of the current item; `play()` moves on to the next.
@@ -502,6 +514,11 @@ public final class Player<Item: Hashable & Sendable> {
                 startTarget = nil
                 landed(at: seconds, seekingTo: target, index: current)
             }
+            // A position that moves while playing is heard, as media3's `onAudioPositionAdvancing`.
+            if awaitingFirstAudio, transportStatus == .playing {
+                awaitingFirstAudio = false
+                send(.firstAudioRendered(index: current, position: seconds))
+            }
         case let .status(status):
             transportStatus = status
             if status == .ended, reachedEnd() { return }
@@ -585,6 +602,7 @@ public final class Player<Item: Hashable & Sendable> {
     private func seekTransport(item key: Int, to seconds: TimeInterval) {
         atEnd = false
         pausedAtEnd = false
+        awaitingFirstAudio = true
         unansweredCalls += 1
         transport.seek(item: key, toSeconds: seconds)
         refreshState()
@@ -604,6 +622,7 @@ public final class Player<Item: Hashable & Sendable> {
         }
         loadedKey = key
         if key == armedKey { armedKey = nil }
+        awaitingFirstAudio = true
         seekTarget = nil
         startTarget = nil
         movePosition(to: 0)
@@ -667,6 +686,7 @@ public final class Player<Item: Hashable & Sendable> {
     /// `setCurrent` of the entry at `index`, then the next armed after it.
     func load(_ index: Int, at seconds: TimeInterval) {
         let entry = entries[index]
+        awaitingFirstAudio = true
         movePosition(to: max(seconds, 0))
         forgetSource()
         armedKey = nil
@@ -790,6 +810,16 @@ public final class Player<Item: Hashable & Sendable> {
             case .ended: .ended
             }
         }
+    }
+
+    /// Called whenever an input changes; sends only on a change, so each start has one end.
+    private func updateRebuffering() {
+        let now = state == .buffering && intent && suppression == .none && !awaitingFirstAudio
+        guard now != rebuffering else { return }
+        rebuffering = now
+        // `.buffering` always has a current item.
+        guard now, let currentIndex else { return send(.bufferingEnded) }
+        send(.bufferingStarted(index: currentIndex, position: position))
     }
 
     private func send(_ event: PlayerEvent<Item>) {

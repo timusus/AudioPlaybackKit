@@ -399,10 +399,20 @@ Task {
         case .seekAdjusted(let index, let requested, let position): break  // clamped, refused or landed elsewhere
         case .recoveredPaused: break                                // see Errors and recovery
         case .playWhenReadyChanged(let value, let reason): break    // the player changed intent: .routeLost, .interruptionEnded, .endOfItem
+        case .firstAudioRendered(let index, let position): break    // first audio heard after a load, seek or transition
+        case .bufferingStarted(let index, let position): break      // a rebuffer while playing
+        case .bufferingEnded: break                                 // ends the last bufferingStarted
         }
     }
 }
 ```
+
+For telemetry, `firstAudioRendered` is sent once the first audio after a load, seek (skips included) or
+item transition is heard playing, so time to first audio is the time from your call to it; a paused load
+counts until `play()`, and a resume sends none. `bufferingStarted` and `bufferingEnded` bracket a
+rebuffer: waiting for audio after the first was heard, while `playWhenReady` is set. A pause, seek, load,
+stop or failure ends one, and nothing is sent while paused, so a stall watchdog arms on the start and
+disarms on the end (ADR-0028).
 
 ### Repeat and pause at the end of an item
 

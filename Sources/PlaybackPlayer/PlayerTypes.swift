@@ -67,4 +67,13 @@ public enum PlayerEvent<Item: Hashable & Sendable>: Sendable {
     case recoveredPaused
     /// `playWhenReady` changed by the player, not the app.
     case playWhenReadyChanged(Bool, reason: PlayWhenReadyChangeReason)
+    /// media3 `onRenderedFirstFrame` for audio: the first `position` that moved while playing after a
+    /// load, seek or item transition, so time to first audio counts from the call. Not after a resume.
+    case firstAudioRendered(index: Int, position: TimeInterval)
+    /// An underrun (media3 `onAudioUnderrun`): `.buffering` after the first audio, while
+    /// `playWhenReady` and not suppressed. The wait after a load or seek is `firstAudioRendered`'s.
+    case bufferingStarted(index: Int, position: TimeInterval)
+    /// Ends the last `bufferingStarted`: audio resumed, or a pause, seek, load, stop or failure
+    /// stopped the wait.
+    case bufferingEnded
 }

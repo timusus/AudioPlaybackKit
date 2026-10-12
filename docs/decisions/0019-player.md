@@ -121,6 +121,10 @@ public enum PlayerEvent<Item: Hashable & Sendable>: Sendable {
     /// `playWhenReady` changed by the player, not the app: a route went (`.routeLost`), an interruption
     /// ended without `shouldResume` (`.interruptionEnded`), the end was reached (`.endOfItem`).
     case playWhenReadyChanged(Bool, reason: PlayWhenReadyChangeReason)
+    /// Telemetry (ADR-0028): first audio heard after a load, seek or transition, and a rebuffer's start and end.
+    case firstAudioRendered(index: Int, position: TimeInterval)
+    case bufferingStarted(index: Int, position: TimeInterval)
+    case bufferingEnded
 }
 
 @MainActor @Observable
