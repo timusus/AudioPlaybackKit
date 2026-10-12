@@ -640,11 +640,12 @@ struct GrowingFileDownload {
             switch status {
             case 206 where range?.start == resumeAt && sameTotal:
                 break
-            case 200 where resumeAt == 0 && wholeLength != nil && (tx.totalLength == nil || wholeLength == tx.totalLength):
+            case 200..<300 where status != 206 && resumeAt == 0 && wholeLength != nil
+                && (tx.totalLength == nil || wholeLength == tx.totalLength):
                 // From byte 0 a whole body is the range asked for (media3 DefaultHttpDataSource
                 // skips bytes only when the position is not 0). Without a length it could be any stream.
                 break
-            case 200, 206, 416:
+            case 200..<300, 416:
                 // The range ignored, or a different file behind the URL: not these bytes' end.
                 downloadLog.warning(
                     "download: resume_refused gen=\(tx.generation) status=\(status) content-range=\(contentRange ?? "-", privacy: .public)"
@@ -665,7 +666,7 @@ struct GrowingFileDownload {
                 end("not audio: content-type=\(response.mimeType ?? "?")", retryable: tx.remembered, refused: true, now: now)
                 return false
             }
-            if tx.totalLength == nil { current?.totalLength = range?.total ?? (status == 200 ? wholeLength : nil) }
+            if tx.totalLength == nil { current?.totalLength = range?.total ?? (status == 206 ? nil : wholeLength) }
             lastKnownTotalLength = current?.totalLength
             if let total = current?.totalLength { effects.append(.makeRoom(bytes: total - resumeAt)) }
             if finalURL == nil { finalURL = response.url }
@@ -676,7 +677,13 @@ struct GrowingFileDownload {
             return true
         }
         switch status {
-        case 200:
+        case 206 where range?.start == tx.bodyAt:
+            current?.rangeHonoured = true
+        case _ where status == 416 || (status == 206 && (range?.total).map { $0 < tx.base } ?? false):
+            failOutOfRange("status=\(status) at=\(tx.base) content-range=\(contentRange ?? "-")")
+            return false
+        case 200..<300 where status != 206:
+            // As media3's DefaultHttpDataSource, any 2xx is success; one other than 206 is a whole body.
             current?.end = nil
             current?.checkEnd = nil
             current?.bodyAt = 0
@@ -696,11 +703,6 @@ struct GrowingFileDownload {
                 // Byte 0 is not where the seek landed, so it is no anchor for it.
                 current?.seekGeneration = nil
             }
-        case 206 where range?.start == tx.bodyAt:
-            current?.rangeHonoured = true
-        case _ where status == 416 || (status == 206 && (range?.total).map { $0 < tx.base } ?? false):
-            failOutOfRange("status=\(status) at=\(tx.base) content-range=\(contentRange ?? "-")")
-            return false
         default:
             end(
                 "status=\(status) content-range=\(contentRange ?? "-")", retryable: true,

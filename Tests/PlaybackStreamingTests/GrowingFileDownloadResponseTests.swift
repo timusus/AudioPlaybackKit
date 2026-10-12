@@ -38,4 +38,42 @@ extension GrowingFileDownloadTests {
         #expect(GrowingFileDownload.isMedia(mimeType: nil) == nil)
         #expect(GrowingFileDownload.isMedia(mimeType: "application/octet-stream", head: Array("ID3".utf8)) == false)
     }
+
+    /// media3's DefaultHttpDataSource takes any 2xx; one other than 206 is the whole body, like a 200.
+    @Test("a 203 is a whole body like a 200, and to a ranged request it means the range is ignored")
+    func anyOther2xxIsAWholeBody() throws {
+        let h = Harness()
+        h.read()
+        #expect(h.respond(203, length: 10000))
+        #expect(h.events == [.transaction(base: 0, generation: 1, seekGeneration: nil, httpStatus: 203)])
+        h.body(10000)
+        h.end()
+        #expect(h.machine.totalLength == 10000)
+        #expect(h.read(100) == .serve(fileOffset: 0, count: 100, landed: nil))
+
+        let ranged = Harness()
+        try ranged.machine.seek(to: 5000)
+        #expect(ranged.read() == .park)
+        #expect(ranged.requests == [ranged.request(1, from: 5000)])
+        #expect(ranged.respond(203, length: 10000))
+        #expect(ranged.machine.rangeIgnored)
+        #expect(ranged.machine.current?.bodyAt == 0)
+
+        // A resume from byte 0 answered 203 with the whole length is the range asked for.
+        let resumed = Harness()
+        resumed.startWithDrop()
+        resumed.clock.advance(by: 0.1)
+        #expect(resumed.requests.last == resumed.request(2, from: 0))
+        #expect(resumed.respond(203, length: 100000))
+        #expect(resumed.opens == 1, "no restart")
+    }
+
+    @Test("a 204 with no body and no type is no media: the read fails")
+    func aNoContentResponseFailsTheRead() {
+        let h = Harness()
+        h.read()
+        #expect(h.respond(204, length: 0, mimeType: "application/octet-stream"))
+        h.end()
+        #expect(h.read() == .fail(.transport("not audio: body of 0 bytes")))
+    }
 }
