@@ -67,6 +67,9 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// taken in `takenDiscontinuities`, and a position computed while they differ predates a call.
     private let discontinuityLock = NSLock()
     private var calledDiscontinuities = 0
+    /// Under `discontinuityLock`: a call zeroes it on the caller's thread, and a pump that predates
+    /// the call cannot write the buffer it discards back.
+    private var lastBufferedAhead: TimeInterval = 0
 
     // Confined to `queue`.
     private var lastID = 0
@@ -75,13 +78,12 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private var ids: [Int: Item] = [:]
     private var failed = false
     private var takenDiscontinuities = 0
-    private let bufferedLock = NSLock()
-    private var lastBufferedAhead: TimeInterval = 0
 
     /// Seconds of the media decoded and queued past what is heard, as of the last pump (every
     /// `pumpInterval`); any thread. About two seconds while decode keeps up, less near the end of what is set.
+    /// 0 from the return of a `setCurrent` or `seek`, and after any flush, until a pump refills it.
     public var bufferedAhead: TimeInterval {
-        bufferedLock.withLock { lastBufferedAhead }
+        discontinuityLock.withLock { lastBufferedAhead }
     }
 
     /// Plays through the device's audio output (`AVSampleBufferAudioRenderer`). The transport never
@@ -139,6 +141,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         queue.async { [self] in
             ids = [:]
             Self.tearDown(upstream, feeder)
+            publishBufferedAhead()
         }
     }
 
@@ -230,11 +233,15 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
             guard failed else { return }
             failed = false
             feeder.flush(from: feeder.heardPosition)
+            publishBufferedAhead()
         }
     }
 
     private func callDiscontinuity() {
-        discontinuityLock.withLock { calledDiscontinuities += 1 }
+        discontinuityLock.withLock {
+            calledDiscontinuities += 1
+            lastBufferedAhead = 0
+        }
     }
 
     // MARK: Private, on the queue
@@ -246,8 +253,16 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
 
     private func pump() {
         feeder.pump()
+        publishBufferedAhead()
+    }
+
+    /// After every pump and flush. Skipped while a `setCurrent` or `seek` is queued, as `report` is:
+    /// the call discards this buffer.
+    private func publishBufferedAhead() {
         let ahead = feeder.bufferedAhead
-        bufferedLock.withLock { lastBufferedAhead = ahead }
+        discontinuityLock.withLock {
+            if calledDiscontinuities == takenDiscontinuities { lastBufferedAhead = ahead }
+        }
     }
 
     /// Every frame position comes from audio already pulled, so its item's rate is known. One computed
@@ -276,7 +291,10 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private func dropUnheard(_ id: Int) -> Bool {
         guard let heard = feeder.heardPosition, id > heard.item else { return false }
         ids[id] = nil
-        if !upstream.drop(item: id) { feeder.flush(from: heard) }
+        if !upstream.drop(item: id) {
+            feeder.flush(from: heard)
+            publishBufferedAhead()
+        }
         return true
     }
 

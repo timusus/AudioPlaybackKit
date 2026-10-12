@@ -52,6 +52,29 @@ final class PlayerBufferedAheadTests: XCTestCase {
         XCTAssertEqual(player.bufferedAhead, 0.5, accuracy: 0.25)
     }
 
+    func testASeekReportsNothingBufferedBeforeTheNextPump() {
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 3)
+        XCTAssertEqual(player.bufferedAhead, 2, accuracy: 1e-9)
+
+        player.seek(to: 5)
+        XCTAssertEqual(player.bufferedAhead, 0, accuracy: 1e-9)
+        rig.settle()
+        XCTAssertEqual(player.bufferedAhead, 0, accuracy: 1e-9)
+    }
+
+    func testALoadReportsNothingBufferedBeforeTheNextPump() {
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 3)
+
+        player.skipToNext()
+        XCTAssertEqual(player.bufferedAhead, 0, accuracy: 1e-9)
+        rig.settle()
+        XCTAssertEqual(player.bufferedAhead, 0, accuracy: 1e-9)
+    }
+
     func testOnlyWhatIsLeftIsBufferedNearTheListsEnd() {
         player.setItems(["a"])
         player.play()
