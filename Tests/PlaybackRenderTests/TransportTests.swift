@@ -681,8 +681,10 @@ final class TransportTests: XCTestCase {
         pump()
         run(for: 2.75)
 
-        transport.seek(item: "a", toSeconds: 2.5)
+        // The clock moves before the seek is called, as the seek runs on the transport queue
+        // and would otherwise race this advance.
         output.advance(by: 0.5)
+        transport.seek(item: "a", toSeconds: 2.5)
         transport.setNext(item: "c", source: c)
         pump()
         run(for: 2)
