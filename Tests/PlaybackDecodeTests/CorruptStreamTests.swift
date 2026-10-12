@@ -91,6 +91,30 @@ final class CorruptStreamTests: XCTestCase {
         try assertSurvivesDamage(Fixture.moovLast, at: 0.4, count: 3000)
     }
 
+    /// The conformance corpus holds the formats whose decoders return assorted codes on bad data.
+    private func corpus(_ name: String) throws -> Data {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("PlaybackDecodeConformanceTests/Fixtures/\(name)")
+        return try Data(contentsOf: url)
+    }
+
+    // The corpus has no APE or WavPack fixture, and its IMA ADPCM WAV does not open in this build.
+    func testCodecErrorsAreSkippedNotFatal() throws {
+        for name in ["opus_stereo.opus", "bear.opus", "alac_stereo.m4a"] {
+            let clean = try corpus(name)
+            let (_, cleanReason) = try XCTUnwrap(try? decode(clean), "\(name) clean open")
+            XCTAssertEqual(cleanReason, .eof, name)
+            for fraction in [0.3, 0.5, 0.7] {
+                var data = clean
+                let start = Int(Double(clean.count) * fraction)
+                for i in 0..<512 { data[start + i] = UInt8(truncatingIfNeeded: 0xA5 &+ i &* 31) }
+                let (_, reason) = try XCTUnwrap(try? decode(data), "\(name) damaged at \(fraction) open")
+                XCTAssertEqual(reason, .eof, "\(name) damaged at \(fraction)")
+            }
+        }
+    }
+
     func testLongRunOfGarbageEndsCleanlyRatherThanHanging() throws {
         let clean = try fixture(Fixture.mp3)
         // media3 parity: Mp3Extractor reports end of input on a sync it cannot recover, so garbage
