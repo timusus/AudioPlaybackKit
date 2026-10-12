@@ -64,7 +64,7 @@ public protocol GrowingFileSnapshotSource: AnyObject {
     var snapshot: GrowingFileSnapshot { get }
 }
 
-/// The byte layer's two structured events, `transaction` and `download`. They go to whoever
+/// The byte layer's structured events (see the cases below). They go to whoever
 /// constructed the source, which may log them as it likes. Every transaction is a fresh body, so
 /// a continuation flag would always be false and is not carried.
 public enum GrowingFileEvent: Equatable, Sendable {

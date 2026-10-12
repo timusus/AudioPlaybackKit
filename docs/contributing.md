@@ -12,6 +12,10 @@ principles are in [CLAUDE.md](../CLAUDE.md). This page holds what those do not s
 | `PlaybackDecodeTests` | The decoder against `AVAssetReader` on three committed tone fixtures. |
 | `PlaybackDecodeConformanceTests` | Every fixture through a faulting reader, then seeks, against goldens. |
 | `PlaybackStreamingTests` | `GrowingFileByteSource`, its state machine `GrowingFileDownload`, `GrowingFileStore` and the loopback server. Also runs on an iOS simulator. |
+| `PlaybackRenderTests` | `Transport`, the sample-buffer output, the processor pipeline, the position map and the gapless scheduler, on `FakeAudioOutput` and a manual clock; the playback dumps are replayed from `Dumps/`. |
+| `PlaybackPlayerTests` | `Player` on the fake session, output and clock: state, edits, seeks, gapless advance, interruptions, failures and events. |
+| `PlaybackNowPlayingTests` | `NowPlayingSession` against `FakeNowPlayingInfoCenter` and `FakeRemoteCommandCenter`: what is shown and how each remote command reaches the `Player`. |
+| `PlaybackPlayerExternalConsumerTests` | `Player` and `NowPlayingSession` through public imports only, as an app's target has them; fails if the products need `@testable`. |
 | `PlaybackDeviceTests` | The player with the real session, renderer and Now Playing centres, the automated rows of `device-checklist.md`. Not in `swift test`: run `scripts/device-test.sh [UDID]` on an unlocked iPhone, or `--simulator UDID`. |
 
 `GrowingFileDownload` (with its `ReadRule` and `Retry`) takes no clock, lock, file or network, so its

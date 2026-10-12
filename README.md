@@ -46,7 +46,7 @@ target only. `FFmpeg` is for an app with its own C code against libavformat.
 ## Install
 
 ```swift
-.package(url: "https://github.com/timusus/AudioPlaybackKit.git", from: "0.10.0")
+.package(url: "https://github.com/timusus/AudioPlaybackKit.git", from: "0.11.0")
 ```
 
 ```swift

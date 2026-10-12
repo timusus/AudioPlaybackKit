@@ -11,7 +11,7 @@ behaviour you must know. Threading and blocking apply throughout: `open()`, `nex
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/timusus/AudioPlaybackKit.git", from: "0.10.0"),
+    .package(url: "https://github.com/timusus/AudioPlaybackKit.git", from: "0.11.0"),
 ],
 targets: [
     .target(name: "MyApp", dependencies: [
@@ -205,7 +205,7 @@ let transport = Transport<Track.ID> { event in          // called on the transpo
     case .crossed(let id, let format): break            // `id` is now heard, decoded at `format`; advance your queue
     case .status(let status): break                     // .paused, .buffering, .playing, .ended
     case .sought(let id, let seconds, let applied): break  // a setCurrent or seek was taken; if applied, events before it are stale
-    case .failed(let id, let error): break              // paused, unless `id` is a next item not yet heard
+    case .failed(let id, let error): break              // paused, unless `id` is a next item not yet heard; `id` is nil when the output refused audio
     case .recovered: break                              // output rebuilt, paused at the heard position; show paused
     }
 }
@@ -489,7 +489,8 @@ item of unknown length that seeks is not shown live and shows the metadata's dur
 `release()` disables every command and clears the info, the playback rates and the skip intervals.
 
 **Your own policy.** The session drives `NowPlayingControllable`, as a media3 session drives a
-`ForwardingPlayer`. Wrap the player with `ForwardingNowPlayingControllable` and declare only what your
+`ForwardingPlayer`. Wrap the player with `ForwardingNowPlayingControllable` (with `PlayerCommands` and
+`SkipIntervals`, it is in `PlaybackPlayer`, not `PlaybackNowPlaying`) and declare only what your
 policy changes; everything else forwards. Make the wrapper `@Observable` so the session sees its changes:
 
 ```swift
