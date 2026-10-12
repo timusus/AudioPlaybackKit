@@ -66,8 +66,8 @@ final class RemoteCommandTests: DeviceTestCase {
         XCTAssertEqual(center.skipForwardCommand.preferredIntervals, [3])
         XCTAssertEqual(center.skipBackwardCommand.preferredIntervals, [2])
         await rig.startPlaying(at: 2, position: 2)
-        XCTAssertNil(rig.send(.nextTrack), "no next with skip intervals")
-        XCTAssertNil(rig.send(.previousTrack))
+        XCTAssertTrue(rig.remote(.nextTrack).isEnabled, "next stays registered beside the skips")
+        XCTAssertTrue(rig.remote(.previousTrack).isEnabled)
 
         var before = rig.player.position
         XCTAssertEqual(rig.send(.skipForward, .interval(3)), .success)
@@ -179,7 +179,7 @@ final class RemoteCommandTests: DeviceTestCase {
         await rig.settle()
         XCTAssertEqual(center.skipForwardCommand.preferredIntervals, [30])
         XCTAssertEqual(center.skipBackwardCommand.preferredIntervals, [30])
-        XCTAssertNil(rig.send(.nextTrack), "no next on an item with skip intervals")
+        XCTAssertTrue(rig.remote(.nextTrack).isEnabled, "next stays registered on an item with skip intervals")
         XCTAssertEqual(rig.send(.skipBackward, .interval(30)), .success)
         await rig.waitUntil("restarted") { rig.player.position < 0.5 }
 

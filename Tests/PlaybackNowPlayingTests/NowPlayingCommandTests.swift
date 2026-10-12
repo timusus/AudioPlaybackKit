@@ -83,7 +83,7 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertEqual(rig.player.position, 6)
     }
 
-    // ADR-0019: a 15 s skip interval registers skipForward and not nextTrack, and the reverse.
+    // ADR-0019: skip intervals add skipForward and skipBackward; next and previous follow availableCommands.
     func testAPlayerEnablesNextAndPreviousAndNoSkips() async {
         await opened(at: 1)
 
@@ -91,23 +91,44 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertNil(rig.commands.intervals)
     }
 
-    func testSkipIntervalsEnableSkipsWithTheirIntervalsAndNoTracks() async {
+    func testSkipIntervalsEnableSkipsWithTheirIntervalsAlongsideTracks() async {
         policyRig(intervals: SkipIntervals(forward: 15, backward: 30))
         await opened(at: 1)
 
-        XCTAssertEqual(enabled, [.play, .pause, .togglePlayPause, .skipForward, .skipBackward, .changePlaybackPosition])
+        XCTAssertEqual(enabled, [.play, .pause, .togglePlayPause, .nextTrack, .previousTrack, .skipForward, .skipBackward, .changePlaybackPosition])
         XCTAssertEqual(rig.commands.intervals?.forward, 15)
         XCTAssertEqual(rig.commands.intervals?.backward, 30)
     }
 
-    func testChangingTheSkipIntervalsSwapsTheCommands() async {
+    // A steering-wheel or headphone press of next or previous reaches the player while skip buttons show.
+    func testNextAndPreviousWorkWithSkipIntervals() async {
+        let policy = policyRig(intervals: SkipIntervals(forward: 15, backward: 30))
+        await opened(at: 1)
+
+        XCTAssertEqual(rig.commands.press(.nextTrack), .success)
+        XCTAssertEqual(rig.player.currentIndex, 2)
+        XCTAssertEqual(rig.commands.press(.previousTrack), .success)
+        XCTAssertEqual(rig.player.currentIndex, 1)
+        XCTAssertNotNil(policy.intervals)
+    }
+
+    func testSkipIntervalsWithoutTrackCommandsLeaveNextAndPreviousUnregistered() async {
+        let policy = policyRig(intervals: SkipIntervals(forward: 15, backward: 30))
+        policy.removed = [.seekToNext, .seekToPrevious]
+        await opened(at: 1)
+
+        XCTAssertEqual(enabled, [.play, .pause, .togglePlayPause, .skipForward, .skipBackward, .changePlaybackPosition])
+        XCTAssertNil(rig.commands.press(.nextTrack))
+        XCTAssertNil(rig.commands.press(.previousTrack))
+    }
+
+    func testChangingTheSkipIntervalsAddsAndRemovesTheSkips() async {
         let policy = policyRig()
         await opened(at: 1)
 
         policy.intervals = SkipIntervals(forward: 10, backward: 10)
         await rig.settle()
-        XCTAssertTrue(enabled.isSuperset(of: [.skipForward, .skipBackward]))
-        XCTAssertTrue(enabled.isDisjoint(with: [.nextTrack, .previousTrack]))
+        XCTAssertTrue(enabled.isSuperset(of: [.skipForward, .skipBackward, .nextTrack, .previousTrack]))
         XCTAssertEqual(rig.commands.intervals?.forward, 10)
 
         policy.intervals = nil
@@ -380,7 +401,7 @@ final class NowPlayingCommandTests: XCTestCase {
         await opened(["a", "b", "c"])
 
         XCTAssertTrue(enabled.isSuperset(of: [.skipForward, .skipBackward]))
-        XCTAssertTrue(enabled.isDisjoint(with: [.nextTrack, .previousTrack]))
+        XCTAssertTrue(enabled.isSuperset(of: [.nextTrack, .previousTrack]))
         XCTAssertEqual(rig.commands.intervals?.forward, 30)
         XCTAssertEqual(rig.commands.intervals?.backward, 30)
         XCTAssertEqual(rig.commands.press(.skipBackward, .interval(30)), .success)

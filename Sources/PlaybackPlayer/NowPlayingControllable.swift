@@ -59,7 +59,8 @@ public protocol NowPlayingControllable<Item>: AnyObject {
 
     var availableCommands: PlayerCommands { get }
     /// Non-nil puts skip-forward and skip-back on the lock screen in place of next and previous, for
-    /// spoken word. Re-read on every item change, so it may differ per item.
+    /// spoken word; next and previous stay registered for controls that send only them. Re-read on
+    /// every item change, so it may differ per item.
     var skipIntervals: SkipIntervals? { get }
 
     func play()

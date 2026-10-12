@@ -29,7 +29,7 @@ public struct NowPlayingMetadata: Sendable {
 /// jump of the player's position, a pause or play, a rate change, an item change, or when what is heard
 /// strays from where the system has extrapolated it (the output started late). A remote command is
 /// enabled only while the player's `availableCommands` has it, as a media3 session offers a controller;
-/// `skipIntervals` swaps next and previous for the skip buttons. One session per app, since both
+/// `skipIntervals` adds the skip buttons, which the lock screen draws in place of next and previous. One session per app, since both
 /// centres are global.
 @MainActor
 public final class NowPlayingSession<Item: Hashable & Sendable> {
@@ -212,15 +212,15 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
 
     // MARK: Commands
 
-    // The lock screen offers either skip buttons or next and previous, so `skipIntervals` picks one pair.
+    // iOS draws skip buttons over next and previous when both are enabled, so `skipIntervals` only picks
+    // what is drawn; next and previous stay registered for steering wheels and headphones that send only them.
     private var remoteCommands: Set<RemoteCommand> {
         let available = player.availableCommands
         var commands: Set<RemoteCommand> = []
         if available.contains(.playPause) { commands.formUnion([.play, .pause, .togglePlayPause]) }
-        if player.skipIntervals == nil {
-            if available.contains(.seekToNext) { commands.insert(.nextTrack) }
-            if available.contains(.seekToPrevious) { commands.insert(.previousTrack) }
-        } else {
+        if available.contains(.seekToNext) { commands.insert(.nextTrack) }
+        if available.contains(.seekToPrevious) { commands.insert(.previousTrack) }
+        if player.skipIntervals != nil {
             if available.contains(.seekForward) { commands.insert(.skipForward) }
             if available.contains(.seekBack) { commands.insert(.skipBackward) }
         }

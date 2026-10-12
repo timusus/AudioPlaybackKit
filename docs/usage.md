@@ -482,7 +482,8 @@ final class SessionPlayer: ForwardingNowPlayingControllable {
     var availableCommands: PlayerCommands {
         queueLocked ? player.availableCommands.subtracting([.seekToNext, .seekToPrevious]) : player.availableCommands
     }
-    // Non-nil shows skip buttons instead of next and previous; re-read on every item change.
+    // Non-nil shows skip buttons in place of next and previous, which stay registered for
+    // steering wheels and headphones; re-read on every item change.
     var skipIntervals: SkipIntervals? {
         player.currentItem?.isSpokenWord == true ? SkipIntervals(forward: 30, backward: 15) : nil
     }
