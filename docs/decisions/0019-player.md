@@ -68,7 +68,8 @@ seam. The app's one override is an `AudioSessionConfiguration` (category, mode, 
 options) passed to `Player.init`; `SystemAudioSession` applies it. Neither app needs a conformer of its
 own, so the seam and `SystemAudioSession` stay internal and only tests replace them. The rules that act on session events (when to pause, when to resume, when to reactivate)
 are the player's and not configurable; both apps' rules are the same once the gaps in the Podcasts copy
-are filled, and Shuttle2's `AudioSessionController` is the version we take.
+are filled, and Shuttle2's `AudioSessionController` rules are the ones the player implements. The
+widget publisher (`NowPlayingWidgetPublisher`) stays in Shuttle2: it is one of those other renderings.
 
 Nothing about podcasts, music libraries, ads, chapters or UI goes in. Chapters are a seek the app
 computes; Smart Skip is seeks, a `setVolume` duck and a chime the app plays; the sleep timer is the
@@ -372,8 +373,8 @@ symbols. For each app to test its own coordinator the same way, slice 5 (#123) w
 `AudioSessionControlling`, `AudioSessionEvent`, `AudioRouteChangeReason`, `AudioPortKind` and that
 initialiser (and `drainTransportEvents`, which the rig needs to step deterministically) to
 `@_spi(Testing) public`, and moves `FakeAudioSession` and a generic `PlayerTestRig<Item>` into
-`PlaybackPlayerTestSupport`. `FakeItemFactory` stays in the package's tests: its string fixtures mean
-nothing to an app, which hands the rig its own factory over `FakeItemSource`. The product imports
+`PlaybackPlayerTestSupport`. `FakeItemFactory` followed in #144, generic over the app's item, so an
+app scripts failures, early ends and stalls per item as the package's tests do. The product imports
 `PlaybackPlayer` with `@_spi(Testing)`. Not `package` access: the apps' test targets are in other
 packages, so a `package` symbol cannot reach them, nor appear in TestSupport's public API.
 `@_spi(Testing)` is what `Transport.init(output:timer:executor:onEvent:)` already uses. Tests advance

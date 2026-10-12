@@ -17,9 +17,9 @@ iOS directory (`mobile/ios` in `timusus/shuttle-podcasts`, `ios` in `timusus/shu
   screen and remote commands.
 - **The apps keep** the queue and its order (shuffle is Kotlin in both, shared with Android), persistence of
   positions, sleep timers, auto-play on headphones, and every effect's algorithm.
-- **Threading.** `Player` is `@MainActor`. Both Kotlin bridges (`IosAudioPlayer`) are called from coroutine
-  dispatchers, so each call hops to main first. Podcasts' `EngineAudioPlayerBridge.onMain` already does it
-  synchronously, to keep Kotlin's ordering; keep that shape.
+- **Threading.** `Player` is `@MainActor`, and both Kotlin bridges (`IosAudioPlayer`) are called on the
+  main thread only, so a bridge calls the player directly. Podcasts' `EngineAudioPlayerBridge.onMain` stays
+  synchronous, to keep Kotlin's ordering.
 
 ## Where things go
 
@@ -94,8 +94,11 @@ Details:
 |---|---|---|
 | `MusicPlaybackController` and its `+Output`, `+Stream`, `+Timeline`, `+Underrun`, `+Opening` extensions, `PreopenLead`, `UnderrunResumeRule` | `Playback/Sources/S2Playback/Engine/` | deleted; one `Player<PlaybackTrack>` |
 | `PlaybackTrack` (`uid`, `gainDb`, `makeSource`) | `PlaybackTrack.swift` | the `Item`; `makeSource` is the `makeSource` closure |
-| `TrackPCMSource`, `FFmpegTrackSource` | `TrackPCMSource.swift` | `FFmpegItemSource(reader:)`, wrapped for ReplayGain below; no conversion to a fixed output format |
-| `PCMProcessor`: ReplayGain, `EqualizerSettings`, `LimiterSettings` | `DSP/PCMProcessor.swift` | `AudioProcessor`s (EQ, limiter) and a gain wrapper around the item source |
+| `TrackPCMSource`, `FFmpegTrackSource` | `TrackPCMSource.swift` | `FFmpegItemSource(reader:)`; no conversion to a fixed output format. A progressive transcode is the app's own `ItemSource`, below |
+| `PCMProcessor`: ReplayGain, `EqualizerSettings`, `LimiterSettings` | `DSP/PCMProcessor.swift` | `AudioProcessor`s: ReplayGain first, picking the gain in `flush(_:)` (ADR-0021), then EQ and limiter |
+| Short-end re-open (an item ending before its duration is re-opened at the position, up to 3 tries) | `Engine/` | app-owned: the package plays a short end as the end, so the app re-opens from its `itemTransition` handler and counts the tries |
+| Start-up timing logs | `Engine/` | app-owned, timed from `events` and the observed `state` |
+| `+Reporting`, `+Slot`, `+StartTiming` controller extensions | `Engine/` | deleted with the controller; what the app still reports it reads from `events` |
 | `AudioEngine.swift`, `MusicPlaybackController+AudioEngine.swift` | `S2/Platform/Audio/` | deleted |
 | `AudioSessionController` | `S2/Platform/Audio/` | deleted; its rules are the player's. `.longFormAudio` is its category and route sharing |
 | `NowPlayingController` | `S2/Platform/Audio/` | `NowPlayingSession(player: sessionPlayer, ...)`, a `ForwardingNowPlayingControllable` for the queue rules, as Android's `SessionPlayer : ForwardingPlayer`. `PlaybackSystemCoordinator` keeps only the widget publisher and `PlayIntent` logging |
@@ -118,13 +121,18 @@ Details:
    so filter memory and the limiter envelope reset there, whatever the format.
 5. **Remove the fixed output format.** Each item plays at its own sample rate and channel count, so
    `PCMProcessor` loses its assumption of stereo at `outputSampleRate`.
-6. **Progressive transcodes** (`isSeekable` false, `onSeekUnsupported`): an `ItemSource.seek` that throws
-   arrives as `itemFailed`, so the adapter decides before calling `seek(to:)` and re-opens the stream at
-   the position with `setItems(_:startIndex:startPosition:)`.
-7. **Failed tracks.** `onCurrentFailed` skips up to 15 failures: do it from the `itemFailed` handler with
-   `skipToNext()`, counting consecutive failures there.
-8. **Crossfade** does not exist on iOS; the join is gapless, and a fade at a track end is a `volume` ramp.
-9. **Repeat one** is `repeatMode = .one`, the same item twice in a row, gapless.
+6. **Progressive transcodes** (`onSeekUnsupported` today): the app's `ItemSource` streams the transcode
+   with no length, declares `isSeekable` true, and seeks by re-opening the server stream at a time offset
+   (ADR-0022). The player then offers the scrubber and does not treat the item as live; a landing more than
+   1 ms off the target arrives as `seekAdjusted`.
+7. **Failed tracks.** `onCurrentFailed` skips only an item that never became ready, never wraps past the
+   end of the queue, and stops after 15 in a row. Keep those rules in the `itemFailed` handler, counting
+   there: `skipToNext()` wraps under `repeatMode = .all`, so check `currentIndex` first.
+8. **Command policy.** The queue rules for remote commands live in the `ForwardingNowPlayingControllable`
+   wrapper (ADR-0020): its `availableCommands` greys a command out, and it overrides `seekToNext()` and
+   `seekToPrevious()` where the queue decides.
+9. **Crossfade** does not exist on iOS; the join is gapless, and a fade at a track end is a `volume` ramp.
+10. **Repeat one** is `repeatMode = .one`, the same item twice in a row, gapless.
 
 ## Order of work
 

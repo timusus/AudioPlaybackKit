@@ -216,7 +216,9 @@ Every method returns at once and runs in call order on the transport's queue. `I
 seek lands on the nearest frame, so a stored resume point seeks back to the frame it was reported at. Use
 the `position` events for the UI and for `MPNowPlayingInfoCenter`; their `duration` is the item's length
 in seconds as FFmpeg probed it, nil for a live stream or a body of unknown length, and `isSeekable` is
-the source's `ItemSource.isSeekable`. `.ended` is not final, a later `setNext` plays on.
+the source's `ItemSource.isSeekable`. `.ended` is not final: a
+`transport.setNext(item:source:)` made after it plays that item on from the end, without a flush. (`Player`
+has no `setNext`; it arms the next item of its list itself.)
 `setCurrent` replaces everything set, so it is also how a skip or a track change by the user works.
 A source belongs to one `setCurrent` or `setNext`; make a new `FFmpegItemSource` each time.
 
