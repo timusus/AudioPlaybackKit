@@ -43,7 +43,11 @@ public final class FakeItemFactory<Item: Hashable & Sendable> {
     /// Items whose source holds `open()` or a read until the stall is released.
     public var stalls: [Item: SourceStall] = [:]
     public private(set) var calls: [Item] = []
+    private var made: [(item: Item, source: FakeItemSource)] = []
     private let base: (Item) -> Float
+
+    /// The items whose source the transport has released, in the order they were made.
+    public var released: [Item] { made.filter { $0.source.releases > 0 }.map(\.item) }
 
     /// `base` is each item's first sample (see `FakeItemSource`), so audio written says whose it is.
     public init(format: PCMFormat = PCMFormat(sampleRate: 8, channelCount: 1), base: @escaping (Item) -> Float = { _ in 0 }) {
@@ -58,6 +62,7 @@ public final class FakeItemFactory<Item: Hashable & Sendable> {
         if live.contains(item) { source.duration = nil }
         if unknownLength.contains(item) { (source.duration, source.seekable) = (nil, true) }
         if unseekable.contains(item) { source.seekable = false }
+        made.append((item, source))
         let script = ScriptedItemSource<Item>.Script(
             unopenable: unopenable.contains(item),
             failsSeeks: failingSeeks.contains(item),
@@ -176,5 +181,9 @@ private final class ScriptedItemSource<Item: Hashable & Sendable>: ItemSource, @
     func interrupt(through epoch: UInt64) {
         if lock.withLock({ self.epoch <= epoch }) { script.stall?.interrupt() }
         source.interrupt(through: epoch)
+    }
+
+    func release() {
+        source.release()
     }
 }

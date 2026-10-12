@@ -8,6 +8,14 @@ import PlaybackDecode
 /// `open()` may block on resolving the item's URL, as a media3 `DataSource.open` does on its loader
 /// thread. `interrupt(through:)` is the one cancellation path: a next item removed, replaced or
 /// skipped past while it opens is interrupted, and the open's outcome is dropped.
+///
+/// The transport owns a source from `setCurrent` or `setNext` until it calls `release()`, as media3's
+/// loader owns a `DataSource` until `close()`. That happens when the source leaves the transport:
+/// a `setCurrent` (a `Player` load, skip to an unarmed item, or `replaceItems` with another current
+/// item) releases every source it replaces; a `setNext` that replaces an unplayed next, or a
+/// `clearNext`, releases that next; a crossing into an item releases the ones before it; a next that
+/// fails before it is heard, `stop()` and dropping the transport release theirs. A seek releases
+/// nothing: it may land in any item still set. A source passed again while still set is not released.
 public protocol ItemSource: AnyObject, Sendable {
     /// Never blocks: the calls that follow belong to the sequencer's `epoch`.
     func begin(epoch: UInt64)
@@ -28,11 +36,16 @@ public protocol ItemSource: AnyObject, Sendable {
     /// Any thread, never blocks: brings back early every call of `epoch` or before, one in flight or
     /// one about to start, and leaves later epochs' calls alone.
     func interrupt(through epoch: UInt64)
+    /// The transport is done with the source: called once, on the executor after any call in flight
+    /// has returned, and nothing is called after it. Ends downloads and frees what the source holds.
+    /// Defaults to nothing, for a source that holds nothing beyond memory.
+    func release()
 }
 
 public extension ItemSource {
     var duration: Int64? { nil }
     var isSeekable: Bool { duration != nil }
+    func release() {}
 }
 
 /// `FFmpegStreamDecoder` as an item source. The decoder already trims encoder delay and padding
@@ -51,7 +64,8 @@ public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
     /// ADR-0017's rule: only a stream with neither a byte length nor a container duration is live.
     public private(set) var isSeekable = false
 
-    /// The source owns `reader` from here on: only the transport's decode executor reads it.
+    /// The source owns `reader` from here on: only the transport's decode executor reads it, and
+    /// `release()` cancels it, which ends a `GrowingFileByteSource`'s download.
     public init(reader: StreamByteReader) {
         self.reader = reader
     }
@@ -108,6 +122,11 @@ public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
             interruptedThrough = max(interruptedThrough ?? epoch, epoch)
             decoder?.interrupt(through: epoch)
         }
+    }
+
+    public func release() {
+        lock.withLock { decoder = nil }
+        reader.cancel()
     }
 
     private func opened() throws -> FFmpegStreamDecoder {

@@ -124,50 +124,58 @@ final class Sequencer: @unchecked Sendable {
 
     /// Replaces the whole window with `item` and decodes it from `start` (its start when nil).
     func setCurrent(item: Int, source: any ItemSource, start: SeekTarget.Offset? = nil) {
-        let interruptStale = lock.withLock {
+        let (interruptStale, removed) = lock.withLock {
             let entry = Entry(item: item, source: source)
             entry.started = true
+            let removed = window
             window = [entry]
-            return restart(Cursor(entry: entry, seekTo: start))
+            return (restart(Cursor(entry: entry, seekTo: start)), leaving(removed))
         }
         interruptStale()
+        retire(removed)
     }
 
     /// Follows the window's last item with no gap once it ends: replaces the last item if decode has
     /// not reached it, else appends.
     @discardableResult
     func setNext(item: Int, source: any ItemSource) -> TailChange {
-        let (change, interruptOpen) = lock.withLock {
+        let (change, interruptOpen, removed) = lock.withLock {
             // A second entry with the same number would make seeks and releases ambiguous.
             precondition(!window.contains { $0.item == item }, "item \(item) is already in the window")
             var change = TailChange.appended
             var interruptOpen: () -> Void = {}
+            var removed: [Entry] = []
             if let last = window.last, tailIsUnplayed {
                 interruptOpen = removeLast()
                 change = .replaced(last.item)
+                removed = [last]
             }
             window.append(Entry(item: item, source: source))
             schedule()
-            return (change, interruptOpen)
+            return (change, interruptOpen, leaving(removed))
         }
         interruptOpen()
+        retire(removed)
         return change
     }
 
     /// Removes the window's last item if decode has not reached it or is still opening it.
     @discardableResult
     func clearNext() -> TailChange {
-        let (change, interruptOpen) = lock.withLock { () -> (TailChange, () -> Void) in
-            guard let last = window.last, tailIsUnplayed else { return (.unchanged, {}) }
-            return (.removed(last.item), removeLast())
+        let (change, interruptOpen, removed) = lock.withLock { () -> (TailChange, () -> Void, [any ItemSource]) in
+            guard let last = window.last, tailIsUnplayed else { return (.unchanged, {}, []) }
+            let interruptOpen = removeLast()
+            return (.removed(last.item), interruptOpen, leaving([last]))
         }
         interruptOpen()
+        retire(removed)
         return change
     }
 
     /// Empties the window and interrupts the source in flight; `pull` returns `.pending` from here until a new item is set.
     func clear() {
-        let interruptStale = lock.withLock {
+        let (interruptStale, removed) = lock.withLock {
+            let removed = window
             window = []
             let stale = cursor?.entry.source
             let staleEpoch = epoch
@@ -176,9 +184,10 @@ final class Sequencer: @unchecked Sendable {
             buffer = []
             failure = nil
             scheduled = false
-            return { stale?.interrupt(through: staleEpoch) }
+            return ({ stale?.interrupt(through: staleEpoch) }, leaving(removed))
         }
         interruptStale()
+        retire(removed)
     }
 
     /// Restarts decode at `offset` of `item`, which must still be in the window; the feeder's
@@ -197,27 +206,33 @@ final class Sequencer: @unchecked Sendable {
     /// Drops the items before `item`, which nothing can seek to any more: the transport calls it on
     /// each `crossed(item:)`. Never drops the item being decoded or any after it.
     func release(before item: Int) {
-        lock.withLock {
+        let removed = lock.withLock { () -> [any ItemSource] in
             guard let end = window.firstIndex(where: { $0.item == item }),
-                  let cursor, let decoding = window.firstIndex(where: { $0 === cursor.entry }) else { return }
+                  let cursor, let decoding = window.firstIndex(where: { $0 === cursor.entry }) else { return [] }
             // A crossed event can trail a seek back past its item.
-            window.removeFirst(min(end, decoding))
+            let removed = Array(window.prefix(min(end, decoding)))
+            window.removeFirst(removed.count)
+            return leaving(removed)
         }
+        retire(removed)
     }
 
     /// Removes a next item whose source failed before it was heard. True when decode had tagged
     /// nothing of it, so it carries on from the item before; false when its chunks may be out, so
     /// the caller seeks.
     func drop(item: Int) -> Bool {
-        lock.withLock {
-            guard let index = window.firstIndex(where: { $0.item == item }) else { return false }
+        let (dropped, removed) = lock.withLock { () -> (Bool, [any ItemSource]) in
+            guard let index = window.firstIndex(where: { $0.item == item }) else { return (false, []) }
             let entry = window.remove(at: index)
-            guard let cursor, cursor.entry === entry, !cursor.tagged, index > 0 else { return false }
+            let removed = leaving([entry])
+            guard let cursor, cursor.entry === entry, !cursor.tagged, index > 0 else { return (false, removed) }
             self.cursor = Cursor(entry: window[index - 1], seekTo: nil, tagged: true, ended: true)
             failure = nil
             schedule()
-            return true
+            return (true, removed)
         }
+        retire(removed)
+        return dropped
     }
 
     /// Known by the time the item's first chunk is pulled; nil when its source does not know it.
@@ -292,6 +307,23 @@ final class Sequencer: @unchecked Sendable {
         failure = nil
         scheduled = false
         return { last.source.interrupt(through: staleEpoch) }
+    }
+
+    /// Locked. The sources of `removed` the window no longer holds, each once.
+    private func leaving(_ removed: [Entry]) -> [any ItemSource] {
+        var sources: [any ItemSource] = []
+        for entry in removed where !window.contains(where: { $0.source === entry.source })
+            && !sources.contains(where: { $0 === entry.source }) {
+            sources.append(entry.source)
+        }
+        return sources
+    }
+
+    /// Not locked, and after any interrupt: the executor runs each `release()` after the job still
+    /// reading the source, so nothing calls it afterwards, as media3's loader closes its `DataSource`.
+    private func retire(_ sources: [any ItemSource]) {
+        guard !sources.isEmpty else { return }
+        executor.run { sources.forEach { $0.release() } }
     }
 
     /// Locked.

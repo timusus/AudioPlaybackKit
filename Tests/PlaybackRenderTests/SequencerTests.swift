@@ -183,7 +183,7 @@ final class SequencerTests: XCTestCase {
 
         sequencer.setNext(item: 2, source: FakeItemSource(format: mono44, frames: 100))
         sequencer.clearNext()
-        XCTAssertEqual(executor.queued, 1)
+        XCTAssertEqual(executor.queued, 2, "the stale step, then the cleared next's release")
         executor.runUntilIdle()
         let drained = drain(sequencer, executor)
 
@@ -203,6 +203,8 @@ final class SequencerTests: XCTestCase {
         XCTAssertEqual(drain(sequencer, executor, limit: 3).tags.last, tag(2, 0, 100))
 
         sequencer.release(before: 2)
+        XCTAssertEqual(released?.releases, 0, "released on the executor, after any job reading it")
+        executor.runUntilIdle()
         XCTAssertNil(released)
         sequencer.seek(item: 2, to: .frame(50))
         let drained = drain(sequencer, executor)
@@ -210,6 +212,20 @@ final class SequencerTests: XCTestCase {
         XCTAssertTrue(drained.ended)
         XCTAssertEqual(drained.tags, [tag(2, 50, 100), tag(2, 150, 100)])
         XCTAssertEqual(drained.samples, b.samples(from: 50, to: 250))
+    }
+
+    func testASourceSetAgainWhileInTheWindowIsNotReleased() {
+        let a = FakeItemSource(format: mono44, frames: 150)
+        let b = FakeItemSource(format: mono44, frames: 150)
+        sequencer.setCurrent(item: 1, source: a)
+        sequencer.setNext(item: 2, source: b)
+        executor.runUntilIdle()
+
+        sequencer.setCurrent(item: 3, source: a)
+        executor.runUntilIdle()
+
+        XCTAssertEqual(a.releases, 0)
+        XCTAssertEqual(b.releases, 1)
     }
 
     func testAFailedSourceIsReportedNotEnded() {

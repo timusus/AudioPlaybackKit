@@ -90,7 +90,9 @@ while let chunk = decoder.nextChunk() { /* schedule it */ }
 ```
 
 - **Always call `cancel()`.** A running URLSession task retains its delegate, which is the source.
-  Without it the source and its partial file leak.
+  Without it the source and its partial file leak. Handed to `Player` or `Transport` in an
+  `FFmpegItemSource`, the transport does it: `ItemSource.release()` cancels the reader once the item
+  is replaced, removed, passed or stopped.
 - **Set `isProbing` around `open()`.** FFmpeg's MP3 open reads the last 128 bytes (an ID3v1 footer).
   While probing, that read answers end of file at once instead of cancelling the head download
   ([ADR-0003](decisions/0003-growing-file-playback.md)).

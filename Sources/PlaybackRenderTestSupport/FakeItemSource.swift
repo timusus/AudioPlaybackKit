@@ -16,7 +16,10 @@ public final class FakeItemSource: ItemSource, @unchecked Sendable {
     /// Runs inside `nextChunk()`, as if the decode were still in flight there.
     public var duringRead: (() -> Void)?
 
+    private var _releases = 0
+
     public var interrupts: Int { lock.withLock { _interrupts } }
+    public var releases: Int { lock.withLock { _releases } }
     /// The item's length unless a test makes it unknown.
     public var duration: Int64?
     /// Overrides `ItemSource`'s default, seekable while the duration is known.
@@ -38,9 +41,13 @@ public final class FakeItemSource: ItemSource, @unchecked Sendable {
 
     public func begin(epoch: UInt64) {}
 
-    public func open() throws -> PCMFormat { format }
+    public func open() throws -> PCMFormat {
+        assertNotReleased()
+        return format
+    }
 
     public func seek(toFrame frame: Int64) throws -> Int64 {
+        assertNotReleased()
         // As FFmpeg's source throws `unseekable` for a forward-only reader.
         guard isSeekable || frame == position else { throw Unseekable() }
         position = min(frame, frameCount)
@@ -48,6 +55,7 @@ public final class FakeItemSource: ItemSource, @unchecked Sendable {
     }
 
     public func nextChunk() throws -> [Float]? {
+        assertNotReleased()
         if let duringRead {
             self.duringRead = nil
             duringRead()
@@ -60,5 +68,14 @@ public final class FakeItemSource: ItemSource, @unchecked Sendable {
 
     public func interrupt(through epoch: UInt64) {
         lock.withLock { _interrupts += 1 }
+    }
+
+    public func release() {
+        lock.withLock { _releases += 1 }
+    }
+
+    // The transport calls nothing after `release()`; a fake that kept serving would hide a read of a cancelled download.
+    private func assertNotReleased() {
+        precondition(releases == 0, "read after release()")
     }
 }

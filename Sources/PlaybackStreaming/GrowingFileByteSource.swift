@@ -58,7 +58,8 @@ import PlaybackDecode
 /// the read lets go. Time (the backoff, the link window, the throughput window, the recheck, the
 /// body's idle check) is the ``GrowingFileClock``'s.
 ///
-/// **``cancel()`` must be called**: a running task retains its delegate, this object.
+/// **``cancel()`` must be called**: a running task retains its delegate, this object. Handed to an
+/// `FFmpegItemSource`, the transport's `ItemSource.release()` calls it once it lets go of the item.
 public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFileSnapshotSource, URLSessionDataDelegate {
 
     /// The window, in seconds, over which ``GrowingFileSnapshot/downloadBytesPerSecond`` is

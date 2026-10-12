@@ -46,4 +46,17 @@ final class FFmpegItemSourceTests: XCTestCase {
         _ = try source.open()
         XCTAssertNil(source.duration)
     }
+
+    func testReleaseCancelsTheReader() throws {
+        let reader = try file("SeekFixtures/cbr_128k_unpadded_info.mp3")
+        let source = FFmpegItemSource(reader: reader)
+        _ = try source.open()
+
+        source.release()
+
+        var byte: UInt8 = 0
+        XCTAssertThrowsError(try reader.read(into: &byte, maxLength: 1)) {
+            XCTAssertEqual($0 as? StreamByteReaderError, .cancelled)
+        }
+    }
 }
