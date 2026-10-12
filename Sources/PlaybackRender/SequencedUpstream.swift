@@ -22,9 +22,9 @@ final class SequencedUpstream: FeederUpstream {
     /// Where `Sequencer.setCurrent` already starts decode, so the feeder's restart there needs no seek.
     private var freshStart: SeekTarget?
 
-    /// Each item's sample rate, known once its first chunk is pulled. Processors cannot resample,
-    /// so it is also the rate of the item's frames at the output.
-    private(set) var sampleRates: [Int: Double] = [:]
+    /// Each item's decoded format, the one the processors are configured with, known once its first
+    /// chunk is pulled. Processors cannot resample, so its rate is also that of the item's output.
+    private(set) var formats: [Int: PCMFormat] = [:]
 
     /// `item` maps an id to the app's item for `StreamMetadata`.
     init(
@@ -38,7 +38,7 @@ final class SequencedUpstream: FeederUpstream {
     }
 
     func setCurrent(item: Int, source: any ItemSource, startSeconds: TimeInterval) {
-        sampleRates = [:]
+        formats = [:]
         sequencer.setCurrent(item: item, source: source, start: startSeconds == 0 ? nil : .seconds(startSeconds))
         freshStart = SeekTarget(item: item, offset: .seconds(startSeconds))
     }
@@ -52,19 +52,19 @@ final class SequencedUpstream: FeederUpstream {
     /// Empties the window and drops what the pipeline holds, so nothing more is supplied.
     func stop() {
         sequencer.clear()
-        sampleRates = [:]
+        formats = [:]
         restartPipeline()
     }
 
     func release(before item: Int) {
         sequencer.release(before: item)
-        sampleRates = sampleRates.filter { $0.key >= item }
+        formats = formats.filter { $0.key >= item }
     }
 
     /// Forgets a next item that failed before it was heard. False when audio of it may be queued, so
     /// the caller re-feeds from what is heard.
     func drop(item: Int) -> Bool {
-        sampleRates[item] = nil
+        formats[item] = nil
         guard sequencer.drop(item: item) else { return false }
         failed = false
         return true
@@ -86,7 +86,7 @@ final class SequencedUpstream: FeederUpstream {
             } else {
                 switch sequencer.pull() {
                 case let .chunk(chunk):
-                    for tag in chunk.tags { sampleRates[tag.item] = chunk.format.sampleRate }
+                    for tag in chunk.tags { formats[tag.item] = chunk.format }
                     next = chunk
                 case .pending:
                     return .pending

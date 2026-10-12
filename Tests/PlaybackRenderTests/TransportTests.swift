@@ -91,7 +91,7 @@ final class TransportTests: XCTestCase {
     ]
 
     private var crossed: [String] {
-        recorder.events.compactMap { if case let .crossed(item) = $0 { item } else { nil } }
+        recorder.events.compactMap { if case let .crossed(item, _) = $0 { item } else { nil } }
     }
 
     private var statuses: [TransportStatus] {
@@ -768,7 +768,7 @@ final class TransportTests: XCTestCase {
             XCTAssertFalse(Thread.isMainThread)
             switch event {
             case .status(.playing): playing.fulfill()
-            case .crossed(item: "b"): crossedB.fulfill()
+            case .crossed(item: "b", _): crossedB.fulfill()
             default: break
             }
         }

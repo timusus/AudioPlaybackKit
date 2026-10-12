@@ -106,7 +106,7 @@ final class TransportJoinTests: XCTestCase {
     }
 
     private var crossed: [String] {
-        recorder.events.compactMap { if case let .crossed(item) = $0 { item } else { nil } }
+        recorder.events.compactMap { if case let .crossed(item, _) = $0 { item } else { nil } }
     }
 
     private var statuses: [TransportStatus] {

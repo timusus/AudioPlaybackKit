@@ -56,7 +56,7 @@ final class TransportStreamMetadataTests: XCTestCase {
 
         XCTAssertEqual(processor.events, [flush("a", 0)] + inputs(12) + [flush("b", 0)] + inputs(8))
         XCTAssertEqual(output.flushes, [0])
-        XCTAssertTrue(recorder.events.contains { if case .crossed("b") = $0 { true } else { false } })
+        XCTAssertTrue(recorder.events.contains { if case .crossed("b", _) = $0 { true } else { false } })
     }
 
     func testAFormatChangeJoinFlushesWithTheNextItem() {

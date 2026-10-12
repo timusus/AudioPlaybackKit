@@ -28,8 +28,9 @@ and is kept as history. The overview is in [architecture](../architecture.md).
 | [0020](0020-now-playing-drives-a-protocol.md) | `NowPlayingSession` drives `NowPlayingControllable`; an app's forwarding wrapper sets the available commands and per-item skip intervals, as media3's `ForwardingPlayer`. | Accepted (2026-10-12) |
 | [0021](0021-processor-stream-metadata.md) | `AudioProcessor.flush(_:)` gets a `StreamMetadata` naming the item that follows; the chain drains and flushes at every join. | Accepted (2026-10-12) |
 | [0022](0022-source-declared-seekability.md) | `ItemSource.isSeekable`; live is neither seekable nor of known duration; a seek not made as asked is reported as `seekAdjusted`. | Accepted (2026-10-12) |
-| [0026](0026-in-place-processing.md) | `AudioProcessor.process(_:)` rewrites each chunk in place; `BufferingAudioProcessor` keeps the queue shape for stages that drop or hold back frames. | Accepted (2026-10-12) |
 | [0023](0023-pause-at-end-stays-on-the-item.md) | `pauseAtEndOfItem` stays on the finished item at its end, as media3; `play()` moves on. | Accepted (2026-10-12) |
 | [0024](0024-prepare.md) | `prepare()` loads the current item from idle, as media3; no auto-skip of a failed item. | Accepted (2026-10-12) |
+| [0025](0025-output-format.md) | `Player.audioFormat` is the heard item's decoded format, the one its processors run at, carried on `TransportEvent.crossed`. | Accepted (2026-10-12) |
+| [0026](0026-in-place-processing.md) | `AudioProcessor.process(_:)` rewrites each chunk in place; `BufferingAudioProcessor` keeps the queue shape for stages that drop or hold back frames. | Accepted (2026-10-12) |
 
 These decisions were first made in the Shuttle Podcasts app and moved here with the code.

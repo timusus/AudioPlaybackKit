@@ -194,8 +194,8 @@ import PlaybackRender
 
 let transport = Transport<Track.ID> { event in          // called on the transport's queue
     switch event {
-    case .position(let id, let seconds, let duration): break   // media time of `id`; duration nil when unknown
-    case .crossed(let id): break                        // `id` is now heard; advance your queue
+    case .position(let id, let seconds, let duration, let isSeekable): break   // media time of `id`; duration nil when unknown
+    case .crossed(let id, let format): break            // `id` is now heard, decoded at `format`; advance your queue
     case .status(let status): break                     // .paused, .buffering, .playing, .ended
     case .sought(let id, let seconds, let applied): break  // a setCurrent or seek was taken; if applied, events before it are stale
     case .failed(let id, let error): break              // paused, unless `id` is a next item not yet heard
@@ -352,6 +352,10 @@ struct NowPlayingBar: View {
   while it changes. `duration` is nil until the item opens and whenever the source does not know it.
   `isSeekable` is the source's, known once it opens; a server transcode seeks with no duration.
   `isLive` is an opened item that neither seeks nor has a duration (ADR-0022).
+- **`audioFormat`** (media3 `getAudioFormat()`) is the current item's sample rate and channel count as
+  decoded, the format your processors are configured with for it: draw an EQ curve at its rate. It is nil
+  until the item is heard, and changes when a join into the next item is heard, not when it is decoded
+  ahead (ADR-0025).
 - **A seek not made as asked** is reported as `seekAdjusted(index:requested:position:)`: a target
   clamped to `0...duration`, a seek an unseekable item refused (it stays put), or a source that landed
   elsewhere, as on a keyframe (sent after `seekLanded`). An unseekable item never fails for a seek.

@@ -18,8 +18,9 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     /// Playing; nil when unknown. `isSeekable` is the source's `ItemSource.isSeekable`.
     case position(item: Item, seconds: TimeInterval, duration: TimeInterval?, isSeekable: Bool)
     /// `item` is now the one at the playhead: the gapless join reached the speaker, or the first
-    /// item's audio was written there, playing or paused.
-    case crossed(item: Item)
+    /// item's audio was written there, playing or paused. `format` is the item's decoded format, the
+    /// one the processors run at for it.
+    case crossed(item: Item, format: PCMFormat)
     case status(TransportStatus)
     /// A `setCurrent` or `seek` was taken, in call order, before anything it caused: events before it
     /// predate the call, and the next `.position` for `item` is the call's first audio. Every call is
@@ -229,7 +230,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
 
     /// Every frame position comes from audio already pulled, so its item's rate is known.
     private func report(_ position: MediaPositionMap.Position) {
-        guard let item = ids[position.item], let rate = upstream.sampleRates[position.item] else { return }
+        guard let item = ids[position.item], let rate = upstream.formats[position.item]?.sampleRate else { return }
         let duration = sequencer.duration(of: position.item).map { Double($0) / rate }
         let isSeekable = sequencer.isSeekable(position.item)
         onEvent(.position(item: item, seconds: Double(position.mediaFrame) / rate, duration: duration, isSeekable: isSeekable))
@@ -248,7 +249,8 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
             // Nothing can seek behind the item now heard, so the sequencer may forget those.
             upstream.release(before: id)
             ids = ids.filter { $0.key >= id }
-            if let item = ids[id] { onEvent(.crossed(item: item)) }
+            // Its first chunk was pulled before it was heard, so its format is known.
+            if let item = ids[id], let format = upstream.formats[id] { onEvent(.crossed(item: item, format: format)) }
         case let .position(position):
             report(position)
         case let .status(status):

@@ -118,7 +118,8 @@ Details:
    for `metadata.item` in `flush(_:)`, which names the item whose frames follow (ADR-0021).
 3. **EQ.** The coefficients come from the shared Kotlin code for one rate. The processor's `configure(_:)`
    gets the item's rate and must ask for coefficients for it, again after each `flush(_:)` that follows a
-   rate change. Never cache a 44.1 kHz set.
+   rate change. Never cache a 44.1 kHz set. The EQ screen draws its curve at `player.audioFormat`'s
+   rate, the one the filters run at for the item heard, rather than assuming 48 kHz.
 4. **Limiter and EQ state across a join.** Every join drains, re-configures and flushes the pipeline,
    so filter memory and the limiter envelope reset there, whatever the format. Both run in place:
    `process(_:)` filters the lent buffer instead of returning a copy. A limiter with lookahead delays

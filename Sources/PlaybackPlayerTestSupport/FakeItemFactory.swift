@@ -19,6 +19,8 @@ public final class FakeItemFactory<Item: Hashable & Sendable> {
     /// Every item's length unless `lengths` has its own: ten seconds at the default 8 Hz.
     public var frames: Int64 = 80
     public var lengths: [Item: Int64] = [:]
+    /// Items decoded at their own format rather than `format`.
+    public var formats: [Item: PCMFormat] = [:]
     /// Items whose source reports no duration and cannot seek, as a live stream does.
     public var live: Set<Item> = []
     /// Items whose source seeks but reports no duration, as a server transcode does.
@@ -52,7 +54,7 @@ public final class FakeItemFactory<Item: Hashable & Sendable> {
     public func make(_ item: Item) throws -> any ItemSource {
         calls.append(item)
         if failing.contains(item) { throw FakeItemError(item: item) }
-        let source = FakeItemSource(format: format, frames: lengths[item] ?? frames, chunkFrames: 2, base: base(item))
+        let source = FakeItemSource(format: formats[item] ?? format, frames: lengths[item] ?? frames, chunkFrames: 2, base: base(item))
         if live.contains(item) { source.duration = nil }
         if unknownLength.contains(item) { (source.duration, source.seekable) = (nil, true) }
         if unseekable.contains(item) { source.seekable = false }

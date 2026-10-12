@@ -86,7 +86,7 @@ final class TransportFailureTests: XCTestCase {
     }
 
     private var crossed: [String] {
-        recorder.events.compactMap { if case let .crossed(item) = $0 { item } else { nil } }
+        recorder.events.compactMap { if case let .crossed(item, _) = $0 { item } else { nil } }
     }
 
     /// Every quarter second of `a`, from its start to its end.
