@@ -1,13 +1,27 @@
 # Architecture
 
-Three parts: a pull decoder over an abstract byte source, an opt-in network byte source that plays a
-file while it downloads, and a committed FFmpeg framework. The reasons behind each are in the
+Three parts below, and three layers above them: a pull decoder over an abstract byte source, an opt-in
+network byte source that plays a file while it downloads, and a committed FFmpeg framework; then an
+output layer, a player and a lock-screen session. The reasons behind each are in the
 [decisions](decisions/README.md); the mechanics are in the source and its doc comments.
 
 ![Products and their dependencies](diagrams/products.svg)
 
 A consumer links only the products it imports. `PlaybackStreaming` depends on `PlaybackDecode`, so a
-decode-only app never links the network code. The `FFmpeg` product exposes the same framework and headers for
+decode-only app never links the network code. The layers above the decoder each depend on the one below
+and nothing else:
+
+- **`PlaybackRender`**: `Transport` runs decoded PCM through the app's `AudioProcessor`s into an
+  `AVSampleBufferAudioRenderer`, joins items gaplessly, maps the synchronizer's clock back to the frame
+  heard, and recovers a failed renderer once ([ADR-0018](decisions/0018-render-layer.md)).
+- **`PlaybackPlayer`**: `Player` keeps the item list and play intent, arms the next item, owns the
+  `AVAudioSession`, and publishes state and position as `@Observable` properties plus one event stream
+  ([ADR-0019](decisions/0019-player.md)). It drives `Transport` only through its public API.
+- **`PlaybackNowPlaying`**: `NowPlayingSession` publishes a `Player` to Now Playing and routes the remote
+  commands back to it ([ADR-0020](decisions/0020-now-playing-drives-a-protocol.md)).
+
+Each has a `*TestSupport` product of fakes for an app's own tests, and none is needed by an app that only
+wants PCM. The `FFmpeg` product exposes the same framework and headers for
 an app with its own C against libavformat; an app links one copy, since a second FFmpeg's symbols would
 clash with this one's or silently shadow them. The engine knows nothing about podcasts, queues or UI, and effects stay in the
 apps ([ADR-0005](decisions/0005-shared-engine-repo.md)).
