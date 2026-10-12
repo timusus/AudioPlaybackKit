@@ -222,7 +222,9 @@ A source belongs to one `setCurrent` or `setNext`; make a new `FFmpegItemSource`
 **Gapless.** Call `setNext(item:source:)` for the track after the current one as soon as the app
 knows it, and again when the queue changes (the last next item is replaced if decode has not reached it;
 `clearNext()` removes it). Items of different sample rates join in one stream. `.crossed` says when the
-speaker reached the new item.
+speaker reached the new item. An `ItemSource.open()` may block resolving its URL: the next item opens about
+two seconds ahead of the join, and one removed, replaced or skipped while it opens is interrupted through
+`interrupt(through:)`.
 
 **Effects.** Skip-silence, Voice Boost, ReplayGain, EQ and limiters are `AudioProcessor`s passed to
 `setProcessors(_:)`. They run on interleaved Float32 PCM on the transport's queue, in order, and

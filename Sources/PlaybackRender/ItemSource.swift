@@ -4,10 +4,16 @@ import PlaybackDecode
 /// One queue item's decoded PCM as the sequencer drives it. Every call but `interrupt(through:)`
 /// comes from the sequencer's executor, one at a time, and may block on the network.
 /// `FFmpegItemSource` covers any `StreamByteReader`; an app implements this only for other PCM.
+///
+/// `open()` may block on resolving the item's URL, as a media3 `DataSource.open` does on its loader
+/// thread. `interrupt(through:)` is the one cancellation path: a next item removed, replaced or
+/// skipped past while it opens is interrupted, and the open's outcome is dropped.
 public protocol ItemSource: AnyObject, Sendable {
     /// Never blocks: the calls that follow belong to the sequencer's `epoch`.
     func begin(epoch: UInt64)
-    /// The format every chunk of this item has.
+    /// The format every chunk of this item has. May block on network resolution: for a next item
+    /// it runs once decode of the item before has ended, about two seconds ahead of the join, so
+    /// a slow resolve overlaps that tail. Once interrupted it may return early or throw.
     func open() throws -> PCMFormat
     /// The item's length in frames, read once `open()` returns; nil when unknown (a live stream).
     var duration: Int64? { get }
