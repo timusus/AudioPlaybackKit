@@ -154,6 +154,24 @@ final class NowPlayingInfoTests: XCTestCase {
         XCTAssertEqual(rig.info.playbackState, .playing)
     }
 
+    // ADR-0027, media3 MediaSessionLegacyStub: speed is 0 until playing, while the button shows pause.
+    func testRateStaysZeroWhileBufferingWithPlayIntentThenFollowsTheRate() async {
+        rig.player.setItems(["a"])
+        rig.player.rate = 1.5
+        rig.player.play()
+        await rig.settle()
+
+        XCTAssertTrue(rig.player.playWhenReady)
+        XCTAssertFalse(rig.player.isPlaying)
+        XCTAssertEqual(rate, 0)
+        XCTAssertEqual(defaultRate, 1.5)
+        XCTAssertEqual(rig.info.playbackState, .playing)
+
+        await rig.run(for: 1)
+
+        XCTAssertEqual(rate, 1.5)
+    }
+
     // On an iPhone a fresh renderer's clock started 0.2 s after the play, so the elapsed time
     // written at the play ran ahead of what was heard for as long as it played.
     func testAPlayHeardLateRewritesTheElapsedTimeOnceHeard() async {
