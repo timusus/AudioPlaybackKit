@@ -45,7 +45,8 @@ final class SampleBufferAudioOutputAutoFlushTests: XCTestCase {
         print("rate 1-2-1-0.5: \(output.summary()); playing to ended \(wall) s")
         // About 3.6 s of wall time, so every rate took effect.
         XCTAssertGreaterThan(wall, 3.2)
-        XCTAssertLessThan(wall, 5)
+        if RenderEventBounds.enabled { XCTAssertLessThan(wall, 5) }
+        XCTAssertLessThan(wall, 9)
         assertContinuous()
     }
 
@@ -67,9 +68,8 @@ final class SampleBufferAudioOutputAutoFlushTests: XCTestCase {
         // The restart is silent about 150 ms, the renderer's own: its first enqueue to the new device
         // blocks about 55 ms and its clock starts about 70 ms after the rate is set. A slow HAL driver
         // on the target adds more, so like every late-event bound it runs only with RENDER_EVENT_BOUNDS=1.
-        if ProcessInfo.processInfo.environment["RENDER_EVENT_BOUNDS"] == "1" {
-            XCTAssertLessThan(wall, 3.45)
-        }
+        if RenderEventBounds.enabled { XCTAssertLessThan(wall, 3.45) }
+        XCTAssertLessThan(wall, 9)
         // The macOS clock includes the device's latency, so the adapter reports 0 on any device.
         XCTAssertEqual(output.latencies, [0])
         // Up to the written end: past it the feeder holds the clock back at the end by design.

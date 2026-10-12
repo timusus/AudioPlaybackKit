@@ -11,7 +11,7 @@ final class SampleBufferAudioOutputIntegrationTests: XCTestCase {
     /// end blocks up to ~0.2 s (MacBook Pro, built-in speakers). A loaded machine delays it by seconds
     /// while the position rate stays exact, so the bound is checked only with `RENDER_EVENT_BOUNDS=1`.
     private static let eventLatency: TimeInterval? =
-        ProcessInfo.processInfo.environment["RENDER_EVENT_BOUNDS"] == "1" ? 0.75 : nil
+        RenderEventBounds.enabled ? 0.75 : nil
     private let recorder = TimedRecorder()
     private var transport: Transport<String>!
 

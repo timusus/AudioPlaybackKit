@@ -11,3 +11,5 @@ paths:
   blocks, and a loaded machine adds seconds. Those upper bounds run only with
   `RENDER_EVENT_BOUNDS=1 swift test --filter SampleBufferAudioOutputIntegrationTests`, on an idle
   Mac, after a change to the feeder, the pump or the output.
+- `SampleBufferAudioOutputAutoFlushTests` follows the same split: its tight wall-time bounds are behind
+  `RENDER_EVENT_BOUNDS=1` (`RenderEventBounds.enabled`), a loose 9 s bound is always on.
