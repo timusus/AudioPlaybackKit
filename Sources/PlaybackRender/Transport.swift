@@ -42,7 +42,7 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
 /// the OS coalesces to twice this never starves the output.
 let pumpInterval: TimeInterval = 0.1
 
-/// The one thing an app drives (ADR-0018): a current item, optionally one or more next items joined
+/// The one thing an app drives (ADR-0018): a current item, optionally a next item joined
 /// gaplessly at each item's own format, a processor chain, and play, pause, speed and seek.
 ///
 /// Threading: every method may be called from any thread and returns at once. The work runs in call
@@ -163,24 +163,22 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         }
     }
 
-    /// Follows the last item set with no gap. Replaces the last next item if decode has not reached
-    /// it yet or is still opening it (interrupting the open); once it has decoded some (decode runs a
-    /// few seconds ahead), `item` is queued after it instead.
-    /// Never flushes: near the end it joins gaplessly, and after `.ended` it plays on from where the
-    /// output stopped. Ignored before a `setCurrent`.
+    /// Follows the item heard now with no gap, replacing a next item not yet heard (interrupting its
+    /// open). Near the end it joins gaplessly, and after `.ended` it plays on from where the output
+    /// stopped. Ignored before a `setCurrent`.
     public func setNext(item: Item, source: any ItemSource) {
         queue.async { [self] in
             guard !ids.isEmpty else { return }
+            clearUnheardNext()
             let id = newID()
             ids[id] = item
             forget(sequencer.setNext(item: id, source: source))
         }
     }
 
-    /// Removes the last next item unless decode has already decoded some of it; then it still plays, and
-    /// the app seeks or calls `setCurrent` to drop it.
+    /// Removes the next item unless it is heard already.
     public func clearNext() {
-        queue.async { [self] in forget(sequencer.clearNext()) }
+        queue.async { [self] in clearUnheardNext() }
     }
 
     public func play() {
@@ -260,6 +258,17 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         let duration = sequencer.duration(of: position.item).map { Double($0) / rate }
         let isSeekable = sequencer.isSeekable(position.item)
         onEvent(.position(item: item, seconds: Double(position.mediaFrame) / rate, duration: duration, isSeekable: isSeekable))
+    }
+
+    /// Once decode has passed into the next its audio may be queued, so it is dropped and the output
+    /// re-fed from the heard frame, as media3 `MediaPeriodQueue.removeAfter` drops a read-ahead period.
+    /// Before that the sequencer swaps it with no flush.
+    private func clearUnheardNext() {
+        let change = sequencer.clearNext()
+        forget(change)
+        guard change == .unchanged, let heard = feeder.currentItem, let last = ids.keys.max(), last > heard else { return }
+        ids[last] = nil
+        if !upstream.drop(item: last) { feeder.flush() }
     }
 
     private func forget(_ change: Sequencer.TailChange) {

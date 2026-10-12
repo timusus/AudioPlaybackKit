@@ -611,36 +611,65 @@ final class TransportTests: XCTestCase {
         executor.runUntilIdle()
     }
 
-    func testSetNextAfterDecodeJoinedTheNextQueuesAfterItAndItStaysSeekable() {
+    func testSetNextAfterDecodeJoinedTheNextReplacesIt() {
         decodeAheadIntoB()
         transport.setNext(item: "c", source: c)
         transport.play()
         pump()
-        run(for: 0.75)
-
-        transport.seek(item: "b", toSeconds: 0.75)
-        pump()
         run(for: 1.5)
 
-        XCTAssertEqual(heard, [0, 1, 2, 3, 1000, 1001, 1006, 1007, 500, 501, 502, 503, 504, 505, 506, 507])
-        XCTAssertEqual(crossed, ["a", "b", "c"])
+        XCTAssertEqual(heard, [0, 1, 2, 3, 500, 501, 502, 503, 504, 505, 506, 507])
+        XCTAssertEqual(crossed, ["a", "c"])
         XCTAssertEqual(statuses.last, .ended)
     }
 
-    func testClearNextAfterDecodeJoinedTheNextLeavesItPlayingAndSeekable() {
+    func testClearNextAfterDecodeJoinedTheNextRemovesIt() {
         decodeAheadIntoB()
         transport.clearNext()
         transport.play()
         pump()
-        run(for: 0.75)
-
-        transport.seek(item: "b", toSeconds: 0.75)
-        pump()
         run(for: 1)
 
-        XCTAssertEqual(heard, [0, 1, 2, 3, 1000, 1001, 1006, 1007])
-        XCTAssertEqual(crossed, ["a", "b"])
+        XCTAssertEqual(heard, [0, 1, 2, 3])
+        XCTAssertEqual(crossed, ["a"])
         XCTAssertEqual(statuses.last, .ended)
+    }
+
+    func testSetNextWithTheNextWrittenButNotHeardReFeedsFromTheHeardFrame() {
+        transport.setCurrent(item: "a", source: a)
+        transport.setNext(item: "b", source: b)
+        transport.play()
+        pump()
+        run(for: 1.5)
+        XCTAssertTrue(output.enqueues.contains { $0.samples == [1000, 1001] }, "b is written ahead")
+
+        transport.setNext(item: "c", source: c)
+        pump()
+        run(for: 3)
+
+        XCTAssertEqual(heard, allOfA + [500, 501, 502, 503, 504, 505, 506, 507])
+        XCTAssertEqual(crossed, ["a", "c"])
+        XCTAssertEqual(output.flushes, [0, 1.5])
+        XCTAssertEqual(statuses.last, .ended)
+    }
+
+    // The seek dropped b's decoded audio, so it is swapped with no flush.
+    func testSetNextAfterASeekBackBehindTheJoinReplacesTheNextWithNoFlush() {
+        transport.setCurrent(item: "a", source: a)
+        transport.setNext(item: "b", source: b)
+        transport.play()
+        pump()
+        run(for: 1.5)
+        transport.seek(item: "a", toSeconds: 0)
+        pump()
+
+        transport.setNext(item: "c", source: c)
+        pump()
+        run(for: 4.5)
+
+        XCTAssertEqual(heard, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] + allOfA + [500, 501, 502, 503, 504, 505, 506, 507])
+        XCTAssertEqual(crossed, ["a", "c"])
+        XCTAssertEqual(output.flushes, [0, 1.5])
     }
 
     /// Ten seconds, so decode is still in it a second in.

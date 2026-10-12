@@ -194,10 +194,13 @@ final class Sequencer: @unchecked Sendable {
     /// `resupply(from:)` passes its `SeekTarget` straight through.
     func seek(item: Int, to offset: SeekTarget.Offset) {
         let interruptStale = lock.withLock {
-            guard let entry = window.first(where: { $0.item == item }) else {
+            guard let index = window.firstIndex(where: { $0.item == item }) else {
                 preconditionFailure("seek to item \(item), which is not in the window")
             }
+            let entry = window[index]
             entry.started = true
+            // The restart drops all decoded audio, so the items after are unplayed again and `setNext` may swap them.
+            window[(index + 1)...].forEach { $0.started = false }
             return restart(Cursor(entry: entry, seekTo: offset))
         }
         interruptStale()
