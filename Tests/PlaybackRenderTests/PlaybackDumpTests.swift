@@ -10,6 +10,7 @@ private struct PlaybackDump: Codable, Equatable {
     var buffers: [String]
     var played: [String]
     var flushes: [String]
+    var rates: [String]
     var events: [String]
 
     init(_ capture: PlaybackCapture) {
@@ -25,6 +26,7 @@ private struct PlaybackDump: Codable, Equatable {
                 + "pcm=\(Self.hash(span.samples))"
         }
         flushes = capture.flushes.map { "t=\(Self.time($0))" }
+        rates = capture.rateChanges.map { "t=\(Self.time($0.time)) rate=\(Self.time($0.rate))" }
         events = capture.events
     }
 
@@ -42,7 +44,7 @@ private struct PlaybackDump: Codable, Equatable {
     /// The first line where `self` differs from `golden`, as a failure message.
     func firstDifference(from golden: PlaybackDump) -> String? {
         let sections: [(String, KeyPath<PlaybackDump, [String]>)] = [
-            ("buffers", \.buffers), ("played", \.played), ("flushes", \.flushes), ("events", \.events),
+            ("buffers", \.buffers), ("played", \.played), ("flushes", \.flushes), ("rates", \.rates), ("events", \.events),
         ]
         for (name, path) in sections {
             let actual = self[keyPath: path], expected = golden[keyPath: path]

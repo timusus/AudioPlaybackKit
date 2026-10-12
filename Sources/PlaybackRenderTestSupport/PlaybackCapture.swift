@@ -22,6 +22,7 @@ public struct PlaybackCapture: Sendable {
     public var buffers: [Buffer]
     public var played: [Played]
     public var flushes: [TimeInterval]
+    public var rateChanges: [FakeAudioOutput.RateChange]
     /// One line per `TransportEvent`, without the error text, which is not stable across systems.
     public var events: [String]
 }
@@ -50,6 +51,7 @@ public final class PlaybackCaptureRecorder<Item: Hashable & Sendable>: @unchecke
                 }
             },
             flushes: output.flushes,
+            rateChanges: output.rateChanges,
             events: lock.withLock { _events }
         )
     }

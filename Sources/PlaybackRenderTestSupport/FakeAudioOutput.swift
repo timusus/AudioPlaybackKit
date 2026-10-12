@@ -16,6 +16,11 @@ public final class FakeAudioOutput: @unchecked Sendable {
         case silence(start: TimeInterval, duration: TimeInterval)
     }
 
+    public struct RateChange: Equatable, Sendable {
+        public var time: TimeInterval
+        public var rate: Double
+    }
+
     private struct Buffer {
         var start: TimeInterval
         var format: PCMFormat
@@ -41,6 +46,7 @@ public final class FakeAudioOutput: @unchecked Sendable {
     private var _enqueues: [Enqueue] = []
     private var _flushes: [TimeInterval] = []
     private var _played: [Played] = []
+    private var _rateChanges: [RateChange] = []
     private var _events: [AudioOutputEvent] = []
 
     /// Ready for more while less than this much is queued ahead of the clock.
@@ -54,6 +60,8 @@ public final class FakeAudioOutput: @unchecked Sendable {
     /// The clock time of each flush, injected auto-flushes included.
     public var flushes: [TimeInterval] { locked { _flushes } }
     public var played: [Played] { locked { _played } }
+    /// Each `setRate`, with the clock time it took effect at.
+    public var rateChanges: [RateChange] { locked { _rateChanges } }
     @_spi(Testing) public var events: [AudioOutputEvent] { locked { _events } }
     public var rate: Double { locked { _rate } }
     /// The output's gain, which a flush leaves alone as the renderer's does.
@@ -93,6 +101,7 @@ public final class FakeAudioOutput: @unchecked Sendable {
         locked {
             _rate = rate
             if let time { clock = time }
+            _rateChanges.append(RateChange(time: clock, rate: rate))
         }
     }
 

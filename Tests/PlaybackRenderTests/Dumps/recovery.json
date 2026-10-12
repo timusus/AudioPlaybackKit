@@ -51,5 +51,13 @@
   "played" : [
     "audio t=0.0000 for=1.0000 8Hzx1 pcm=0571cfe42be5c7b9",
     "audio t=0.0000 for=2.0000 8Hzx1 pcm=8135aa6c9ef39ba2"
+  ],
+  "rates" : [
+    "t=0.0000 rate=0.0000",
+    "t=0.0000 rate=0.0000",
+    "t=0.0000 rate=1.0000",
+    "t=0.0000 rate=0.0000",
+    "t=0.0000 rate=1.0000",
+    "t=2.0000 rate=0.0000"
   ]
 }
