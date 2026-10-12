@@ -30,10 +30,36 @@ extension LoopbackMediaServer {
     /// Under the source's three answered failures in a row, so a chaos run is always recoverable.
     static let chaosMaxFaults = 3
 
+    public enum ChaosFaultKind: Sendable { case disconnect, reset, hang }
+
     struct ChaosPlan {
         let seed: UInt64
         var requests = 0
+        var faultsReached: [ChaosFaultKind] = []
+        var openFault: ChaosFaultKind?
         init(seed: UInt64) { self.seed = seed }
+    }
+
+    /// The faults the plan has carried out so far, in order: a test that steps a manual clock waits
+    /// on this (via ``ChangeSignal``) instead of guessing from silence that the origin has stopped.
+    public var chaosFaultsReached: [ChaosFaultKind] {
+        lock.lock(); defer { lock.unlock() }
+        return _chaos?.faultsReached ?? []
+    }
+
+    /// The last fault reached, until the next request: the client is waiting out its backoff or
+    /// idle timeout, so only its own clock moves it on.
+    public var chaosOpenFault: ChaosFaultKind? {
+        lock.lock(); defer { lock.unlock() }
+        return _chaos?.openFault
+    }
+
+    private func reached(_ kind: ChaosFaultKind) {
+        lock.lock()
+        _chaos?.faultsReached.append(kind)
+        _chaos?.openFault = kind
+        lock.unlock()
+        ChangeSignal.shared.notify()
     }
 
     /// SplitMix64: small, and stable across platforms and releases, unlike `SystemRandomNumberGenerator`.
@@ -55,6 +81,7 @@ extension LoopbackMediaServer {
         guard var plan = _chaos else { lock.unlock(); return nil }
         let ordinal = plan.requests
         plan.requests += 1
+        plan.openFault = nil
         _chaos = plan
         lock.unlock()
 
@@ -91,9 +118,17 @@ extension LoopbackMediaServer {
     ) {
         guard offset < limit else {
             switch fault {
-            case .hang: return
-            case .reset: queue.asyncAfter(deadline: .now() + Self.shortBodyCloseDelay) { connection.forceCancel() }
-            case .disconnect: queue.asyncAfter(deadline: .now() + Self.shortBodyCloseDelay) { connection.cancel() }
+            case .hang: reached(.hang)
+            case .reset:
+                queue.asyncAfter(deadline: .now() + Self.shortBodyCloseDelay) {
+                    connection.forceCancel()
+                    self.reached(.reset)
+                }
+            case .disconnect:
+                queue.asyncAfter(deadline: .now() + Self.shortBodyCloseDelay) {
+                    connection.cancel()
+                    self.reached(.disconnect)
+                }
             case nil: connection.cancel()
             }
             return
