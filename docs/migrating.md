@@ -63,17 +63,17 @@ Skip chime plays on its own `AVAudioPlayer` until the render layer mixes at the 
 
 | Today | File | Becomes |
 |---|---|---|
-| `AVAudioEnginePlaybackController` (about 2,700 lines), `Engine/BufferingPolicy`, `Engine/MediaClock` | `Playback/Sources/Playback/` | deleted; one `Player<Episode>` with `audioSession: .spokenAudio` |
+| `AVAudioEnginePlaybackController` (12 files, about 2,950 lines), `Engine/BufferingPolicy`, `Engine/MediaClock` | `Playback/Sources/Playback/` | deleted; one `Player<Episode>` with `audioSession: .spokenAudio` |
 | `EngineAudioPlayerBridge` (the `IosAudioPlayer` adapter) | `ShuttlePodcasts/Platform/Audio/AVAudioEnginePlaybackController+IosAudioPlayer.swift` | the adapter that remains: `load(url:episodeId:positionMs:playWhenReady:)` is `setItems([episode], startPosition:)` then `play()` if asked, `seek(positionMs:)` is `seek(to:)` over 1000, `setSpeed` is `rate`, `setVolume` is `volume` |
 | `PlaybackControlling`, `PlaybackControllerState`, `PlaybackControllerEvent` | `PlaybackControlling.swift` | the bridge publishes them from `Player` state and `events`, until nothing else reads them |
-| `StreamingPCMReader` | `StreamingPCMReader.swift` | `FFmpegItemSource(reader: GrowingFileByteSource(...))` in the `makeSource` closure, with the ad-skip scan's `GrowingFileListener` tap attached to the source |
-| `SilenceGate`, `VoiceEnhanceProcessor`, `LookaheadLimiter` | `Sources/SilenceGate/`, `Sources/VoiceEnhance/` | processors, in that order, passed to `setProcessors`: `VoiceEnhanceProcessor` in place, `SilenceGate` (drops) and `LookaheadLimiter` (delays) as `BufferingAudioProcessor`s |
+| `StreamingPCMReader`, `GrowingFileItemSource` | `StreamingPCMReader.swift`, `ShuttlePodcasts/Platform/Audio/Playback/` | `GrowingFileItemSource` stays as the `makeSource` closure's source: it wraps `FFmpegItemSource(reader: GrowingFileByteSource(...))` and forwards every call, so the `GrowingFileListener` hears the first `open()` and each `seek(toFrame:)`. It forwards `release()`, which cancels the download, in place of cancelling in `deinit` |
+| `SilenceGate`, `VoiceEnhanceProcessor` (with its `LookaheadLimiter` inside) | `Sources/SilenceGate/`, `Sources/VoiceEnhance/` | two processors passed to `setProcessors`: `SilenceGate` (drops) then `VoiceEnhanceProcessor` (its limiter delays), both `BufferingAudioProcessor`s |
 | `PlaybackEnhancementTracker` (reads `pref_skip_silence`, `pref_voice_enhance` per buffer) | `PlaybackEnhancementSettings.swift` | a processor flag read under the processor's lock; `setProcessors` only if `isActive` or the output format changes |
-| `SkipCueMixer` | `SkipCueMixer.swift` | chime on its own player; the duck is a `volume` ramp |
+| `SkipCueMixer` | `SkipCueMixer.swift` | the last processor, duck and chime together, so the cue stays summed into the stream. Its "at the landing" is the flush after the seek: every seek flushes each processor with the landed frame before any audio after it. Not a second player (its own route and clock) nor a `volume` ramp (that would duck the chime too) |
 | Sleep-timer fade, `SleepTimerManager.kt` | the controller, Kotlin | `volume` ramp; the timer calls `pause()`, or sets `pauseAtEndOfItem` for "end of episode" |
-| session setup in `ShuttlePodcastsApp.swift`, interruption and route handlers, `CarPlaySceneDelegate.configureAudioSession` | | deleted. `HeadphoneObserver` stays: auto-play on connect is a preference |
-| `NowPlayingInfoManager`, `RemoteCommandHandler` | `Platform/Audio/` | `NowPlayingSession(player: wrapper, supportedRates: CarPlayNowPlayingController.speeds, ...)`, where the `ForwardingNowPlayingControllable` wrapper's `skipIntervals` come from `WidgetIntentDefaults` |
-| `ObserveAndStorePlaybackPosition.kt` | Kotlin | unchanged: it reads `position` in seconds, and counts listening only while `discontinuityCount` is unchanged |
+| `AVAudioEnginePlaybackController.configureAudioSession()` and its calls; the interruption, route and media-services-reset observers | `ShuttlePodcastsApp.swift`, `PlaybackService.swift`, `Platform/CarPlay/CarPlaySceneDelegate.swift`; the observers in the controller's `+Session.swift` | deleted: `Player` sets the category in its init, so build it before CarPlay can connect (at app launch, not in the scene delegate). `HeadphoneObserver` stays: auto-play on connect is a preference |
+| `NowPlayingInfoManager`, `RemoteCommandHandler` | `Platform/Audio/` | `NowPlayingSession(player: wrapper, supportedRates: CarPlayNowPlayingController.speeds, ...)`. The `ForwardingNowPlayingControllable` wrapper's `rate` setter is the rate command's callback, and its `skipIntervals` (from `WidgetIntentDefaults`) is read on every refresh, so the app may change it per episode |
+| `ObserveAndStorePlaybackPosition.kt` | Kotlin | unchanged: it saves on an episode change, every 10 s while playing, on pause or end, and on `SeekCompleted`; it neither counts listening nor reads `discontinuityCount`. The bridge sends `SeekCompleted` from `PlayerEvent.seekLanded` |
 
 Details:
 
@@ -87,8 +87,8 @@ Details:
    intervals instead of next and previous, `supportedRates` for the rate command. The wrapper takes the
    commands over: its `rate` setter saves the speed in Kotlin before setting `player.rate`, and its
    `seek(by:)` applies the app's own skip rules.
-6. A `recoveredPaused` event is new to Podcasts, which never handled a media-services reset: show paused,
-   and let the user press play.
+6. A media-services reset already rebuilds the graph and lands paused in `+Session.swift`; `Player` does
+   the same and sends `recoveredPaused`, which the bridge publishes as a pause.
 
 ### Shuttle2
 
