@@ -245,6 +245,7 @@ private final class FailingItemSource: ItemSource, @unchecked Sendable {
     func nextChunk() throws -> [Float]? { throw Failure() }
     func begin(epoch: UInt64) {}
     func interrupt(through epoch: UInt64) {}
+    func release() {}
 }
 
 private extension Sequencer {

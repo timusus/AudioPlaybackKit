@@ -147,7 +147,7 @@ final class RemoteCommandTests: DeviceTestCase {
         XCTAssertNil(rig.send(.skipBackward, .interval(3)))
         XCTAssertEqual(rig.shownTitle, Fixture.items[1], "the title shows at once")
 
-        rig.gates.forEach { $0.release() }
+        rig.gates.forEach { $0.openGate() }
         await rig.waitUntil("opened") { rig.player.duration != nil }
         await rig.settle()
         XCTAssertTrue(rig.remote(.changePlaybackPosition).isEnabled)

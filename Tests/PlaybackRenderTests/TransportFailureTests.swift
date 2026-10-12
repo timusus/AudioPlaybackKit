@@ -33,6 +33,7 @@ private final class FailingSource: ItemSource, @unchecked Sendable {
     }
 
     func interrupt(through epoch: UInt64) {}
+    func release() {}
 }
 
 /// Which item's failure pauses (ADR-0019 Errors): the one heard, not a next item decode reached

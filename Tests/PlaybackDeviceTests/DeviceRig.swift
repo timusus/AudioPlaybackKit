@@ -73,7 +73,7 @@ final class TappedOutput: AudioOutput, @unchecked Sendable {
     func setEventHandler(_ handler: @escaping @Sendable (AudioOutputEvent) -> Void) { base.setEventHandler(handler) }
 }
 
-/// Holds an item's `open()` until `release()`, so the moment before the duration is known lasts as
+/// Holds an item's `open()` until `openGate()`, so the moment before the duration is known lasts as
 /// long as a test needs instead of the few milliseconds a local file takes.
 final class GatedSource: ItemSource, @unchecked Sendable {
     private let base: FFmpegItemSource
@@ -83,7 +83,7 @@ final class GatedSource: ItemSource, @unchecked Sendable {
         self.base = base
     }
 
-    func release() { gate.signal() }
+    func openGate() { gate.signal() }
 
     func begin(epoch: UInt64) { base.begin(epoch: epoch) }
     func open() throws -> PCMFormat {
@@ -96,6 +96,7 @@ final class GatedSource: ItemSource, @unchecked Sendable {
     func seek(toFrame frame: Int64) throws -> Int64 { try base.seek(toFrame: frame) }
     func nextChunk() throws -> [Float]? { try base.nextChunk() }
     func interrupt(through epoch: UInt64) { base.interrupt(through: epoch) }
+    func release() { base.release() }
 }
 
 /// Hides the file's duration but still seeks, as a server transcode that re-opens at a time offset.
@@ -112,6 +113,7 @@ final class UnknownLengthSource: ItemSource, @unchecked Sendable {
     func seek(toFrame frame: Int64) throws -> Int64 { try base.seek(toFrame: frame) }
     func nextChunk() throws -> [Float]? { try base.nextChunk() }
     func interrupt(through epoch: UInt64) { base.interrupt(through: epoch) }
+    func release() { base.release() }
 }
 
 /// A `Player` built as `Player(makeSource:audioSession:)` builds it, on `SystemAudioSession` and the
@@ -124,7 +126,7 @@ final class DeviceRig {
     let infoCenter = StampedInfoCenter()
     private(set) var nowPlaying: NowPlayingSession<String>!
     private(set) var events: [PlayerEvent<String>] = []
-    /// Items whose next source waits for `GatedSource.release()`.
+    /// Items whose next source waits for `GatedSource.openGate()`.
     var gated: Set<String> = []
     private(set) var gates: [GatedSource] = []
     /// Items whose source is an `UnknownLengthSource`.
@@ -164,7 +166,7 @@ final class DeviceRig {
     /// Leaves the shared centres and the session as a fresh rig finds them.
     func tearDown() async {
         nowPlaying.release()
-        gates.forEach { $0.release() }
+        gates.forEach { $0.openGate() }
         player.removeAll()
         eventTask?.cancel()
         // The deactivation runs on the session's queue; the next test's activation queues behind it.

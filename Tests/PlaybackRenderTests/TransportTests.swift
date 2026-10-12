@@ -26,6 +26,7 @@ private final class FailsMidwaySource: ItemSource, @unchecked Sendable {
     }
 
     func interrupt(through epoch: UInt64) {}
+    func release() {}
 }
 
 final class EventRecorder: @unchecked Sendable {

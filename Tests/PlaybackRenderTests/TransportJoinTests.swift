@@ -49,6 +49,8 @@ private final class SlowOpenSource: ItemSource, @unchecked Sendable {
             interruptedThrough = max(interruptedThrough ?? 0, epoch)
         }
     }
+
+    func release() { inner.release() }
 }
 
 /// The join between two items through the public API, on the fake output's manual clock: when the

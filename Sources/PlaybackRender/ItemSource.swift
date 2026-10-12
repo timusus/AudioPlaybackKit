@@ -43,14 +43,14 @@ public protocol ItemSource: AnyObject, Sendable {
     func interrupt(through epoch: UInt64)
     /// The transport is done with the source: called once, on the executor after any call in flight
     /// has returned, and nothing is called after it. Ends downloads and frees what the source holds.
-    /// Defaults to nothing, for a source that holds nothing beyond memory.
+    /// Required, as media3's `DataSource.close()`: a wrapper forwards it to the source it wraps, and
+    /// a source that holds nothing beyond memory implements it empty.
     func release()
 }
 
 public extension ItemSource {
     var duration: Int64? { nil }
     var isSeekable: Bool { duration != nil }
-    func release() {}
 }
 
 /// `FFmpegStreamDecoder` as an item source. The decoder already trims encoder delay and padding

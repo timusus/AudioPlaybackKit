@@ -134,6 +134,7 @@ private final class RampSource: ItemSource, @unchecked Sendable {
     }
 
     func interrupt(through epoch: UInt64) {}
+    func release() {}
 }
 
 /// The real output with every call the feeder makes and every auto-flush it reports, in order.

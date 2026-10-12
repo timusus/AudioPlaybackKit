@@ -116,6 +116,7 @@ private final class ToneSource: ItemSource, @unchecked Sendable {
     }
 
     func interrupt(through epoch: UInt64) {}
+    func release() {}
 }
 
 /// Every event with the wall time it arrived, and expectations fulfilled by the first matching one.
