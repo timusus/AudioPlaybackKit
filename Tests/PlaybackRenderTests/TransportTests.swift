@@ -106,6 +106,10 @@ final class TransportTests: XCTestCase {
         }
     }
 
+    private var failedErrors: [any Error] {
+        recorder.events.compactMap { if case let .failed(_, error) = $0 { error } else { nil } }
+    }
+
     private var failedItems: [String?] {
         recorder.events.compactMap { if case let .failed(item, _) = $0 { item } else { nil } }
     }
@@ -516,6 +520,26 @@ final class TransportTests: XCTestCase {
         run(for: 3.25)
         XCTAssertEqual(heard, allOfA)
         XCTAssertEqual(statuses.last, .ended)
+    }
+
+    func testAProcessorThatChangesTheSampleRateFailsTheItem() {
+        transport.setProcessors([RateDoublingProcessor()])
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        pump()
+        run(for: 3.25)
+
+        XCTAssertEqual(failedItems, ["a"])
+        XCTAssertEqual(failedErrors.first as? AudioProcessingError,
+                       .sampleRateChanged(from: mono, to: PCMFormat(sampleRate: 16, channelCount: 1)))
+    }
+
+    func testAProcessorThatChangesTheSampleRateMidPlaybackFailsTheItem() {
+        playLongThenChange(processors: []) { transport.setProcessors([RateDoublingProcessor()]) }
+
+        XCTAssertEqual(failedItems, ["a"])
+        XCTAssertEqual(failedErrors.first as? AudioProcessingError,
+                       .sampleRateChanged(from: mono, to: PCMFormat(sampleRate: 16, channelCount: 1)))
     }
 
     func testSetCurrentDropsTheNextItem() {
