@@ -27,13 +27,13 @@ extension GrowingFileByteSourceTests {
         XCTAssertTrue(waitUntil { !source.awaitsNetworkForTest }, "never paused at the read-ahead")
         let paused = source.snapshot
         XCTAssertFalse(paused.isComplete, "downloaded whole")
-        // A probe read that lags the download pauses it short of the probe's end plus the read-ahead.
+        // The pause leaves at least half the read-ahead buffered past the decoder.
         XCTAssertGreaterThanOrEqual(paused.frontier - source.position, Self.readAhead / 2)
         return (source, monitor)
     }
 
-    /// (c) A track skipped after its probe on cellular cost the host the probe, the read-ahead and
-    /// the chunk on the wire when the request was cancelled; not the rest of the file.
+    /// (c) A track skipped after its probe on cellular cost the host what was fetched before the
+    /// pause; not the rest of the file.
     func testAnExpensivePathDownloadsOnlyTheReadAheadPastTheDecoder() throws {
         let body = makeBody(1_000_000)
         let server = try startServer(body: body)
