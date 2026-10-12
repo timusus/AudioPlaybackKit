@@ -72,7 +72,7 @@ final class RemoteCommandTests: DeviceTestCase {
         var before = rig.player.position
         XCTAssertEqual(rig.send(.skipForward, .interval(3)), .success)
         await rig.waitUntil("skipped forward") { rig.player.position > before + 2.5 }
-        // 0.25 s: the transport reports the position every 100 ms, plus the output latency.
+        // Assumed: 0.25 s allows the transport's 100 ms position report plus the output latency.
         XCTAssertEqual(rig.player.position, before + 3, accuracy: 0.25)
 
         before = rig.player.position

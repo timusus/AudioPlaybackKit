@@ -59,6 +59,11 @@ final class SystemAudioSession: AudioSessionControlling {
         self.handler = handler
     }
 
+    /// Returns once every call made so far has run, so a test can end with the shared session settled.
+    func waitForPendingCalls() {
+        queue.sync {}
+    }
+
     private nonisolated static func apply(_ configuration: AudioSessionConfiguration) throws {
         try AVAudioSession.sharedInstance().setCategory(
             configuration.category,
@@ -128,5 +133,6 @@ final class SystemAudioSession: AudioSessionControlling {
     func activate(completion: @escaping @MainActor ((any Error)?) -> Void) { completion(nil) }
     func deactivate() {}
     func setEventHandler(_ handler: @escaping @MainActor (AudioSessionEvent) -> Void) {}
+    func waitForPendingCalls() {}
 }
 #endif

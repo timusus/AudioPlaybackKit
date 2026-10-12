@@ -19,7 +19,7 @@ final class AudibleTests: DeviceTestCase {
     func testFasterRateIsHeardAtThatRate() async {
         await rig.startPlaying(at: 2)
         rig.player.rate = 1.5
-        await rig.settle()
+        await rig.waitUntil("transport at 1.5") { rig.output.appliedRate == 1.5 }
         await rig.assertAudible()
     }
 }

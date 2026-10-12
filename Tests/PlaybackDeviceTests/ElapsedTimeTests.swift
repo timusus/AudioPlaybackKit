@@ -62,7 +62,7 @@ final class ElapsedTimeTests: DeviceTestCase {
         XCTAssertEqual(rig.shownDuration ?? 0, 8, accuracy: 0.05)
         // No gap: the output clock kept wall time across the join.
         let advanced = rig.output.currentTime() - start.clock
-        // 0.15 s: the clock's own jitter, as in `assertAudible`.
+        // Assumed: 0.15 s covers the clock's jitter, as in `assertAudible`.
         XCTAssertEqual(advanced, Date().timeIntervalSince(start.wall), accuracy: 0.15)
     }
 
@@ -92,7 +92,7 @@ final class ElapsedTimeTests: DeviceTestCase {
             XCTAssertEqual(rig.shownTitle, rig.player.currentItem, file: file, line: line)
             try? await Task.sleep(for: .milliseconds(50))
         }
-        // 0.25 = the transport's 100 ms position report plus the 0.15 s Bluetooth output latency.
+        // Assumed: 0.25 allows the transport's 100 ms position report plus a 0.15 s Bluetooth output latency.
         XCTAssertLessThan(worst, 0.25, "largest gap between extrapolated elapsed and position", file: file, line: line)
         XCTAssertLessThan(longestStart, 0.6, "output start before the position moved", file: file, line: line)
     }

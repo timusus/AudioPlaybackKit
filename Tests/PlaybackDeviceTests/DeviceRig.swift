@@ -45,6 +45,10 @@ final class TappedOutput: AudioOutput, @unchecked Sendable {
     private let lock = NSLock()
     private var frames = 0
     private var peak: Float = 0
+    private var rate = 0.0
+
+    /// The last rate the transport applied to the synchronizer.
+    var appliedRate: Double { lock.withLock { rate } }
 
     /// Frames enqueued so far, and the loudest sample among them since the last call.
     func takeTap() -> (frames: Int, peak: Float) {
@@ -64,7 +68,10 @@ final class TappedOutput: AudioOutput, @unchecked Sendable {
     }
 
     func flush() { base.flush() }
-    func setRate(_ rate: Double, at time: TimeInterval?) { base.setRate(rate, at: time) }
+    func setRate(_ rate: Double, at time: TimeInterval?) {
+        lock.withLock { self.rate = rate }
+        base.setRate(rate, at: time)
+    }
     func setVolume(_ volume: Float) { base.setVolume(volume) }
     func currentTime() -> TimeInterval { base.currentTime() }
     var outputLatency: TimeInterval { base.outputLatency }
@@ -122,6 +129,7 @@ final class UnknownLengthSource: ItemSource, @unchecked Sendable {
 final class DeviceRig {
     let output = TappedOutput()
     let player: Player<String>
+    private let session: SystemAudioSession
     private let commands = SystemRemoteCommandCenter()
     let infoCenter = StampedInfoCenter()
     private(set) var nowPlaying: NowPlayingSession<String>!
@@ -137,6 +145,8 @@ final class DeviceRig {
     init(supportedRates: [Double] = [1, 1.5, 2], wrap: (Player<String>) -> any NowPlayingControllable<String> = { $0 }) {
         weak var weakSelf: DeviceRig?
         let output = output
+        let session = SystemAudioSession(configuration: .longFormAudio)
+        self.session = session
         player = Player(
             makeSource: { item in
                 let source = try FFmpegItemSource(reader: FileByteReader(url: Fixture.url(item)))
@@ -146,7 +156,7 @@ final class DeviceRig {
                 rig.gates.append(gate)
                 return gate
             },
-            session: SystemAudioSession(configuration: .longFormAudio)
+            session: session
         ) { onEvent in
             Transport(output: output, timer: DispatchPumpTimer(), executor: SerialQueueExecutor(), onEvent: onEvent)
         }
@@ -169,8 +179,9 @@ final class DeviceRig {
         gates.forEach { $0.openGate() }
         player.removeAll()
         eventTask?.cancel()
-        // The deactivation runs on the session's queue; the next test's activation queues behind it,
-        // so there is nothing to wait for here.
+        // Each rig's session has its own queue, so the next rig's activation does not queue behind
+        // this deactivation; wait for it, or it can run after that activation and leave it inactive.
+        session.waitForPendingCalls()
     }
 
     /// Starts `items[index]` at `position` and waits until it is heard.
