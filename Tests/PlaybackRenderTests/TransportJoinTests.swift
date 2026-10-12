@@ -115,7 +115,7 @@ final class TransportJoinTests: XCTestCase {
 
     private var positions: [Heard] {
         recorder.events.compactMap {
-            guard case let .position(item, seconds, _) = $0 else { return nil }
+            guard case let .position(item, seconds, _, _) = $0 else { return nil }
             return Heard(item: item, frame: Int64(seconds * 8))
         }
     }
