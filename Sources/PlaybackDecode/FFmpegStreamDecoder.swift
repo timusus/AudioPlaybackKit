@@ -4,7 +4,7 @@ import Foundation
 #endif
 
 /// What the container says about the audio behind a ``StreamByteReader``.
-public struct StreamAudioFormat: Equatable {
+public struct StreamAudioFormat: Equatable, Sendable {
     /// The SOURCE's rate. The output's too, unless
     /// ``FFmpegStreamDecoder/setOutputFormat(sampleRate:channelCount:)`` fixed another.
     public let sampleRate: Double
@@ -54,7 +54,7 @@ public struct StreamProbeBudget: Equatable, Sendable {
 }
 
 /// Why a decoder stopped producing audio.
-public enum StreamDecoderError: Error, Equatable, CustomStringConvertible {
+public enum StreamDecoderError: Error, Equatable, Sendable, CustomStringConvertible {
     /// This build has no FFmpeg xcframework, so there is no decode path at all.
     case unavailable
     /// `open()` was called twice, or a read/seek was asked for before `open()`.
@@ -98,7 +98,7 @@ public enum StreamDecoderError: Error, Equatable, CustomStringConvertible {
 public final class FFmpegStreamDecoder {
 
     /// Why ``nextChunk()`` last returned nil. `.running` until it has.
-    public enum EndReason: String {
+    public enum EndReason: String, Sendable {
         case running, eof, failure, cancelled
         /// ``interrupt()`` brought the read back so a seek could be applied. The only one of these
         /// a caller must NOT report as the end of the stream: the next ``seek(toSeconds:)`` puts
