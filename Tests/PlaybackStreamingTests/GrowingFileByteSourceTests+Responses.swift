@@ -99,6 +99,18 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(try Data(contentsOf: cached), body, "a garbled file was promoted as complete")
     }
 
+    func testEveryRequestAsksForTheIdentityEncoding() throws {
+        let body = makeBody(64 * 1024)
+        let server = try startServer(body: body)
+        let source = makeSource(server.url)
+
+        XCTAssertEqual(try readAsync(source, Int.max).result.get(), body)
+        XCTAssertFalse(server.requestHeads.isEmpty)
+        for head in server.requestHeads {
+            XCTAssertTrue(head.lowercased().contains("accept-encoding: identity"), head)
+        }
+    }
+
     /// The same-length file swapped behind the URL between a drop and its resume: the total does
     /// not move, so only the validator can tell. The resume sends `If-Range` with the first
     /// response's ETag, the origin answers the whole new body, and the retry restarts at the

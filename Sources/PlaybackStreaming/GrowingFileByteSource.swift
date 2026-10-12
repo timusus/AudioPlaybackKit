@@ -507,6 +507,8 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     private func request(for target: URL, from base: Int64, end: Int64?) -> URLRequest {
         var request = URLRequest(url: target)
         request.setValue("bytes=\(base)-\(end.map { String($0 - 1) } ?? "")", forHTTPHeaderField: "Range")
+        // A byte range of an encoded representation is not a byte range of the file (media3 DefaultHttpDataSource).
+        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         if target.hasSameOrigin(as: url) { applyServerHeaders(to: &request) }
         return request
     }
