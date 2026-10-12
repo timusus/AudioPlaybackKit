@@ -50,7 +50,7 @@ final class RemoteCommandTests: DeviceTestCase {
         await rig.settle()
         XCTAssertEqual(rig.shownTitle, Fixture.items[0])
 
-        await rig.sleep(1)
+        await rig.waitUntil("played past the restart threshold") { rig.player.position > 1 }
         XCTAssertEqual(rig.send(.previousTrack), .success, "previous stays enabled on the first item")
         await rig.waitUntil("restarted") { rig.player.position < 0.5 }
         XCTAssertEqual(rig.player.currentIndex, 0)
@@ -72,6 +72,7 @@ final class RemoteCommandTests: DeviceTestCase {
         var before = rig.player.position
         XCTAssertEqual(rig.send(.skipForward, .interval(3)), .success)
         await rig.waitUntil("skipped forward") { rig.player.position > before + 2.5 }
+        // 0.25 s: the transport reports the position every 100 ms, plus the output latency.
         XCTAssertEqual(rig.player.position, before + 3, accuracy: 0.25)
 
         before = rig.player.position
@@ -115,7 +116,6 @@ final class RemoteCommandTests: DeviceTestCase {
         await rig.startPlaying(at: 2)
         XCTAssertEqual(rig.send(.changePlaybackRate, .rate(1.5)), .success)
         XCTAssertEqual(rig.player.rate, 1.5)
-        await rig.sleep(0.3)
         await rig.settle()
         XCTAssertEqual(rig.shownRate, 1.5)
         await rig.assertAudible()
@@ -139,7 +139,7 @@ final class RemoteCommandTests: DeviceTestCase {
         rig.gated = [Fixture.items[1]]
         rig.player.setItems(Fixture.items, startIndex: 1)
         rig.player.play()
-        await rig.sleep(0.3)
+        await rig.waitUntil("item 1 current") { rig.player.currentIndex == 1 }
         await rig.settle()
         XCTAssertNil(rig.player.duration)
         XCTAssertNil(rig.send(.changePlaybackPosition, .position(2)), "no scrubbing before the item opens")

@@ -60,7 +60,7 @@ final class SessionNotificationTests: DeviceTestCase {
         await rig.waitUntil("paused") { !rig.player.isPlaying }
 
         SystemSession.interruptionBegan()
-        await rig.sleep(0.2)
+        await rig.drainNotifications()
         XCTAssertEqual(rig.player.suppression, .none, "nothing shows paused by another app")
         SystemSession.interruptionEnded(shouldResume: true)
         await rig.assertSilent(over: 1)
@@ -79,7 +79,7 @@ final class SessionNotificationTests: DeviceTestCase {
         await rig.assertAudible()
         // The interruption's end, once the call stops ringing, changes nothing.
         SystemSession.interruptionEnded(shouldResume: false)
-        await rig.sleep(0.2)
+        await rig.drainNotifications()
         XCTAssertTrue(rig.player.playWhenReady)
         await rig.assertAudible(over: 0.5)
     }
@@ -112,7 +112,7 @@ final class SessionNotificationTests: DeviceTestCase {
         await rig.startPlaying()
         SystemSession.routeChanged(.categoryChange, previous: [.headphones])
         SystemSession.routeChanged(.newDeviceAvailable, previous: [.builtInSpeaker])
-        await rig.sleep(0.2)
+        await rig.drainNotifications()
         XCTAssertTrue(rig.player.playWhenReady)
         await rig.assertAudible()
     }
@@ -133,7 +133,7 @@ final class SessionNotificationTests: DeviceTestCase {
 
     func testResetLandsPausedAtThePositionAndPlayResumesFromIt() async {
         await rig.startPlaying(at: 2, position: 3)
-        await rig.sleep(0.5)
+        await rig.waitUntil("position past the start") { rig.player.position > 3.4 }
         await resetAndAssertRecovered(index: 2)
 
         let kept = rig.player.position

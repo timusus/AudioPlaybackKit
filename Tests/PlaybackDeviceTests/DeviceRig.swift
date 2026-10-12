@@ -169,8 +169,8 @@ final class DeviceRig {
         gates.forEach { $0.openGate() }
         player.removeAll()
         eventTask?.cancel()
-        // The deactivation runs on the session's queue; the next test's activation queues behind it.
-        try? await Task.sleep(for: .milliseconds(200))
+        // The deactivation runs on the session's queue; the next test's activation queues behind it,
+        // so there is nothing to wait for here.
     }
 
     /// Starts `items[index]` at `position` and waits until it is heard.
@@ -204,6 +204,15 @@ final class DeviceRig {
 
     func sleep(_ seconds: TimeInterval) async {
         try? await Task.sleep(for: .seconds(seconds))
+    }
+
+    /// Returns once the session's observers, which run on the main operation queue, have handled
+    /// every notification posted before; for a test that expects nothing to change.
+    func drainNotifications() async {
+        await withCheckedContinuation { continuation in
+            OperationQueue.main.addOperation { continuation.resume() }
+        }
+        await Task.yield()
     }
 
     func didSend(_ match: (PlayerEvent<String>) -> Bool) -> Bool {

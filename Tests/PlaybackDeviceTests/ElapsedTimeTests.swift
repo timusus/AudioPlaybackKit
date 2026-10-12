@@ -62,11 +62,13 @@ final class ElapsedTimeTests: DeviceTestCase {
         XCTAssertEqual(rig.shownDuration ?? 0, 8, accuracy: 0.05)
         // No gap: the output clock kept wall time across the join.
         let advanced = rig.output.currentTime() - start.clock
+        // 0.15 s: the clock's own jitter, as in `assertAudible`.
         XCTAssertEqual(advanced, Date().timeIntervalSince(start.wall), accuracy: 0.15)
     }
 
     /// Every 50 ms for `seconds`, the shown elapsed plus rate times the time since it was written
     /// matches the player's position within 0.25 s, and the shown title its item.
+    ///
     /// While the heard position still stands where elapsed was last written at a running rate, the
     /// output is starting and the system extrapolates ahead; the session rewrites elapsed once it moves.
     /// That wait is bounded on its own: on an iPhone the clock started up to 0.36 s after a seek or a
@@ -82,7 +84,7 @@ final class ElapsedTimeTests: DeviceTestCase {
                 return XCTFail("nothing published", file: file, line: line)
             }
             let sinceWrite = Date().timeIntervalSince(rig.infoCenter.lastWrite)
-            if rate > 0, rig.player.position == elapsed {
+            if rate > 0, abs(rig.player.position - elapsed) < 0.001 {
                 longestStart = max(longestStart, sinceWrite)
             } else {
                 worst = max(worst, abs(elapsed + rate * sinceWrite - rig.player.position))
@@ -90,6 +92,7 @@ final class ElapsedTimeTests: DeviceTestCase {
             XCTAssertEqual(rig.shownTitle, rig.player.currentItem, file: file, line: line)
             try? await Task.sleep(for: .milliseconds(50))
         }
+        // 0.25 = the transport's 100 ms position report plus the 0.15 s Bluetooth output latency.
         XCTAssertLessThan(worst, 0.25, "largest gap between extrapolated elapsed and position", file: file, line: line)
         XCTAssertLessThan(longestStart, 0.6, "output start before the position moved", file: file, line: line)
     }
