@@ -5,6 +5,13 @@
 
 #include "decoder.h"
 
+/* A reader's `STREAM_READ_*` failure as the open's status. */
+static int probe_failure(int rc) {
+    if (rc == STREAM_READ_CANCELLED) return STREAM_DECODE_ERR_CANCELLED;
+    if (rc == STREAM_READ_INTERRUPTED) return STREAM_DECODE_ERR_INTERRUPTED;
+    return STREAM_DECODE_ERR_IO;
+}
+
 /*
  * How many bytes of leading ID3v2 tag(s) to hide from libavformat.
  *
@@ -20,29 +27,24 @@
  * caller sees (`stream_decoder_position_bytes`, the reader's positions) stay the SOURCE's, since
  * the translation lives in the AVIO callbacks and nowhere else.
  *
- * Returns the absolute offset to start at, and leaves the reader positioned there. On anything
- * that is not ID3v2 it returns 0 and rewinds, which is every m4a and most mp3s.
+ * Returns STREAM_DECODE_OK with `base_offset` set to the absolute offset to start at and the
+ * reader positioned there; on anything that is not ID3v2 that is 0, which is every m4a and most
+ * mp3s. A read or seek cut short is the open's failure, never "no tag": the reader is left mid-tag,
+ * and a dropped connection must not read as an unsupported format.
  */
-int64_t sd_probe_id3_offset(StreamDecoder *d) {
+int sd_probe_id3_offset(StreamDecoder *d) {
     int64_t offset = 0;
     int have = 0;   /* header bytes read at `offset` */
     uint8_t header[10];
     for (;;) {
-        int got = 0;
         have = 0;
-        while (got < (int)sizeof(header)) {
-            int n = d->cb.read(d->opaque, header + got, (int)sizeof(header) - got);
-            if (n > 0) have += n;
-            /* Latched as the AVIO glue latches them: a probe cut short is not "no tag". */
-            if (n == STREAM_READ_CANCELLED) d->cancelled = 1;
-            if (n == STREAM_READ_INTERRUPTED) d->interrupted = 1;
-            if (n <= 0) { got = -1; break; }
-            got += n;
+        while (have < (int)sizeof(header)) {
+            int n = d->cb.read(d->opaque, header + have, (int)sizeof(header) - have);
+            if (n == 0 || n == STREAM_READ_EOF) break;
+            if (n < 0) return probe_failure(n);
+            have += n;
         }
-        if (got != (int)sizeof(header)) {
-            if (d->cancelled || d->interrupted) return 0;
-            break;
-        }
+        if (have != (int)sizeof(header)) break;
         if (header[0] != 'I' || header[1] != 'D' || header[2] != '3') break;
         if (header[3] == 0xFF || header[4] == 0xFF) break;   /* not a version we can trust */
         /* Syncsafe: seven bits per byte, high bit always clear. */
@@ -62,30 +64,27 @@ int64_t sd_probe_id3_offset(StreamDecoder *d) {
             uint8_t sink[1024];
             while (left > 0) {
                 int n = d->cb.read(d->opaque, sink, left < (int64_t)sizeof(sink) ? (int)left : (int)sizeof(sink));
-                if (n == STREAM_READ_CANCELLED) d->cancelled = 1;
-                if (n == STREAM_READ_INTERRUPTED) d->interrupted = 1;
-                if (n <= 0) return 0;
+                /* A tag that runs past the end leaves no audio. */
+                if (n == 0 || n == STREAM_READ_EOF) return STREAM_DECODE_ERR_OPEN;
+                if (n < 0) return probe_failure(n);
                 left -= n;
             }
             rc = 0;
         }
-        if (rc == STREAM_READ_CANCELLED) d->cancelled = 1;
-        if (rc == STREAM_READ_INTERRUPTED) d->interrupted = 1;
-        if (rc != 0) return 0;
+        if (rc != 0) return probe_failure(rc);
     }
     /* Either there was no tag or the last read was past the last one: go back to where the media
      * (or the file) starts. */
     int rc = d->cb.seek(d->opaque, offset);
-    if (rc != 0) {
+    if (rc == STREAM_READ_UNSEEKABLE) {
         /* A forward-only source cannot go back over the bytes just read; hand them to libavformat
-         * from here instead of losing them (media3's DefaultExtractorInput peeks the same way).
-         * A cancel or interruption is the seek's own result, not a refusal: latch it and stop. */
-        if (rc == STREAM_READ_CANCELLED) d->cancelled = 1;
-        if (rc == STREAM_READ_INTERRUPTED) d->interrupted = 1;
-        if (d->cancelled || d->interrupted || have == 0) return 0;
+         * from here instead of losing them (media3's DefaultExtractorInput peeks the same way). */
         memcpy(d->lead, header, (size_t)have);
         d->lead_len = have;
         d->lead_pos = 0;
+    } else if (rc != 0) {
+        return probe_failure(rc);
     }
-    return offset;
+    d->base_offset = offset;
+    return STREAM_DECODE_OK;
 }

@@ -2,6 +2,9 @@ import Foundation
 import XCTest
 
 @testable import PlaybackDecode
+#if canImport(CStreamDecode)
+    import CStreamDecode
+#endif
 
 /// A source that can only move forward (an unknown-length chunked transcode): no total length, and
 /// any seek behind the read position throws ``StreamByteReaderError/unseekable``.
@@ -18,6 +21,8 @@ private final class ForwardOnlyByteReader: StreamByteReader {
     var outageFrom: Int64?
     /// Serves backward seeks too while set (an open that a later refusal must not affect).
     var allowsBackwardSeeks = false
+    /// Every seek fails with a transport error (the connection dropped).
+    var seeksFail = false
 
     init(_ data: Data, knowsLength: Bool = false, refusesAllSeeks: Bool = false) {
         self.data = data
@@ -39,6 +44,7 @@ private final class ForwardOnlyByteReader: StreamByteReader {
     }
 
     func seek(to newOffset: Int64) throws {
+        if seeksFail { throw URLError(.networkConnectionLost) }
         guard newOffset >= offset || allowsBackwardSeeks, !refusesAllSeeks else {
             refusedSeeks += 1
             refusedTargets.append(newOffset)
@@ -104,12 +110,8 @@ final class ForwardOnlySourceTests: XCTestCase {
         let tagged = fixtures.appendingPathComponent("bear-id3.mp3")
         let tone = try Data(contentsOf: fixtureURL("tone.mp3"))
 
-        func tag(size: Int) -> Data {
-            let syncsafe = [size >> 21, size >> 14, size >> 7, size].map { UInt8($0 & 0x7F) }
-            return Data([0x49, 0x44, 0x33, 4, 0, 0] + syncsafe) + Data(repeating: 0, count: size)
-        }
         let stacked = FileManager.default.temporaryDirectory.appendingPathComponent("stacked-id3-\(UUID().uuidString).mp3")
-        try (tag(size: 3000) + tag(size: 40) + tone).write(to: stacked)
+        try (Self.id3Tag(size: 3000) + Self.id3Tag(size: 40) + tone).write(to: stacked)
         defer { try? FileManager.default.removeItem(at: stacked) }
 
         for url in [tagged, stacked] {
@@ -118,6 +120,27 @@ final class ForwardOnlySourceTests: XCTestCase {
             let forward = try decodeAll(FFmpegStreamDecoder(reader: source))
             XCTAssertGreaterThan(forward.count, 0, url.lastPathComponent)
             XCTAssertEqual(forward, seekable, url.lastPathComponent)
+        }
+    }
+
+    /// An ID3v2.4 tag of `size` zero bytes after its header.
+    private static func id3Tag(size: Int) -> Data {
+        let syncsafe = [size >> 21, size >> 14, size >> 7, size].map { UInt8($0 & 0x7F) }
+        return Data([0x49, 0x44, 0x33, 4, 0, 0] + syncsafe) + Data(repeating: 0, count: size)
+    }
+
+    /// A connection that drops inside the leading ID3 tag, while the probe reads past it or seeks
+    /// over it, fails the open as I/O: the caller retries rather than taking the file as unsupported.
+    func testATransportErrorInsideTheID3TagFailsTheOpenAsIO() throws {
+        let tagged = Self.id3Tag(size: 3000) + (try Data(contentsOf: fixtureURL("tone.mp3")))
+        let reading = ForwardOnlyByteReader(tagged, refusesAllSeeks: true)
+        reading.outageFrom = 1000
+        let seeking = ForwardOnlyByteReader(tagged)
+        seeking.seeksFail = true
+        for (name, source) in [("read", reading), ("seek", seeking)] {
+            XCTAssertThrowsError(try FFmpegStreamDecoder(reader: source).open(), name) { error in
+                XCTAssertEqual(error as? StreamDecoderError, .failed(status: Int32(STREAM_DECODE_ERR_IO.rawValue)), name)
+            }
         }
     }
 

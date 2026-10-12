@@ -55,9 +55,8 @@ StreamDecoder *stream_decoder_open_with(const StreamDecodeCallbacks *callbacks,
 
     /* Before anything reads: hide the ID3v2 tag, which on a real published MP3 is megabytes of
      * cover art that libavformat would otherwise consume in full. */
-    d->base_offset = sd_probe_id3_offset(d);
-    if (d->cancelled) { local_status = STREAM_DECODE_ERR_CANCELLED; goto fail; }
-    if (d->interrupted) { local_status = STREAM_DECODE_ERR_INTERRUPTED; goto fail; }
+    local_status = sd_probe_id3_offset(d);
+    if (local_status != STREAM_DECODE_OK) goto fail;
 
     local_status = sd_open_format(d, options);
     if (local_status == STREAM_DECODE_ERR_NO_AUDIO || local_status == STREAM_DECODE_ERR_OPEN) {

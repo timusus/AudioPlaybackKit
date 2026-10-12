@@ -182,7 +182,7 @@ void    sd_avio_arm_jump(StreamDecoder *d);
 void    sd_avio_set_direct(StreamDecoder *d, int direct);
 
 /* id3_probe.c */
-int64_t sd_probe_id3_offset(StreamDecoder *d);
+int     sd_probe_id3_offset(StreamDecoder *d);
 
 /* open_format.c */
 int  sd_open_format(StreamDecoder *d, const StreamDecodeOptions *options);
