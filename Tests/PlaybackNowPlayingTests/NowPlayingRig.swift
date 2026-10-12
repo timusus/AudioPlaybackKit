@@ -5,6 +5,7 @@ import AppKit
 #endif
 import Foundation
 import MediaPlayer
+import Observation
 import PlaybackPlayer
 import PlaybackPlayerTestSupport
 import PlaybackRender
@@ -51,6 +52,34 @@ final class FakeCommandCenter: RemoteCommandCenter {
     }
 }
 
+/// An app's policy over the player, as Shuttle2's `SessionPlayer`: everything else forwards.
+@MainActor @Observable
+final class PolicyPlayer: ForwardingNowPlayingControllable {
+    typealias Item = String
+
+    @ObservationIgnored let player: Player<String>
+    var removed: PlayerCommands = []
+    /// For every item without its own in `itemIntervals`; nil for next and previous.
+    var intervals: SkipIntervals?
+    var itemIntervals: [String: SkipIntervals] = [:]
+    var vetoesNext = false
+    private(set) var vetoedNexts = 0
+
+    init(_ player: Player<String>, intervals: SkipIntervals? = nil) {
+        self.player = player
+        self.intervals = intervals
+    }
+
+    var availableCommands: PlayerCommands { player.availableCommands.subtracting(removed) }
+
+    var skipIntervals: SkipIntervals? { player.currentItem.flatMap { itemIntervals[$0] } ?? intervals }
+
+    func seekToNext() {
+        guard !vetoesNext else { return vetoedNexts += 1 }
+        player.seekToNext()
+    }
+}
+
 /// A session over a `PlayerTestRig` of ten-second string items at 8 Hz.
 @MainActor
 final class NowPlayingRig {
@@ -69,15 +98,19 @@ final class NowPlayingRig {
 
     var player: Player<String> { base.player }
 
-    init(skipMode: NowPlayingSession<String>.SkipMode = .tracks, supportedRates: [Double] = [], live: Set<String> = []) {
+    /// `wrap` puts an app's wrapper between the session and the player.
+    init(
+        supportedRates: [Double] = [],
+        live: Set<String> = [],
+        wrap: (Player<String>) -> any NowPlayingControllable<String> = { $0 }
+    ) {
         base = PlayerTestRig { item in
             let source = FakeItemSource(format: Self.format, frames: 80, chunkFrames: 2)
             if live.contains(item) { source.duration = nil }
             return source
         }
         session = NowPlayingSession(
-            player: base.player,
-            skipMode: skipMode,
+            player: wrap(base.player),
             supportedRates: supportedRates,
             metadata: { NowPlayingMetadata(title: $0.uppercased(), artist: "Artist \($0)", album: "Album", duration: 99) },
             artwork: { [weak self] in await self?.loadArtwork($0) },

@@ -50,16 +50,18 @@ every iOS version: if the step does nothing, record that it did not reproduce ra
 ## Lock screen and Control Center
 
 Lock the phone while playing item 1 of 3, then use the lock screen, and repeat the commands in Control
-Center. Next and previous exist only with `skipMode: .tracks`, and the skip buttons only with
-`.intervals`; run the rows for each mode your app uses.
+Center. Next and previous exist only on an item without `skipIntervals`, and the skip buttons only on
+one with them; run the rows for each kind of item your app plays.
 
 | Steps | Expected | Covered by |
 |---|---|---|
 | Play, pause | Audio follows at once; the icon and elapsed time stop and start | `RemoteCommandTests.testPlayPauseAndToggle` |
 | Next | Item 2 starts, with its title, artwork and duration; elapsed starts at 0 | `RemoteCommandTests.testTrackSkipsMoveBetweenItemsAndPreviousOnTheFirstRestartsIt` |
 | Previous on item 2 | Item 1 starts. Previous on item 1 (no earlier item) restarts item 1 at 0, and the button stays enabled | `RemoteCommandTests.testTrackSkipsMoveBetweenItemsAndPreviousOnTheFirstRestartsIt` |
-| Skip forward and back (with `skipMode: .intervals`) | Position moves by the configured seconds; the glyph shows those seconds; next and previous are not offered | `RemoteCommandTests.testIntervalSkipsMoveByTheConfiguredSeconds` |
-| Skip with `skipMode: .tracks` | Next and previous items; no interval buttons | `RemoteCommandTests.testTrackSkipsMoveBetweenItemsAndPreviousOnTheFirstRestartsIt` |
+| Skip forward and back (with `skipIntervals`) | Position moves by the configured seconds; the glyph shows those seconds; next and previous are not offered | `RemoteCommandTests.testIntervalSkipsMoveByTheConfiguredSeconds` |
+| Skip without `skipIntervals` | Next and previous items; no interval buttons | `RemoteCommandTests.testTrackSkipsMoveBetweenItemsAndPreviousOnTheFirstRestartsIt` |
+| An item with intervals, then one without (an app's wrapper) | The skip buttons give way to next and previous at the item change | `RemoteCommandTests.testPerItemSkipIntervalsSwapTheButtonsAtTheItemChange` |
+| A command the app's wrapper removes | Greyed out until the wrapper puts it back | `RemoteCommandTests.testAWrapperRemovingNextGreysItOutAndPutsItBack` |
 | Drag the scrubber | The audio follows the release point; elapsed lands there and keeps counting | `RemoteCommandTests.testScrubberSeeksAndElapsedKeepsCounting` |
 | Change the rate (with `supportedRates`) | Audio speeds up or slows with pitch kept; the lock screen's rate matches | `RemoteCommandTests.testRateCommandChangesTheHeardRateAndTheShownOne` |
 | Last item, repeat off | Next is greyed out. With repeat `.all` it wraps | `RemoteCommandTests.testNextOnTheLastItemIsOffWithRepeatOffAndWrapsWithRepeatAll` |

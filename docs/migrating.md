@@ -72,7 +72,7 @@ Skip chime plays on its own `AVAudioPlayer` until the render layer mixes at the 
 | `SkipCueMixer` | `SkipCueMixer.swift` | chime on its own player; the duck is a `volume` ramp |
 | Sleep-timer fade, `SleepTimerManager.kt` | the controller, Kotlin | `volume` ramp; the timer calls `pause()`, or sets `pauseAtEndOfItem` for "end of episode" |
 | session setup in `ShuttlePodcastsApp.swift`, interruption and route handlers, `CarPlaySceneDelegate.configureAudioSession` | | deleted. `HeadphoneObserver` stays: auto-play on connect is a preference |
-| `NowPlayingInfoManager`, `RemoteCommandHandler` | `Platform/Audio/` | `NowPlayingSession(skipMode: .intervals(...), supportedRates: CarPlayNowPlayingController.speeds, ...)`, with the intervals from `WidgetIntentDefaults` |
+| `NowPlayingInfoManager`, `RemoteCommandHandler` | `Platform/Audio/` | `NowPlayingSession(player: wrapper, supportedRates: CarPlayNowPlayingController.speeds, ...)`, where the `ForwardingNowPlayingControllable` wrapper's `skipIntervals` come from `WidgetIntentDefaults` |
 | `ObserveAndStorePlaybackPosition.kt` | Kotlin | unchanged: it reads `position` in seconds, and counts listening only while `discontinuityCount` is unchanged |
 
 Details:
@@ -98,7 +98,7 @@ Details:
 | `PCMProcessor`: ReplayGain, `EqualizerSettings`, `LimiterSettings` | `DSP/PCMProcessor.swift` | `AudioProcessor`s (EQ, limiter) and a gain wrapper around the item source |
 | `AudioEngine.swift`, `MusicPlaybackController+AudioEngine.swift` | `S2/Platform/Audio/` | deleted |
 | `AudioSessionController` | `S2/Platform/Audio/` | deleted; its rules are the player's. `.longFormAudio` is its category and route sharing |
-| `NowPlayingController` | `S2/Platform/Audio/` | `NowPlayingSession(skipMode: .tracks, ...)`. `PlaybackSystemCoordinator` keeps only the widget publisher and `PlayIntent` logging |
+| `NowPlayingController` | `S2/Platform/Audio/` | `NowPlayingSession(player: sessionPlayer, ...)`, a `ForwardingNowPlayingControllable` for the queue rules, as Android's `SessionPlayer : ForwardingPlayer`. `PlaybackSystemCoordinator` keeps only the widget publisher and `PlayIntent` logging |
 | `EngineAudioPlayer` (the `IosAudioPlayer` adapter) | `S2/Platform/Audio/EngineAudioPlayer.swift` | thin over `Player`: `load` is `setItems` or `replaceItems`, `setNext` goes, `setPauseAtEnd` is `pauseAtEndOfItem`, `stop()` is `stop()` |
 | Kotlin `IosEngineFeeder.feedNext` | `shared/` | deleted; `IosEngineEvents.onCurrentFailed` stays as the `itemFailed` handler |
 | `QueueModel` shuffle order | Kotlin | unchanged; hand the player `queue.playOrder`, and `replaceItems` on every edit or shuffle toggle |

@@ -24,31 +24,16 @@ public struct NowPlayingMetadata: Sendable {
     }
 }
 
-/// Shows a `Player` in `MPNowPlayingInfoCenter` and routes `MPRemoteCommandCenter` back to it, until
-/// `release()`. Elapsed time and rate are written only on a jump of the player's position, a pause or
-/// play, a rate change, an item change, or when what is heard strays from where the system has
-/// extrapolated it (the output started late). A command is enabled
-/// only while it applies, as media3's available commands: next while there is a next, previous on any
-/// item but a live one with nothing before it, skips and scrubbing while the item is seekable, play and
-/// pause always. One session per app, since both centres are global.
+/// Shows a `Player`, or an app's wrapper of one, in `MPNowPlayingInfoCenter` and routes
+/// `MPRemoteCommandCenter` back to it, until `release()`. Elapsed time and rate are written only on a
+/// jump of the player's position, a pause or play, a rate change, an item change, or when what is heard
+/// strays from where the system has extrapolated it (the output started late). A remote command is
+/// enabled only while the player's `availableCommands` has it, as a media3 session offers a controller;
+/// `skipIntervals` swaps next and previous for the skip buttons. One session per app, since both
+/// centres are global.
 @MainActor
 public final class NowPlayingSession<Item: Hashable & Sendable> {
-    public enum SkipMode: Equatable, Sendable {
-        /// Next and previous item, for music.
-        case tracks
-        /// Seek by these seconds within the item, for spoken word.
-        case intervals(forward: TimeInterval, backward: TimeInterval)
-    }
-
-    public var skipMode: SkipMode {
-        didSet {
-            guard !released, skipMode != oldValue else { return }
-            applySkipIntervals()
-            applyCommands()
-        }
-    }
-
-    let player: Player<Item>
+    let player: any NowPlayingControllable<Item>
     private let supportedRates: [Double]
     private let metadata: @MainActor (Item) -> NowPlayingMetadata
     private let artwork: (@MainActor (Item) async -> MPMediaItemArtwork?)?
@@ -61,6 +46,8 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     private(set) var artworkLoad: Task<Void, Never>?
     private var released = false
     private var enabledCommands: Set<RemoteCommand>?
+    /// The outer optional is unset until the first write.
+    private var shownIntervals: SkipIntervals??
     private var current: (item: Item, metadata: NowPlayingMetadata, artwork: MPMediaItemArtwork?)?
     private var published: Published?
     /// Tells one artwork load from another for the same item, so only the latest publishes.
@@ -90,21 +77,19 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     /// `supportedRates` enables the rate command with those rates; empty leaves it off. `artwork` runs
     /// once per item change, and what it returns is dropped if the item changed meanwhile.
     public convenience init(
-        player: Player<Item>,
-        skipMode: SkipMode = .tracks,
+        player: any NowPlayingControllable<Item>,
         supportedRates: [Double] = [],
         metadata: @escaping @MainActor (Item) -> NowPlayingMetadata,
         artwork: (@MainActor (Item) async -> MPMediaItemArtwork?)? = nil
     ) {
         self.init(
-            player: player, skipMode: skipMode, supportedRates: supportedRates, metadata: metadata, artwork: artwork,
+            player: player, supportedRates: supportedRates, metadata: metadata, artwork: artwork,
             infoCenter: MPNowPlayingInfoCenter.default(), commandCenter: SystemRemoteCommandCenter()
         )
     }
 
     init(
-        player: Player<Item>,
-        skipMode: SkipMode,
+        player: any NowPlayingControllable<Item>,
         supportedRates: [Double],
         metadata: @escaping @MainActor (Item) -> NowPlayingMetadata,
         artwork: (@MainActor (Item) async -> MPMediaItemArtwork?)?,
@@ -114,14 +99,12 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     ) {
         self.now = now
         self.player = player
-        self.skipMode = skipMode
         self.supportedRates = supportedRates
         self.metadata = metadata
         self.artwork = artwork
         self.infoCenter = infoCenter
         self.commandCenter = commandCenter
         if !supportedRates.isEmpty { commandCenter.setSupportedRates(supportedRates) }
-        applySkipIntervals()
         observe()
     }
 
@@ -229,26 +212,30 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
 
     // MARK: Commands
 
-    // media3 `SEEK_IN_CURRENT_MEDIA_ITEM`: off before the item opens and for a live or unseekable item.
-    private var isSeekable: Bool { player.duration != nil }
-
-    private var availableCommands: Set<RemoteCommand> {
-        var commands: Set<RemoteCommand> = [.play, .pause, .togglePlayPause]
-        switch skipMode {
-        case .tracks:
-            if player.hasNext { commands.insert(.nextTrack) }
-            // media3 COMMAND_SEEK_TO_PREVIOUS, which restarts an item with no previous; a live one cannot.
-            if player.hasPrevious || (player.currentItem != nil && !player.isLive) { commands.insert(.previousTrack) }
-        case .intervals:
-            if isSeekable { commands.formUnion([.skipForward, .skipBackward]) }
+    // The lock screen offers either skip buttons or next and previous, so `skipIntervals` picks one pair.
+    private var remoteCommands: Set<RemoteCommand> {
+        let available = player.availableCommands
+        var commands: Set<RemoteCommand> = []
+        if available.contains(.playPause) { commands.formUnion([.play, .pause, .togglePlayPause]) }
+        if player.skipIntervals == nil {
+            if available.contains(.seekToNext) { commands.insert(.nextTrack) }
+            if available.contains(.seekToPrevious) { commands.insert(.previousTrack) }
+        } else {
+            if available.contains(.seekForward) { commands.insert(.skipForward) }
+            if available.contains(.seekBack) { commands.insert(.skipBackward) }
         }
-        if isSeekable { commands.insert(.changePlaybackPosition) }
-        if !supportedRates.isEmpty { commands.insert(.changePlaybackRate) }
+        if available.contains(.seekInCurrentItem) { commands.insert(.changePlaybackPosition) }
+        if available.contains(.setRate), !supportedRates.isEmpty { commands.insert(.changePlaybackRate) }
         return commands
     }
 
     private func applyCommands() {
-        let available = availableCommands
+        let intervals = player.skipIntervals
+        if shownIntervals != .some(intervals) {
+            shownIntervals = intervals
+            commandCenter.setSkipIntervals(intervals.map { ($0.forward, $0.backward) })
+        }
+        let available = remoteCommands
         for command in RemoteCommand.allCases {
             let enable = available.contains(command)
             guard enabledCommands.map({ $0.contains(command) != enable }) ?? true else { continue }
@@ -257,21 +244,17 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         enabledCommands = available
     }
 
-    private func applySkipIntervals() {
-        guard case let .intervals(forward, backward) = skipMode else { return }
-        commandCenter.setSkipIntervals((forward, backward))
-    }
-
     private func handle(_ command: RemoteCommand, _ event: RemoteCommandEvent) -> MPRemoteCommandHandlerStatus {
         guard player.currentItem != nil else { return .noActionableNowPlayingItem }
+        // The handlers follow a change only on the next refresh; a press in between is refused, as media3 does.
+        guard remoteCommands.contains(command) else { return .commandFailed }
         switch (command, event) {
         case (.play, _): player.play()
         case (.pause, _): player.pause()
         // media3's `playIfSuppressed` default: a suppressed player shows play, so toggle plays.
         case (.togglePlayPause, _): showsPlay ? player.play() : player.pause()
-        case (.nextTrack, _): player.skipToNext()
-        // No 3 s threshold (ADR-0019): a previous item is always where it goes.
-        case (.previousTrack, _): player.hasPrevious ? player.skipToPrevious() : player.seek(to: 0)
+        case (.nextTrack, _): player.seekToNext()
+        case (.previousTrack, _): player.seekToPrevious()
         case let (.skipForward, .interval(seconds)): player.seek(by: seconds)
         case let (.skipBackward, .interval(seconds)): player.seek(by: -seconds)
         case let (.changePlaybackPosition, .position(seconds)): player.seek(to: seconds)

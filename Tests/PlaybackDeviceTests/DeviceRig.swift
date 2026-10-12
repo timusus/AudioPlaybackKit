@@ -1,5 +1,6 @@
 import AVFoundation
 import MediaPlayer
+import Observation
 import PlaybackDecode
 import UIKit
 import XCTest
@@ -14,6 +15,27 @@ enum Fixture {
     static func url(_ item: String) -> URL {
         Bundle(for: TappedOutput.self).url(forResource: item, withExtension: nil)!
     }
+}
+
+/// An app's policy over the player, as Shuttle2's `SessionPlayer`: everything else forwards.
+@MainActor @Observable
+final class PolicyPlayer: ForwardingNowPlayingControllable {
+    typealias Item = String
+
+    @ObservationIgnored let player: Player<String>
+    var removed: PlayerCommands = []
+    /// For every item without its own in `itemIntervals`; nil for next and previous.
+    var intervals: SkipIntervals?
+    var itemIntervals: [String: SkipIntervals] = [:]
+
+    init(_ player: Player<String>, intervals: SkipIntervals? = nil) {
+        self.player = player
+        self.intervals = intervals
+    }
+
+    var availableCommands: PlayerCommands { player.availableCommands.subtracting(removed) }
+
+    var skipIntervals: SkipIntervals? { player.currentItem.flatMap { itemIntervals[$0] } ?? intervals }
 }
 
 /// The production output with a tap on what reaches the renderer, so a test can tell real audio from
@@ -90,7 +112,8 @@ final class DeviceRig {
     private(set) var gates: [GatedSource] = []
     private var eventTask: Task<Void, Never>?
 
-    init(skipMode: NowPlayingSession<String>.SkipMode = .tracks, supportedRates: [Double] = [1, 1.5, 2]) {
+    /// `wrap` puts an app's wrapper between the session and the player.
+    init(supportedRates: [Double] = [1, 1.5, 2], wrap: (Player<String>) -> any NowPlayingControllable<String> = { $0 }) {
         weak var weakSelf: DeviceRig?
         let output = output
         player = Player(
@@ -108,7 +131,7 @@ final class DeviceRig {
         weakSelf = self
         // The public init's real centres, held here so `send` reaches the targets and writes are timed.
         nowPlaying = NowPlayingSession(
-            player: player, skipMode: skipMode, supportedRates: supportedRates,
+            player: wrap(player), supportedRates: supportedRates,
             metadata: { NowPlayingMetadata(title: $0) }, artwork: nil,
             infoCenter: infoCenter, commandCenter: commands
         )
@@ -336,10 +359,16 @@ private final class StubPort: AVAudioSessionPortDescription, @unchecked Sendable
 class DeviceTestCase: XCTestCase {
     private(set) var rig: DeviceRig!
 
-    /// Replaces the rig, for a test that needs another skip mode.
-    func makeRig(skipMode: NowPlayingSession<String>.SkipMode) async {
+    /// Replaces the rig with one whose session drives a `PolicyPlayer` over the player.
+    @discardableResult
+    func makePolicyRig(intervals: SkipIntervals? = nil) async -> PolicyPlayer {
         await rig?.tearDown()
-        rig = DeviceRig(skipMode: skipMode)
+        var policy: PolicyPlayer!
+        rig = DeviceRig {
+            policy = PolicyPlayer($0, intervals: intervals)
+            return policy
+        }
+        return policy
     }
 
     override func setUp() async throws {

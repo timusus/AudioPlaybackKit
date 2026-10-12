@@ -35,7 +35,7 @@ final class RemoteCommandTests: DeviceTestCase {
         await rig.settle()
         XCTAssertEqual(rig.shownTitle, Fixture.items[0])
         XCTAssertEqual(rig.shownDuration ?? 0, 4, accuracy: 0.05)
-        XCTAssertNil(rig.send(.skipForward, .interval(15)), "no interval buttons with .tracks")
+        XCTAssertNil(rig.send(.skipForward, .interval(15)), "no interval buttons without skip intervals")
         XCTAssertNil(rig.send(.skipBackward, .interval(15)))
 
         XCTAssertEqual(rig.send(.nextTrack), .success)
@@ -61,12 +61,12 @@ final class RemoteCommandTests: DeviceTestCase {
     }
 
     func testIntervalSkipsMoveByTheConfiguredSeconds() async {
-        await makeRig(skipMode: .intervals(forward: 3, backward: 2))
+        await makePolicyRig(intervals: SkipIntervals(forward: 3, backward: 2))
         let center = MPRemoteCommandCenter.shared()
         XCTAssertEqual(center.skipForwardCommand.preferredIntervals, [3])
         XCTAssertEqual(center.skipBackwardCommand.preferredIntervals, [2])
         await rig.startPlaying(at: 2, position: 2)
-        XCTAssertNil(rig.send(.nextTrack), "no next with .intervals")
+        XCTAssertNil(rig.send(.nextTrack), "no next with skip intervals")
         XCTAssertNil(rig.send(.previousTrack))
 
         var before = rig.player.position
@@ -117,7 +117,7 @@ final class RemoteCommandTests: DeviceTestCase {
     }
 
     func testScrubbingAndSkipsAreOffUntilTheDurationIsKnown() async {
-        await makeRig(skipMode: .intervals(forward: 3, backward: 3))
+        await makePolicyRig(intervals: SkipIntervals(forward: 3, backward: 3))
         rig.gated = [Fixture.items[1]]
         rig.player.setItems(Fixture.items, startIndex: 1)
         rig.player.play()
@@ -136,5 +136,42 @@ final class RemoteCommandTests: DeviceTestCase {
         XCTAssertTrue(rig.remote(.skipForward).isEnabled)
         XCTAssertTrue(rig.remote(.skipBackward).isEnabled)
         XCTAssertEqual(rig.shownDuration ?? 0, 8, accuracy: 0.05)
+    }
+
+    func testAWrapperRemovingNextGreysItOutAndPutsItBack() async {
+        let policy = await makePolicyRig()
+        policy.removed = .seekToNext
+        await rig.startPlaying()
+        await rig.settle()
+        XCTAssertNil(rig.send(.nextTrack), "next is greyed out while the wrapper removes it")
+        XCTAssertFalse(rig.remote(.nextTrack).isEnabled)
+        XCTAssertTrue(rig.remote(.previousTrack).isEnabled)
+
+        policy.removed = []
+        await rig.settle()
+        XCTAssertEqual(rig.send(.nextTrack), .success)
+        await rig.waitUntil("item 2 heard") { rig.player.currentIndex == 1 && rig.player.isPlaying }
+    }
+
+    func testPerItemSkipIntervalsSwapTheButtonsAtTheItemChange() async {
+        let policy = await makePolicyRig()
+        policy.itemIntervals = [Fixture.items[0]: SkipIntervals(forward: 30, backward: 30)]
+        let center = MPRemoteCommandCenter.shared()
+        await rig.startPlaying()
+        await rig.settle()
+        XCTAssertEqual(center.skipForwardCommand.preferredIntervals, [30])
+        XCTAssertEqual(center.skipBackwardCommand.preferredIntervals, [30])
+        XCTAssertNil(rig.send(.nextTrack), "no next on an item with skip intervals")
+        XCTAssertEqual(rig.send(.skipBackward, .interval(30)), .success)
+        await rig.waitUntil("restarted") { rig.player.position < 0.5 }
+
+        rig.player.seek(to: 0, itemAt: 1)
+        await rig.waitUntil("item 2 heard") { rig.player.isPlaying && rig.player.duration != nil }
+        await rig.settle()
+        XCTAssertNil(rig.send(.skipForward, .interval(30)), "no skips on an item without them")
+        XCTAssertTrue(rig.remote(.nextTrack).isEnabled)
+        XCTAssertEqual(rig.send(.nextTrack), .success)
+        await rig.waitUntil("item 3 heard") { rig.player.currentIndex == 2 && rig.player.isPlaying }
+        await rig.assertAudible(over: 0.5)
     }
 }

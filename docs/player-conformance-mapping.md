@@ -472,9 +472,9 @@ the rest drive media3 API (custom layouts, browsing, playlist metadata, volume) 
 | `MediaSessionPlayerTest.seekTo` | `NowPlayingCommandTests.testChangePlaybackPositionSeeks` |
 | `MediaSessionPlayerTest.setPlaybackSpeed` | `NowPlayingCommandTests.testChangePlaybackRateSetsTheRate` |
 | `MediaSessionPlayerTest.seekToNextMediaItem` | `NowPlayingCommandTests.testNextAndPreviousSkip` |
-| `MediaSessionPlayerTest.seekToPreviousMediaItem` | `NowPlayingCommandTests.testNextAndPreviousSkip` || `MediaSessionPlayerTest.seekForward` | `NowPlayingCommandTests.testSkipsSeekByTheirInterval`; the interval is the app's `SkipMode`, not the player's |
+| `MediaSessionPlayerTest.seekToPreviousMediaItem` | `NowPlayingCommandTests.testNextAndPreviousSkip` || `MediaSessionPlayerTest.seekForward` | `NowPlayingCommandTests.testSkipsSeekByTheirInterval`; the interval is the wrapper's `skipIntervals`, not the player's |
 | `MediaSessionPlayerTest.seekBack` | `NowPlayingCommandTests.testSkipsSeekByTheirInterval` |
-| `MediaControllerTest.isCommandAvailable_withAvailableCommand_returnsTrue` | `NowPlayingCommandTests.testTracksModeEnablesNextAndPreviousAndNoSkips`, `testIntervalsModeEnablesSkipsWithTheirIntervalsAndNoTracks` |
+| `MediaControllerTest.isCommandAvailable_withAvailableCommand_returnsTrue` | `NowPlayingCommandTests.testAPlayerEnablesNextAndPreviousAndNoSkips`, `testSkipIntervalsEnableSkipsWithTheirIntervalsAndNoTracks`, `testAWrapperThatRemovesNextDisablesItAndKeepsTheRest`, `testCommandsTheWrapperRemovesMidItemAreDisabledAndRefusedAtOnce` |
 | `MediaControllerTest.isCommandAvailable_withUnavailableCommand_returnsFalse` | `NowPlayingCommandTests.testChangePlaybackRateIsEnabledOnlyWithSupportedRates` |
 | `MediaControllerTest.getMediaMetadata` | `NowPlayingInfoTests.testAnItemPublishesItsMetadataDurationElapsedAndRate` |
 | `MediaControllerTest.getCurrentPosition_whenPlaying_advances` | `NowPlayingInfoTests.testAnItemPublishesItsMetadataDurationElapsedAndRate`; the system extrapolates from elapsed time and rate |

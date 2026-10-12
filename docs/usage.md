@@ -421,8 +421,7 @@ session for the app's life, since both centres are global:
 
 ```swift
 let nowPlaying = NowPlayingSession(
-    player: player,
-    skipMode: .intervals(forward: 30, backward: 15),   // or .tracks for next/previous
+    player: player,                                    // or a wrapper of it, below
     supportedRates: [1, 1.5, 2],                       // empty leaves the rate command off
     metadata: { episode in NowPlayingMetadata(title: episode.title, artist: episode.show, duration: episode.duration) },
     artwork: { episode in await artworkCache.artwork(for: episode) }   // MPMediaItemArtwork?
@@ -433,11 +432,37 @@ The metadata closure runs once per item change; its `duration` is shown until th
 item. Artwork that arrives after the item changed is dropped. Elapsed time and rate are written on a seek,
 a play or pause, a rate change and an item change, never on each position update: the system
 extrapolates between them. They are written again if what is heard strays more than 0.05 s from that
-extrapolation, as when the output starts late after a play. Commands are enabled only while they apply, as media3's available commands:
-next while there is a next item (repeat `.all` wraps), previous on any item but a live one with nothing
-before it (with nothing before, it restarts the item), skips and scrubbing once the item's duration is
-known, play and pause always. `skipMode` can change at any time. `release()` disables every command and
-clears the info, the playback rates and the skip intervals.
+extrapolation, as when the output starts late after a play. A remote command is enabled only while the
+player's `availableCommands` has it. A `Player`'s are media3's: next while there is a next item (repeat
+`.all` wraps), previous on any item but a live one with nothing before it (with nothing before, it
+restarts the item), skips and scrubbing once the item's duration is known, play and pause always.
+`release()` disables every command and clears the info, the playback rates and the skip intervals.
+
+**Your own policy.** The session drives `NowPlayingControllable`, as a media3 session drives a
+`ForwardingPlayer`. Wrap the player with `ForwardingNowPlayingControllable` and declare only what your
+policy changes; everything else forwards. Make the wrapper `@Observable` so the session sees its changes:
+
+```swift
+@MainActor @Observable
+final class SessionPlayer: ForwardingNowPlayingControllable {
+    @ObservationIgnored let player: Player<Episode>
+    var queueLocked = false
+    init(player: Player<Episode>) { self.player = player }
+
+    // A command left out is greyed out on the lock screen.
+    var availableCommands: PlayerCommands {
+        queueLocked ? player.availableCommands.subtracting([.seekToNext, .seekToPrevious]) : player.availableCommands
+    }
+    // Non-nil shows skip buttons instead of next and previous; re-read on every item change.
+    var skipIntervals: SkipIntervals? {
+        player.currentItem?.isSpokenWord == true ? SkipIntervals(forward: 30, backward: 15) : nil
+    }
+    func seekToNext() { queue.advance(player) }   // the next button, through the app's queue rules
+}
+```
+
+The next button calls `seekToNext()`, previous `seekToPrevious()` (the previous item, or a restart with
+none), the skip buttons `seek(by:)` and the scrubber `seek(to:)`.
 
 ## Write a byte source of your own
 

@@ -19,6 +19,17 @@ final class NowPlayingCommandTests: XCTestCase {
 
     private var enabled: Set<RemoteCommand> { rig.commands.enabled }
 
+    /// Replaces the rig with one whose session drives a `PolicyPlayer` over the player.
+    @discardableResult
+    private func policyRig(live: Set<String> = [], intervals: SkipIntervals? = nil) -> PolicyPlayer {
+        var policy: PolicyPlayer!
+        rig = NowPlayingRig(live: live) {
+            policy = PolicyPlayer($0, intervals: intervals)
+            return policy
+        }
+        return policy
+    }
+
     /// The items, played until the current one has opened, then paused.
     private func opened(_ items: [String] = ["a", "b", "c"], at index: Int = 0) async {
         rig.player.setItems(items, startIndex: index)
@@ -52,7 +63,7 @@ final class NowPlayingCommandTests: XCTestCase {
 
     // media3 ExoPlayerTest.isCommandAvailable_duringUnseekableItem_isFalseForSeekInCurrentCommands
     func testSeekingIsUnavailableForALiveItem() async {
-        rig = NowPlayingRig(skipMode: .intervals(forward: 15, backward: 15), live: ["a"])
+        policyRig(live: ["a"], intervals: SkipIntervals(forward: 15, backward: 15))
         await opened(["a"])
 
         XCTAssertTrue(rig.player.isLive)
@@ -62,14 +73,15 @@ final class NowPlayingCommandTests: XCTestCase {
     }
 
     // ADR-0019: a 15 s skip interval registers skipForward and not nextTrack, and the reverse.
-    func testTracksModeEnablesNextAndPreviousAndNoSkips() async {
+    func testAPlayerEnablesNextAndPreviousAndNoSkips() async {
         await opened(at: 1)
 
         XCTAssertEqual(enabled, [.play, .pause, .togglePlayPause, .nextTrack, .previousTrack, .changePlaybackPosition])
+        XCTAssertNil(rig.commands.intervals)
     }
 
-    func testIntervalsModeEnablesSkipsWithTheirIntervalsAndNoTracks() async {
-        rig = NowPlayingRig(skipMode: .intervals(forward: 15, backward: 30))
+    func testSkipIntervalsEnableSkipsWithTheirIntervalsAndNoTracks() async {
+        policyRig(intervals: SkipIntervals(forward: 15, backward: 30))
         await opened(at: 1)
 
         XCTAssertEqual(enabled, [.play, .pause, .togglePlayPause, .skipForward, .skipBackward, .changePlaybackPosition])
@@ -77,17 +89,21 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertEqual(rig.commands.intervals?.backward, 30)
     }
 
-    func testChangingTheSkipModeSwapsTheCommands() async {
+    func testChangingTheSkipIntervalsSwapsTheCommands() async {
+        let policy = policyRig()
         await opened(at: 1)
 
-        rig.session.skipMode = .intervals(forward: 10, backward: 10)
+        policy.intervals = SkipIntervals(forward: 10, backward: 10)
+        await rig.settle()
         XCTAssertTrue(enabled.isSuperset(of: [.skipForward, .skipBackward]))
         XCTAssertTrue(enabled.isDisjoint(with: [.nextTrack, .previousTrack]))
         XCTAssertEqual(rig.commands.intervals?.forward, 10)
 
-        rig.session.skipMode = .tracks
+        policy.intervals = nil
+        await rig.settle()
         XCTAssertTrue(enabled.isSuperset(of: [.nextTrack, .previousTrack]))
         XCTAssertTrue(enabled.isDisjoint(with: [.skipForward, .skipBackward]))
+        XCTAssertNil(rig.commands.intervals)
     }
 
     // media3 ExoPlayerTest.seekTo_nextWindow_notifiesAvailableCommandsChanged,
@@ -272,7 +288,7 @@ final class NowPlayingCommandTests: XCTestCase {
 
     // media3 MediaSessionPlayerTest.seekForward, seekBack
     func testSkipsSeekByTheirInterval() async {
-        rig = NowPlayingRig(skipMode: .intervals(forward: 3, backward: 2))
+        policyRig(intervals: SkipIntervals(forward: 3, backward: 2))
         await opened()
         rig.player.seek(to: 1)
 
@@ -309,6 +325,68 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertEqual(rig.player.position, 1, accuracy: 0.5)
     }
 
+    // MARK: Through a wrapper (media3 ForwardingPlayer)
+
+    // As a media3 session offers a controller only the player's available commands.
+    func testAWrapperThatRemovesNextDisablesItAndKeepsTheRest() async {
+        let policy = policyRig()
+        policy.removed = .seekToNext
+        await opened(at: 1)
+
+        XCTAssertEqual(enabled, [.play, .pause, .togglePlayPause, .previousTrack, .changePlaybackPosition])
+        XCTAssertNil(rig.commands.fire(.nextTrack))
+        XCTAssertEqual(rig.player.currentIndex, 1)
+    }
+
+    func testNextGoesThroughTheWrappersPolicy() async {
+        let policy = policyRig()
+        policy.vetoesNext = true
+        await opened(at: 1)
+
+        XCTAssertEqual(rig.commands.fire(.nextTrack), .success)
+
+        XCTAssertEqual(policy.vetoedNexts, 1)
+        XCTAssertEqual(rig.player.currentIndex, 1)
+    }
+
+    func testSkipIntervalsArePerItem() async {
+        let policy = policyRig()
+        policy.itemIntervals = ["a": SkipIntervals(forward: 30, backward: 30)]
+        await opened(["a", "b", "c"])
+
+        XCTAssertTrue(enabled.isSuperset(of: [.skipForward, .skipBackward]))
+        XCTAssertTrue(enabled.isDisjoint(with: [.nextTrack, .previousTrack]))
+        XCTAssertEqual(rig.commands.intervals?.forward, 30)
+        XCTAssertEqual(rig.commands.intervals?.backward, 30)
+        XCTAssertEqual(rig.commands.fire(.skipBackward, .interval(30)), .success)
+        XCTAssertEqual(rig.player.position, 0)
+
+        rig.player.seek(to: 0, itemAt: 1)
+        await rig.settle()
+        XCTAssertTrue(enabled.isSuperset(of: [.nextTrack, .previousTrack]))
+        XCTAssertTrue(enabled.isDisjoint(with: [.skipForward, .skipBackward]))
+        XCTAssertNil(rig.commands.intervals)
+        XCTAssertEqual(rig.commands.fire(.nextTrack), .success)
+        XCTAssertEqual(rig.player.currentIndex, 2)
+    }
+
+    func testCommandsTheWrapperRemovesMidItemAreDisabledAndRefusedAtOnce() async {
+        let policy = policyRig()
+        await opened()
+        XCTAssertTrue(enabled.contains(.changePlaybackPosition))
+
+        policy.removed = .seekInCurrentItem
+        XCTAssertEqual(rig.commands.fire(.changePlaybackPosition, .position(6)), .commandFailed, "refused before the refresh")
+        XCTAssertEqual(rig.player.position, 1, accuracy: 0.5)
+        await rig.settle()
+        XCTAssertFalse(enabled.contains(.changePlaybackPosition))
+
+        policy.removed = []
+        await rig.settle()
+        XCTAssertEqual(rig.commands.fire(.changePlaybackPosition, .position(6)), .success)
+        XCTAssertEqual(rig.player.position, 6)
+    }
+
     func testReleaseDisablesEveryCommandAndClearsTheInfo() async {
         await opened()
 
@@ -322,7 +400,7 @@ final class NowPlayingCommandTests: XCTestCase {
     }
 
     func testReleaseClearsTheRatesAndSkipIntervalsItSet() async {
-        rig = NowPlayingRig(skipMode: .intervals(forward: 15, backward: 30), supportedRates: [1, 2])
+        rig = NowPlayingRig(supportedRates: [1, 2]) { PolicyPlayer($0, intervals: SkipIntervals(forward: 15, backward: 30)) }
         await opened()
 
         rig.session.release()
