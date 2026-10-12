@@ -448,7 +448,7 @@ final class NowPlayingCommandTests: XCTestCase {
         await opened()
         XCTAssertNotEqual(enabled, [])
 
-        rig.dropSession()
+        await rig.dropSession()
 
         XCTAssertEqual(enabled, [])
         XCTAssertNil(rig.info.nowPlayingInfo)

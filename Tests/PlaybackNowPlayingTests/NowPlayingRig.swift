@@ -90,9 +90,11 @@ final class NowPlayingRig {
         )
     }
 
-    /// Drops the only reference to the session; `settle` and `run` need it afterwards.
-    func dropSession() {
+    /// Drops the only reference to the session; `settle` and `run` need it afterwards. The release hops
+    /// to the main actor, and a task queued after it runs after it.
+    func dropSession() async {
         session = nil
+        await Task { @MainActor in }.value
     }
 
     /// Runs the player for `seconds` of output, then lets the session catch up.

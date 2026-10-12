@@ -112,18 +112,26 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         observe()
     }
 
-    // Both centres are global, so a dropped session would leave its handlers and info behind.
-    isolated deinit {
-        release()
+    // Both centres are global, so a dropped session would leave its handlers and info behind. A hop
+    // rather than `isolated deinit` (Swift 6 only): the centres are main-actor classes, so the task
+    // captures them, not `self`. The pending tasks hold `self` weakly and end with it.
+    deinit {
+        guard !released else { return }
+        let commandCenter = commandCenter, infoCenter = infoCenter
+        Task { @MainActor in Self.clear(commandCenter, infoCenter) }
     }
 
     /// Disables every command and clears the info, rates and skip intervals, as media3's
-    /// `MediaSession.release`. Final.
+    /// `MediaSession.release`. Final. Dropping the session does the same, one main-actor turn later.
     public func release() {
         guard !released else { return }
         released = true
         pendingRefresh?.cancel()
         artworkLoad?.cancel()
+        Self.clear(commandCenter, infoCenter)
+    }
+
+    private static func clear(_ commandCenter: any RemoteCommandCenter, _ infoCenter: any NowPlayingInfoCenter) {
         for command in RemoteCommand.allCases { commandCenter.setHandler(for: command, nil) }
         commandCenter.setSupportedRates([])
         commandCenter.setSkipIntervals(nil)
