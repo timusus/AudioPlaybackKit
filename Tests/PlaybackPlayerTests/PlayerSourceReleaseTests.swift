@@ -71,6 +71,19 @@ final class PlayerSourceReleaseTests: XCTestCase {
         XCTAssertEqual(rig.factory.released, ["a", "b"])
     }
 
+    func testUnloadingDropsTheItemsKeptForProcessors() {
+        player.setItems(["a", "b", "c"])
+        player.play()
+        rig.run(for: 1)
+
+        player.stop()
+        XCTAssertEqual(player.keyedItems.count, 0)
+
+        player.play()
+        player.removeAll()
+        XCTAssertEqual(player.keyedItems.count, 0)
+    }
+
     func testASeekReleasesNothing() {
         player.setItems(["a", "b"])
         player.play()

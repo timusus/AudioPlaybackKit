@@ -75,7 +75,7 @@ public final class Player<Item: Hashable & Sendable> {
     /// and arm takes a fresh key, so a repeat of the current entry is told from its own first audio.
     @ObservationIgnored private var keyedEntries: [Int: Int] = [:]
     @ObservationIgnored private var lastKey = 0
-    @ObservationIgnored private let keyedItems = KeyedItems<Item>()
+    @ObservationIgnored let keyedItems = KeyedItems<Item>()
     /// The current entry's key while the transport holds it; nil when stopped, or ended by an edit.
     @ObservationIgnored private var loadedKey: Int?
     @ObservationIgnored private var armedKey: Int?
@@ -718,6 +718,7 @@ public final class Player<Item: Hashable & Sendable> {
     private func unload(as state: PlaybackState) {
         transport.stop()
         keyedEntries = [:]
+        keyedItems.forget(below: lastKey + 1)
         pausedAtEnd = false
         loadedKey = nil
         armedKey = nil

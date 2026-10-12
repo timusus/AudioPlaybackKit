@@ -15,6 +15,10 @@ final class KeyedItems<Item: Hashable & Sendable>: @unchecked Sendable {
         lock.withLock { items = items.filter { $0.key >= key } }
     }
 
+    var count: Int {
+        lock.withLock { items.count }
+    }
+
     func item(for key: Int) -> Item? {
         lock.withLock { items[key] }
     }
