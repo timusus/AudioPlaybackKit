@@ -208,6 +208,10 @@ public final class FFmpegStreamDecoder {
                 size: { opaque in
                     guard let opaque else { return -1 }
                     return ReaderBox.from(opaque).size()
+                },
+                fetched_end: { opaque in
+                    guard let opaque else { return -1 }
+                    return ReaderBox.from(opaque).fetchedEnd()
                 }
             )
             var info = StreamAudioInfo()
@@ -532,5 +536,9 @@ private final class ReaderBox {
 
     func size() -> Int64 {
         reader.totalLength ?? -1
+    }
+
+    func fetchedEnd() -> Int64 {
+        reader.fetchedEnd ?? -1
     }
 }

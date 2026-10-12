@@ -41,6 +41,16 @@ public protocol StreamByteReader: AnyObject {
 
     /// Forget an interruption. Called by the decoder before the seek that follows one.
     func clearInterrupt()
+
+    /// End (exclusive) of the bytes from ``position`` on that are already held locally, so a read
+    /// up to it never waits on a transport. The decoder then seeks to a target past it rather than
+    /// reading forward to it, letting the reader fetch from there. Nil, the default, when every
+    /// byte is local (a file) or when reading on is the only way to reach bytes ahead.
+    var fetchedEnd: Int64? { get }
+}
+
+public extension StreamByteReader {
+    var fetchedEnd: Int64? { nil }
 }
 
 public enum StreamByteReaderError: Error, Equatable {

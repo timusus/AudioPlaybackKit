@@ -135,6 +135,7 @@ static int seek_back_to(StreamDecoder *d, int64_t target) {
  * seek's failure, and a refusal (`unseekable`, already latched) is reported as such. */
 static int seek_to_byte(StreamDecoder *d, int64_t byte) {
     int64_t failed = d->failed_seeks;
+    sd_avio_arm_jump(d);
     int rc = avformat_seek_file(d->fmt, d->audio_idx, INT64_MIN, byte, byte,
                                 AVSEEK_FLAG_BYTE | AVSEEK_FLAG_BACKWARD);
     if (rc < 0 || d->failed_seeks != failed) return seek_failure(d);
@@ -172,6 +173,7 @@ int stream_decoder_seek(StreamDecoder *decoder, double seconds, double *landed_s
     decoder->output_fixed = 1;
     decoder->unseekable = 0;
     int status = seek_to(decoder, seconds, landed_seconds);
+    sd_avio_set_direct(decoder, 0);   /* a jump the seek never made must not outlive it */
     /* Only a seek that ended in a seek or I/O failure: the C code recovers from some refused
      * reader seeks (fallbacks), and cancel/interrupt keep their own verdicts. */
     if (decoder->unseekable && (status == STREAM_DECODE_ERR_SEEK || status == STREAM_DECODE_ERR_IO)) {
@@ -325,6 +327,7 @@ static int place_demuxer(StreamDecoder *decoder, double seconds, int64_t target,
     *plan = (SeekPlan){ .anchor_pos = -1, .anchor_dts = AV_NOPTS_VALUE, .seek_ts = target,
                         .land_at = AV_NOPTS_VALUE };
     *anchored = 0;
+    sd_avio_arm_jump(decoder);
     if (format->place) {
         int found = format->place(decoder, target, plan);
         if (found != STREAM_DECODE_OK) return found;

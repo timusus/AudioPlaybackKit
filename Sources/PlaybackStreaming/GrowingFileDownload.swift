@@ -155,6 +155,14 @@ struct GrowingFileDownload {
         stickyFailure = nil
     }
 
+    /// End of the run of the file holding the decoder's position. Nil when a seek ahead could not
+    /// fetch sooner than reading on: the host ignores ranges, or `seek` would refuse it.
+    var fetchedEnd: Int64? {
+        if rangeIgnored { return nil }
+        if let tx = current, tx.answered, tx.totalLength == nil, !tx.rangeHonoured { return nil }
+        return file.ranges.run(containing: offset)?.upperBound ?? offset
+    }
+
     mutating func interrupt() -> [Effect] {
         interrupted = true
         return [.wake]

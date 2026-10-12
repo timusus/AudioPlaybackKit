@@ -148,7 +148,7 @@ static int flac_probe(StreamDecoder *d, const FLACInfo *si, int64_t at, int64_t 
     int cand_sizes[kCands], ncands = 0;
     int64_t cand = -1, cand_sample = 0;
     int have = 0, scanned = 0, ended = 0;
-    d->avio->direct = 1;
+    sd_avio_set_direct(d, 1);
     if (avio_seek(d->fmt->pb, at, SEEK_SET) < 0) ended = -1;
     while (ended == 0) {
         while (scanned < have) {
@@ -228,7 +228,7 @@ done:
         *pos = at + cand;
         *sample = cand_sample;
     }
-    d->avio->direct = 0;
+    sd_avio_set_direct(d, 0);
     av_free(buf);
     return sd_read_failure_status(d);
 }
@@ -242,9 +242,9 @@ static int flac_read_small(StreamDecoder *d, int64_t pos, uint8_t *buf, int n, i
         memcpy(buf, d->prologue + pos, (size_t)n);
         return n;
     }
-    d->avio->direct = 1;
+    sd_avio_set_direct(d, 1);
     int got = avio_seek(d->fmt->pb, pos, SEEK_SET) < 0 ? -1 : avio_read(d->fmt->pb, buf, n);
-    d->avio->direct = 0;
+    sd_avio_set_direct(d, 0);
     sd_avio_clear_latched_error(d);
     if (got <= 0) return 0;
     *spent += got;

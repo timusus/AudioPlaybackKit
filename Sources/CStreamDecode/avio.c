@@ -133,6 +133,8 @@ int64_t sd_avio_seek_packet(void *opaque, int64_t offset, int whence) {
         return AVERROR(ENOSYS);
     }
     if (target < 0) return AVERROR(EINVAL);
+    /* The jump is here; what follows it reads and short-seeks through the buffer again. */
+    if (d->jump_armed) sd_avio_set_direct(d, 0);
     if (d->phantom_len && target >= d->phantom_at) {   /* the source has nothing there to seek to */
         d->io_pos = target;
         return target;
@@ -165,4 +167,35 @@ void sd_avio_clear_latched_error(StreamDecoder *d) {
     if (!d->avio) return;
     d->avio->error = 0;
     d->avio->eof_reached = 0;
+}
+
+/* FFmpeg's SHORT_SEEK_THRESHOLD (aviobuf.c): how far past the bytes it holds `avio_seek` reads on. */
+static const int64_t kShortSeekBytes = 32 * 1024;
+
+/*
+ * Send the next AVIO reposition to the reader, whatever its distance, when the reader's fetched
+ * bytes end inside the short-seek window.
+ *
+ * `avio_seek` serves a forward target up to 32 KiB past the bytes it holds by reading forward, and
+ * for a growing download whose fetched bytes end before the target those reads crawl at network
+ * rate while the reader, never told the target, cannot open a range there. Direct mode makes that
+ * one seek a reader seek, which answers it from the fetched bytes or opens a range as it sees fit
+ * (as media3's ProgressiveMediaPeriod opens a new DataSpec at every extractor seek and its
+ * CacheDataSource decides cache or network). Disarmed by that seek, so the demuxer's short seeks
+ * around the landing stay in the buffer. A reader holding the whole window (a file) is left alone:
+ * reading on is cheap there. The short-seek threshold itself is not public API.
+ */
+void sd_avio_arm_jump(StreamDecoder *d) {
+    if (!d->avio || !d->cb.fetched_end) return;
+    int64_t fetched = d->cb.fetched_end(d->opaque);
+    if (fetched < 0 || fetched - d->base_offset >= d->io_pos + kShortSeekBytes) return;
+    d->avio->direct = 1;
+    d->jump_armed = 1;
+}
+
+/* Direct mode for a caller's own reads (FLAC probes), which also ends any armed jump. */
+void sd_avio_set_direct(StreamDecoder *d, int direct) {
+    if (!d->avio) return;
+    d->avio->direct = direct;
+    d->jump_armed = 0;
 }

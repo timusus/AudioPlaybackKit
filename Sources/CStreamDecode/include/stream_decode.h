@@ -67,6 +67,9 @@ typedef struct {
     int (*seek)(void *opaque, int64_t offset);
     /** Total length in bytes, or < 0 when unknown (a live stream, or chunked with no length). */
     int64_t (*size)(void *opaque);
+    /** End of the bytes from the current position on that are held locally, or < 0 when every
+     *  byte is (a file) or a seek ahead could not fetch sooner than reading on. NULL means < 0. */
+    int64_t (*fetched_end)(void *opaque);
 } StreamDecodeCallbacks;
 
 /** What the container says about the audio, filled in by `stream_decoder_open`. */

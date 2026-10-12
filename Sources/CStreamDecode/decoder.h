@@ -94,6 +94,8 @@ struct StreamDecoder {
     /* Tests only; see `stream_decoder_set_seek_budget_bytes`. <= 0 means the default. */
     int64_t      seek_budget_override;
     int          seek_budget_blown;
+    /* The next AVIO reposition goes to the reader (see `sd_avio_arm_jump`). */
+    int          jump_armed;
 
     /* Whole-container facts kept for the byte-estimate seek: media bytes (size minus
      * `base_offset`) and the duration those bytes cover. */
@@ -175,6 +177,8 @@ int     sd_avio_read_packet(void *opaque, uint8_t *buf, int buf_size);
 int64_t sd_avio_seek_packet(void *opaque, int64_t offset, int whence);
 int64_t sd_avio_size_seen(const StreamDecoder *d);
 void    sd_avio_clear_latched_error(StreamDecoder *d);
+void    sd_avio_arm_jump(StreamDecoder *d);
+void    sd_avio_set_direct(StreamDecoder *d, int direct);
 
 /* id3_probe.c */
 int64_t sd_probe_id3_offset(StreamDecoder *d);

@@ -278,6 +278,8 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
 
     public var position: Int64 { locked { machine.offset } }
 
+    public var fetchedEnd: Int64? { locked { machine.fetchedEnd } }
+
     public func read(into buffer: UnsafeMutableRawPointer, maxLength: Int) throws -> Int {
         guard maxLength > 0 else { return 0 }
         var announcedWait = false
