@@ -94,6 +94,49 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(server.requestedRanges, [0, 0], "no restart after the resume")
         XCTAssertEqual(source.snapshot.transactionGeneration, 1, "a resume is the same file")
         XCTAssertEqual(events.transactions.count, 1)
+        XCTAssertTrue(waitUntil { source.snapshot.isComplete })
+        let cached = try XCTUnwrap(GrowingFileStore(directory: directory).completedFile(for: server.url))
+        XCTAssertEqual(try Data(contentsOf: cached), body)
+    }
+
+    /// A drop under 64 KiB in resumes from byte 0, and a whole body longer than the file's total is
+    /// not that file's end, though its first bytes match: the file is discarded and the retry
+    /// restarts into a new one.
+    func testAResumeFromByteZeroAnsweredWithA200OfAnotherLengthRestarts() throws {
+        let body = makeBody(128 * 1024)
+        let other = body + makeBody(32 * 1024, seed: 42)
+        let server = try startServer(body: body)
+        server.bodies = [body, other]
+        server.respondsWholeBodyIgnoringRange = true
+        server.closesAfterBodyBytes = 20_000
+        let source = makeSource(server.url)
+
+        let head = try read(source, 4096)
+        XCTAssertTrue(waitUntil { server.requestedRanges.count == 3 })
+        XCTAssertEqual(server.requestedRanges, [0, 0, 4096], "the resume was refused and the restart is at the read position")
+        XCTAssertEqual(head + (try readToEnd(source)), other)
+        XCTAssertEqual(source.totalLength, Int64(other.count))
+        XCTAssertTrue(waitUntil { source.snapshot.isComplete })
+        let cached = try XCTUnwrap(GrowingFileStore(directory: directory).completedFile(for: server.url))
+        XCTAssertEqual(try Data(contentsOf: cached), other, "the file was discarded, not spliced")
+    }
+
+    /// A drop under 64 KiB in resumes from byte 0, and a plain 200 with no length says nothing about
+    /// where its bytes end: the file is discarded and the retry restarts into a new one.
+    func testAResumeFromByteZeroAnsweredWithAChunked200RestartsIntoANewFile() throws {
+        let body = makeBody(128 * 1024)
+        let server = try startServer(body: body)
+        server.respondsWholeBodyIgnoringRange = true
+        server.usesChunkedEncoding = true
+        server.closesAfterBodyBytes = 20_000
+        server.resetsDroppedConnections = true
+        let source = makeSource(server.url)
+
+        let head = try read(source, 4096)
+        XCTAssertTrue(waitUntil { server.requestedRanges.count == 3 })
+        XCTAssertEqual(server.requestedRanges, [0, 0, 4096], "the resume was refused and the restart is at the read position")
+        XCTAssertEqual(head + (try readToEnd(source)), body)
+        XCTAssertEqual(source.totalLength, Int64(body.count))
     }
 
     /// The host spliced different content in between the drop and the resume (the total moved): its bytes are not
