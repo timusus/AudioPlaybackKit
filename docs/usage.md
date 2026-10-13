@@ -31,7 +31,7 @@ extension target must still embed and sign `FFmpeg.framework` in the app itself.
 
 MP3, AAC (ADTS and LATM), MP4/M4A (AAC, ALAC), Ogg (Vorbis, Opus, FLAC), Matroska/WebM (Opus, Vorbis), FLAC, PCM WAV/AIFF, WavPack, WMA v1/v2 (ASF), DSD (DSF/DFF, decoded to PCM; no DoP passthrough), Monkey's Audio (APE).
 
-WavPack and WMA have known seek and fault-resume findings pinned in `KnownIssues+Codecs.swift` (#171); APE has no conformance fixture (ffmpeg cannot encode it).
+WavPack seeking is broken (#175): seeks into the stream fail. WMA has known fault-resume and unknown-length seek findings; both are pinned in `KnownIssues+Codecs.swift` (#171). Monkey's Audio (APE) is untested: it has no conformance fixture, as no encoder is available.
 
 Sample-accurate seek can land early on fragmented MP4 of unknown length (known-issue fixtures #61 and #62).
 

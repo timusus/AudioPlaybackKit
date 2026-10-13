@@ -24,6 +24,7 @@ extra formats. Build profiles and `FFmpeg-music.xcframework` are gone.
 ## Consequences
 
 - Every format in the list has a fixture in the conformance corpus; an untested format is not supported.
+- Adding Monkey's Audio, WavPack, DSD and WMA grew each slice by about 130 KB.
 - Adding a format to either app is a rebuild of the one framework, and the other app gets it too.
 - The licence stays LGPL-2.1 only: no GPL flags, and no library beyond the system zlib.
 

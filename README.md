@@ -16,7 +16,7 @@ framework is about 1.7 MB per iOS slice, and the fakes let an app test its own p
 
 What an app gets:
 
-- **Formats AVPlayer lacks.** Ogg Vorbis, Ogg Opus, FLAC in Ogg and Matroska/WebM audio, alongside MP3, AAC, M4A/ALAC, FLAC and WAV/AIFF. Also WavPack, WMA (v1/v2), DSD (DSF and DFF, decoded to PCM, no DoP passthrough) and Monkey's Audio (APE); the last has no conformance fixture yet.
+- **Formats AVPlayer lacks.** Ogg Vorbis, Ogg Opus, FLAC in Ogg and Matroska/WebM audio, alongside MP3, AAC, M4A/ALAC, FLAC and WAV/AIFF. Also WavPack, WMA (v1/v2), DSD (DSF and DFF, decoded to PCM, no DoP passthrough) and Monkey's Audio (APE). APE is untested (no conformance fixture), and WavPack seeking is broken (#175).
 - **Playback before the download ends.** `GrowingFileByteSource` reads an HTTP(S) URL while it downloads, with range-request resume, stall detection and retry. An MP4 with its index at the end plays from range requests.
 - **Seeks that land on the sample** (VBR MP3 excepted), gapless joins between items (even at different sample rates), and decode that can be cancelled while blocked on the network.
 - **A decoder checked against goldens.** Over a hundred fixtures run through a faulting reader and a seek matrix against committed PCM hashes, modelled on androidx/media's tests ([ADR-0008](docs/decisions/0008-conformance-testing-modelled-on-media3.md)).
