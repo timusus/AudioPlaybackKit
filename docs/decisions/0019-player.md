@@ -168,7 +168,7 @@ public final class Player<Item: Hashable & Sendable> {
     public func stop()                              // `.idle`, session deactivated, items kept
     public func prepare()                           // from `.idle`, loads the current item at `position` (ADR-0024)
     public func skipToNext(); public func skipToPrevious()
-    public var hasNext: Bool { get }; public var hasPrevious: Bool { get }
+    var hasNext: Bool { get }; var hasPrevious: Bool { get }   // internal; availableCommands reports them
 
     // Position, in seconds of the current item's media time.
     public private(set) var position: TimeInterval   // what is heard; updated every 100 ms while it changes

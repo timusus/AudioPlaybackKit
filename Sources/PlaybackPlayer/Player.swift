@@ -299,8 +299,8 @@ public final class Player<Item: Hashable & Sendable> {
         didSet { armNext() }
     }
 
-    public var hasNext: Bool { neighbour(1) != nil }
-    public var hasPrevious: Bool { neighbour(-1) != nil }
+    var hasNext: Bool { neighbour(1) != nil }
+    var hasPrevious: Bool { neighbour(-1) != nil }
 
     public func skipToNext() {
         guard let next = neighbour(1) else { return }
