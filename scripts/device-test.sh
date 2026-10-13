@@ -42,6 +42,16 @@ else
   [ -n "$udid" ] || fail "no paired iPhone; pair one in Xcode or pass a UDID"
 fi
 
+# The phone is shared with other repos' sessions, which lease it by name ("Elise's iPhone" is
+# iphone-elise); hold that lease for the whole run, build included, so nobody installs mid-suite.
+if [ -z "${DEVICE_TEST_PHONE_HELD:-}" ]; then
+  xcrun devicectl list devices --quiet --json-output "$scratch/devices.json" >/dev/null
+  phone="$(json "$scratch/devices.json" "import re; n = next(x['deviceProperties']['name'] for x in d['result']['devices']
+    if x['hardwareProperties']['udid'] == '$udid'); n = re.sub(r\"['’]s iphone\$\", '', n.lower()); print('iphone-' + re.sub(r'[^a-z0-9]+', '-', n).strip('-'))")"
+  rm -rf "$scratch"
+  DEVICE_TEST_PHONE_HELD=1 exec lease --class "$phone" -- "$PWD/scripts/device-test.sh" "$udid" "$@"
+fi
+
 # A locked phone cannot launch the host, and xcodebuild waits on it rather than failing.
 # Checked again after the build, which can outlast the auto-lock; the host keeps it awake from then on.
 check_unlocked() {
@@ -71,8 +81,9 @@ if [ -n "${ASC_API_KEY_PATH:-}" ]; then
   build+=(-authenticationKeyPath "$ASC_API_KEY_PATH" -authenticationKeyID "${ASC_KEY_ID:?}"
     -authenticationKeyIssuerID "${ASC_ISSUER_ID:?}")
 fi
-lease -- xcodebuild build-for-testing "${build[@]}" -quiet
-lease --class device -- xcrun devicectl device install app --device "$udid" --quiet "$derived/Build/Products/Debug-iphoneos/Interruptor.app"
+# Without LEASE_HELD the build queues for a build slot instead of riding on the phone's lease.
+env -u LEASE_HELD lease -- xcodebuild build-for-testing "${build[@]}" -quiet
+xcrun devicectl device install app --device "$udid" --quiet "$derived/Build/Products/Debug-iphoneos/Interruptor.app"
 check_unlocked
 # xcodebuild hands TEST_RUNNER_ variables to the tests without the prefix.
-TEST_RUNNER_DEVICE_INTERRUPTOR=1 lease --class device -- xcodebuild test-without-building "${build[@]}" "$@"
+TEST_RUNNER_DEVICE_INTERRUPTOR=1 xcodebuild test-without-building "${build[@]}" "$@"
