@@ -4,115 +4,157 @@ import XCTest
 @testable import PlaybackDecode
 
 /// Seeded corruption of the conformance fixtures, decoded to the end with a couple of seeks. The
-/// only claim is that the glue survives: every outcome is a clean end or a typed
-/// ``StreamDecoderError``, within a chunk cap and a wall-clock cap. A crash takes the process down,
-/// so the case being run is printed first and a failure carries its seed.
+/// only claim is that the glue survives: every outcome is a clean end or a `.failed`
+/// ``StreamDecoderError`` (`.unseekable` only over a non-seekable reader), within a chunk cap and a
+/// wall-clock cap. A crash takes the process down, so the case being run is printed first and a
+/// failure carries its seed.
 ///
 /// `FUZZ_ITERATIONS=5000 swift test --filter CorruptionFuzzTests` runs longer; `FUZZ_SEED=n
-/// FUZZ_ITERATIONS=1` replays case `n` (its fixture, mutations and reader behaviour all derive from it).
+/// FUZZ_ITERATIONS=1` with the test's `--filter` replays the case printed as `seed n`.
 final class CorruptionFuzzTests: XCTestCase {
-    private static var iterations: Int {
-        ProcessInfo.processInfo.environment["FUZZ_ITERATIONS"].flatMap(Int.init) ?? 40
+    private static var iterations: Int? {
+        ProcessInfo.processInfo.environment["FUZZ_ITERATIONS"].flatMap(Int.init)
     }
 
     private static var baseSeed: UInt64 {
         ProcessInfo.processInfo.environment["FUZZ_SEED"].flatMap(UInt64.init) ?? 0x5EED_0132
     }
 
-    /// Small fixtures only: a decode of each mutant must cost milliseconds.
-    private static let corpus: [URL] = GoldenStore.fixtureURLs().filter {
-        ((try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? .max) <= 200_000
-    }
-
     override func setUpWithError() throws {
         try XCTSkipUnless(FFmpegStreamDecoder.isAvailable, "no FFmpeg in this build")
     }
 
-    /// Mutated bytes through a plain file reader.
     func testMutatedFixturesThroughFileReader() throws {
+        let corpus = try Corpus.load()
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("fuzz-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
-        for i in 0..<Self.iterations {
+        for i in 0..<(Self.iterations ?? 40) {
             let seed = Self.baseSeed &+ UInt64(i)
             var rng = SplitMix64(seed: seed)
-            let (name, bytes, ops) = try Self.mutant(&rng)
+            let (fixture, bytes, ops) = corpus.mutant(&rng)
             let url = dir.appendingPathComponent("case.bin")
             try bytes.write(to: url)
-            let label = "seed \(seed) \(name) [\(ops)]"
+            let label = "seed \(seed) \(fixture.name) [\(ops)]"
             print("fuzz: \(label)")
-            FuzzDecode.run(reader: try FileByteReader(url: url), label: label)
+            FuzzDecode.run(reader: try FileByteReader(url: url), seekable: true, maxSeconds: fixture.mutantMaxSeconds, label: label)
         }
     }
 
-    /// Mutated bytes through a reader whose behaviour comes from control bytes, as FFmpeg's
-    /// `tools/target_dem_fuzzer.c` does with its trailer.
+    /// Reader behaviour comes from control bytes, as FFmpeg's `tools/target_dem_fuzzer.c` does with its trailer.
     func testMutatedFixturesThroughHostileReader() throws {
-        for i in 0..<Self.iterations {
-            let seed = Self.baseSeed &+ UInt64(i) &+ 0x100_0000
+        let corpus = try Corpus.load()
+        for i in 0..<(Self.iterations ?? 40) {
+            let seed = Self.baseSeed &+ UInt64(i)
             var rng = SplitMix64(seed: seed)
-            let (name, bytes, ops) = try Self.mutant(&rng)
+            let (fixture, bytes, ops) = corpus.mutant(&rng)
             let reader = HostileReader(data: bytes, control: (0..<8).map { _ in UInt8(truncatingIfNeeded: rng.next()) })
-            let label = "seed \(seed) \(name) [\(ops)] reader \(reader.behaviour)"
+            let label = "seed \(seed) \(fixture.name) [\(ops)] reader \(reader.behaviour)"
             print("fuzz: \(label)")
-            FuzzDecode.run(reader: reader, label: label)
+            FuzzDecode.run(reader: reader, seekable: reader.seekable, maxSeconds: fixture.mutantMaxSeconds, label: label)
         }
     }
 
-    /// Unmutated fixtures through the hostile reader: the control bytes alone must not crash.
+    /// Unmutated fixtures: the control bytes alone must not crash, and must not lengthen the decode.
     func testCleanFixturesThroughHostileReader() throws {
-        for (i, url) in Self.corpus.enumerated() {
-            var rng = SplitMix64(seed: Self.baseSeed &+ 0x200_0000 &+ UInt64(i))
-            let reader = HostileReader(data: try Data(contentsOf: url), control: (0..<8).map { _ in UInt8(truncatingIfNeeded: rng.next()) })
-            let label = "\(url.lastPathComponent) reader \(reader.behaviour)"
+        let corpus = try Corpus.load()
+        for i in 0..<(Self.iterations ?? corpus.fixtures.count) {
+            let seed = Self.baseSeed &+ UInt64(i)
+            var rng = SplitMix64(seed: seed)
+            let fixture = corpus.fixtures[Int(rng.next() % UInt64(corpus.fixtures.count))]
+            let reader = HostileReader(data: fixture.data, control: (0..<8).map { _ in UInt8(truncatingIfNeeded: rng.next()) })
+            let label = "seed \(seed) \(fixture.name) reader \(reader.behaviour)"
             print("fuzz: \(label)")
-            FuzzDecode.run(reader: reader, label: label)
+            FuzzDecode.run(reader: reader, seekable: reader.seekable, maxSeconds: fixture.cleanMaxSeconds, label: label)
         }
     }
+}
 
-    private static func mutant(_ rng: inout SplitMix64) throws -> (String, Data, String) {
-        let url = corpus[Int(rng.next() % UInt64(corpus.count))]
-        var bytes = try Data(contentsOf: url)
+// MARK: - Corpus
+
+private struct Corpus {
+    struct Fixture {
+        let name: String
+        let data: Data
+        let cleanSeconds: Double
+
+        // In seconds, not chunks: a corrupt header can claim another sample rate, which scales the frame
+        // count. Duplicated spans lengthen a mutant several-fold; a loop needs far more than that.
+        var mutantMaxSeconds: Double { 8 * cleanSeconds + 5 }
+        var cleanMaxSeconds: Double { 2 * cleanSeconds + 5 }
+    }
+
+    struct Failure: Error, CustomStringConvertible { let description: String }
+
+    let fixtures: [Fixture]
+
+    /// Small fixtures only: a decode of each mutant must cost milliseconds.
+    static func load(maxBytes: Int = 200_000) throws -> Corpus {
+        var fixtures: [Fixture] = []
+        for url in GoldenStore.fixtureURLs() {
+            let data = try Data(contentsOf: url)
+            guard data.count <= maxBytes else { continue }
+            let decoder = FFmpegStreamDecoder(reader: try FileByteReader(url: url))
+            var seconds = 0.0
+            if let format = try? decoder.open() {
+                while let chunk = decoder.nextChunk() { seconds += Double(chunk.count / max(format.channelCount, 1)) / format.sampleRate }
+            }
+            fixtures.append(Fixture(name: url.lastPathComponent, data: data, cleanSeconds: seconds))
+        }
+        guard !fixtures.isEmpty else { throw Failure(description: "fuzz corpus is empty: no fixture of at most \(maxBytes) bytes in GoldenStore.fixtureURLs()") }
+        return Corpus(fixtures: fixtures)
+    }
+
+    func mutant(_ rng: inout SplitMix64) -> (Fixture, Data, String) {
+        let fixture = fixtures[Int(rng.next() % UInt64(fixtures.count))]
+        var bytes = fixture.data
         var ops: [String] = []
         for _ in 0..<(1 + Int(rng.next() % 3)) { ops.append(Mutation.apply(to: &bytes, &rng)) }
-        return (url.lastPathComponent, bytes, ops.joined(separator: ", "))
+        return (fixture, bytes, ops.joined(separator: ", "))
     }
 }
 
 // MARK: - Decode under test
 
 private enum FuzzDecode {
-    static let chunkCap = 4000
     static let wallClock: TimeInterval = 30
 
-    static func run(reader: StreamByteReader, label: String, file: StaticString = #filePath, line: UInt = #line) {
+    static func run(reader: StreamByteReader, seekable: Bool, maxSeconds: Double, label: String, file: StaticString = #filePath, line: UInt = #line) {
         let decoder = FFmpegStreamDecoder(reader: reader)
         let timedOut = Flag()
         let watchdog = DispatchWorkItem { timedOut.set(); decoder.cancel() }
         DispatchQueue.global().asyncAfter(deadline: .now() + wallClock, execute: watchdog)
-        defer { watchdog.cancel() }
+        defer {
+            watchdog.cancel()
+            // The watchdog's own cancel() surfaces as .cancelled, so a hang must fail here, not as a typed error.
+            XCTAssertFalse(timedOut.value, "exceeded \(wallClock) s: \(label)", file: file, line: line)
+        }
 
-        func typed(_ error: Error, _ what: String) {
-            XCTAssertTrue(error is StreamDecoderError, "\(what) threw untyped \(error): \(label)", file: file, line: line)
+        func accept(_ error: Error, _ what: String) {
+            guard !timedOut.value else { return }
+            switch error as? StreamDecoderError {
+            case .failed: break
+            case .unseekable where !seekable: break
+            default: XCTFail("\(what) ended with \(error): \(label)", file: file, line: line)
+            }
         }
 
         let format: StreamAudioFormat
-        do { format = try decoder.open() } catch { typed(error, "open"); return }
+        do { format = try decoder.open() } catch { accept(error, "open"); return }
 
-        var chunks = 0
-        while decoder.nextChunk() != nil {
-            chunks += 1
-            if chunks > chunkCap { XCTFail("no end after \(chunkCap) chunks: \(label)", file: file, line: line); return }
+        var seconds = 0.0
+        while let chunk = decoder.nextChunk() {
+            seconds += Double(chunk.count / max(format.channelCount, 1)) / format.sampleRate
+            if seconds > maxSeconds { XCTFail("no end after \(seconds) s of audio (cap \(maxSeconds) s): \(label)", file: file, line: line); return }
         }
-        if let error = decoder.error { typed(error, "decode") }
+        if let error = decoder.error { accept(error, "decode") }
 
         let span = format.duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil } ?? 1
         for fraction in [1.0 / 3, 0.9] {
-            do { _ = try decoder.seek(toSeconds: span * fraction) } catch { typed(error, "seek"); return }
+            do { _ = try decoder.seek(toSeconds: span * fraction) } catch { accept(error, "seek"); return }
             for _ in 0..<8 where decoder.nextChunk() == nil { break }
-            if let error = decoder.error { typed(error, "decode after seek"); return }
+            if let error = decoder.error { accept(error, "decode after seek"); return }
         }
-        XCTAssertFalse(timedOut.value, "exceeded \(wallClock) s: \(label)", file: file, line: line)
     }
 
     final class Flag: @unchecked Sendable {
@@ -172,7 +214,7 @@ final class HostileReader: StreamByteReader {
     enum Size: Int { case correct, absent, larger, smaller }
 
     private let data: Data
-    private let seekable: Bool
+    let seekable: Bool
     private let size: Size
     private let maxRead: Int
     private let eofAt: Int
@@ -183,8 +225,8 @@ final class HostileReader: StreamByteReader {
 
     init(data: Data, control c: [UInt8]) {
         self.data = data
-        seekable = c[0] & 1 == 0 || c[0] & 6 == 0  // mostly seekable
-        size = Size(rawValue: Int(c[0] >> 1) & 3) ?? .correct
+        seekable = c[0] & 3 != 0  // independent bits: every size is tried with and without seeking
+        size = Size(rawValue: Int(c[0] >> 2) & 3) ?? .correct
         maxRead = 1 + Int(c[1]) * (c[2] & 1 == 0 ? 1 : 64)
         eofAt = c[3] & 3 == 0 ? Int(UInt64(data.count) * UInt64(c[4]) / 255) : data.count
         rng = SplitMix64(seed: c[5...7].reduce(UInt64(c[1])) { $0 << 8 | UInt64($1) })

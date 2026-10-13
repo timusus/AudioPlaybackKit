@@ -53,6 +53,14 @@ are in `Tests/PlaybackDecodeConformanceTests/Fixtures/NOTICE`.
 `CONFORMANCE_FIXTURE=<file name>` runs one fixture; `CONFORMANCE_PLANT_DEFECT=1` drops a frame from
 the clean decode to prove the suite fails.
 
+**Corruption fuzz.** `CorruptionFuzzTests` (in `PlaybackDecodeConformanceTests`) mutates the small fixtures
+and runs them through a plain file reader and through `HostileReader` (seekability, declared size, short
+reads and early EOF from control bytes). Every outcome must be a clean end or a `.failed` error
+(`.unseekable` only over a non-seekable reader), within a time cap and a 30 s watchdog. Each case prints
+`fuzz: seed <n> ...` before it runs, so a crash leaves its seed in the log. `FUZZ_ITERATIONS=3000` runs
+longer; `FUZZ_SEED=<n> FUZZ_ITERATIONS=1` with the test's `--filter` replays that case. libFuzzer is not
+in the Xcode toolchain (it needs Homebrew LLVM), so the fuzzing is seeded and in-process instead.
+
 **Byte-source contract.** `GrowingFileContractTests` runs media3's `DataSourceContractTest` cases against
 the source over `LoopbackMediaServer`. A new server behaviour is one `Resource` in the matrix of
 `GrowingFileContractCase`. The loopback server speaks no TLS, so certificate trust is tested as a decision
