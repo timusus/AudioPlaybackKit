@@ -12,7 +12,58 @@ iOS directory (`mobile/ios` in `timusus/shuttle-podcasts`, `ios` in `timusus/shu
 |---|---|
 | `PlayerEvent` cases with `index: Int` (`itemFailed`, `seekLanded`, `seekAdjusted`, `firstAudioRendered`, `bufferingStarted`) and `itemTransition(from: Int?, to: Int?, ...)` | the index becomes a `PlayerEvent.ItemRef` (`index`, `item`), captured when the event is sent; `itemTransition` takes one per side. Read `ref.item` instead of `player.items[index]`, which a `setItems` or `replaceItems` since the event may have shortened (a trap) or changed (the wrong item). Removing the current item sends it as `from`, with its index before the removal (#180) |
 
-Shuttle2 can drop its `@_spi(Testing) onEvent` hook, which it used to capture the item at send time.
+Paths are relative to each app's iOS directory, as above. Call sites were listed against the apps' `main`.
+
+### Changed and added symbols
+
+| Symbol | Change | Breaks |
+|---|---|---|
+| `TransportEvent.formatChanged(item:format:)` | new case: `item`, already crossed, is now heard in another decoded format (#181). `crossed(item:format:)` is unchanged in shape (`format` came in 0.12) but now carries the format the item's first audio was heard in | an exhaustive `switch` over `TransportEvent` |
+| `ItemSource.currentFormat: PCMFormat?` | new, with a default of nil; a conformer need not implement it. A source whose format changes after `open()` (a stream re-opened at a time offset that returns another rate or channel count) returns the new format; read after every `seek(toFrame:)` and `nextChunk()`. From the change on its frames count at the new rate. A wrapper must forward it, as it forwards `release()`, or the change is never seen | nothing; a wrapper that does not forward it hides a change |
+| `Player.audioFormat` | also updates when a `formatChanged` is heard, not only at a join | nothing |
+| `AudioProcessor` | `configure(_:)` can run again mid-item, with the new format and the same item in `flush(_:)`, when a source changes format. A processor that keeps per-item state in `flush` must also reset on a second `configure` | nothing at compile time |
+| `NowPlayingSession.refreshMetadata()` | new: asks `metadata` and `artwork` again for the current item and republishes title, artist, album, artwork and duration; elapsed time, rate and commands are left alone. No-op with no current item or after `release()` | nothing |
+| `PlayerEvent.ItemRef` and the index cases (#180) | see the table above | pattern matches that bind the index as an `Int` |
+
+No other public symbol changed: the rest of the 0.12 to HEAD source diff is internal (`Sequencer`, `MediaPositionMap`,
+`TaggedChunk`, `Feeder`, `AudioProcessingPipeline`, the C seek code and `GrowingFileDownload`).
+
+### Shuttle Podcasts (`mobile/ios/`)
+
+- `ItemRef`: nothing to change. `Platform/Audio/Playback/PlayerStateBridge.swift:161, 165` bind `.seekLanded(_, seconds)`,
+  `.seekAdjusted(_, _, seconds)` and `.itemFailed(_, error)` with the index discarded, and `:173` matches
+  `.itemTransition` bare; all compile unchanged.
+- `TransportEvent`: not used anywhere in the app, so the new case breaks nothing.
+- `currentFormat`: `Platform/Audio/Playback/GrowingFileItemSource.swift:28` wraps an `ItemSource` (`opened?.source`, :54, :59,
+  :104) and should add `var currentFormat: PCMFormat? { lock.withLock { opened?.source.currentFormat } }` next to
+  `frameCount`. `FFmpegItemSource` itself reports nil, so today this changes nothing. The test sources
+  (`ShuttlePodcastsTests/GrowingFileItemSourceTests.swift:150, 177`, `PlayerProcessorChainTests.swift:251`) need nothing.
+- Processors: a second `configure` mid-item can reach `Playback/Sources/Playback/SilenceGateProcessor.swift`,
+  `LookaheadLimiterProcessor.swift`, `VoiceBoostProcessor.swift` and `SkipCueProcessor.swift`. `SilenceGateProcessor.apply()`
+  (`:97-113`) already rebuilds the gate when the staged format changes; check the other three on a changed format.
+- #182 is fixed: a trim that ends exactly on a chunk boundary no longer fails the item with `misreportedFrames`. If the app
+  keeps a `getOutput` workaround that ends the output at the first trim, drop it; I found none in
+  `SilenceGateProcessor.getOutput()` (`:75`), which returns everything queued, so look for it where the gate is driven.
+- `NowPlayingSession.refreshMetadata()`: the app does not use `NowPlayingSession`; this is for adopting it.
+
+### Shuttle2 (`ios/`)
+
+- `ItemRef`: `S2/Platform/Audio/KitAudioPlayer.swift:54-60` (the `@_spi(Testing) onEvent` hook that captures
+  `Self.item(of: event, in: player.items)` as the event is sent) and `:154-162` (`item(of:in:)`, which reads the index out of
+  `.itemTransition(_, to, _)`, `.itemFailed`, `.seekLanded`, `.seekAdjusted` and `.firstAudioRendered` and indexes `items`) no
+  longer compile. Return `ref.item` from `item(of:)`, then delete the hook, `sentItems` (`:44`, `:59`, `:166`) and the
+  `items` argument. `handle(_:)` (`:165-191`) binds `_` for the first payload and compiles unchanged.
+  `S2Tests/KitAudioPlayerTests.swift:79` matches `.itemFailed` bare and compiles.
+- `TransportEvent`: not used in the app.
+- `currentFormat`: `Playback/Sources/S2Playback/Streaming/TimeOffsetItemSource.swift:23` re-opens its stream at a time offset
+  and wraps `FFmpegItemSource` (`inner`); it should forward `inner?.currentFormat`. This is the case the hook exists for.
+  Test sources `FailingItemSource` and `UnseekableItemSource` (`S2Tests/KitAudioPlayerTests.swift:476, 489`) need nothing.
+- Processors: `ReplayGainProcessor`, `EqualizerProcessor` and `LimiterProcessor` (`Playback/Sources/S2Playback/DSP/`) can see a
+  second `configure` mid-item; check each rebuilds its state from the new rate and channel count.
+- `NowPlayingSession.refreshMetadata()`: `S2/Platform/Audio/PlaybackSystemCoordinator.swift:36, 47` holds the session; call
+  `session?.refreshMetadata()` after a tag edit on the playing song, in place of re-issuing the load.
+
+Neither app needs a change to compile except Shuttle2's `item(of:in:)`.
 
 ## Migrating from 0.11 to 0.12
 
