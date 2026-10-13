@@ -20,28 +20,44 @@ enum { kWVHeaderBytes = 32 };
 /* Probes before a seek gives up its anchor and leaves the demuxer's walk to place it. */
 static const int kWVProbes = 8;
 
-/* Whether `p` is the header of a block that starts a frame (its first, for multichannel) and holds
- * audio, with that first sample's index and the block's sample count. The wv demuxer reads the
- * same fields (ff_wv_parse_header) and labels the packet with that 32-bit index. */
-static int wv_block_header(const uint8_t *p, int64_t total, int64_t *index, int64_t *samples) {
-    if (AV_RL32(p) != MKTAG('w', 'v', 'p', 'k')) return 0;
-    uint32_t size = AV_RL32(p + 4);
-    unsigned version = AV_RL16(p + 8);
-    uint32_t flags = AV_RL32(p + 24);
-    if (size < 24 || size > (uint32_t)kWVBlockLimit || version < 0x402 || version > 0x410) return 0;
-    if (!(flags & (1u << 11))) return 0;   /* WV_FLAG_INITIAL_BLOCK */
-    *index = AV_RL32(p + 16);
-    *samples = AV_RL32(p + 20);
-    return *samples > 0 && (total <= 0 || *index < total);
+/* A block's first sample: 40 bits, the high byte apart from the rest. The wv demuxer reads only
+ * the low 32 (ff_wv_parse_header) and labels the packet with them. */
+static int64_t wv_index(const uint8_t *p) {
+    return ((int64_t)p[10] << 32) | AV_RL32(p + 16);
 }
 
-/* The first block to start at or after byte `at` (AVIO offset): every block is at most
- * `kWVBlockLimit` long, so it starts within that. `*pos` stays -1 when none was found (a failed read,
- * or no block before the end). Returns STREAM_DECODE_OK, or a cancel or an interruption. */
-static int wv_block_after(StreamDecoder *d, int64_t at, int64_t total, int64_t *pos, int64_t *index,
+/* Whether `p` is the header of a block that starts a frame (its first, for multichannel) and holds
+ * audio, with that first sample's index, the block's sample count and its size after the size
+ * field. `first` is the stream's first index, which `total` counts from. */
+static int wv_block_header(const uint8_t *p, int64_t first, int64_t total, int64_t *index, int64_t *samples,
+                           uint32_t *size) {
+    if (AV_RL32(p) != MKTAG('w', 'v', 'p', 'k')) return 0;
+    *size = AV_RL32(p + 4);
+    unsigned version = AV_RL16(p + 8);
+    uint32_t flags = AV_RL32(p + 24);
+    if (*size < 24 || *size > (uint32_t)kWVBlockLimit || version < 0x402 || version > 0x410) return 0;
+    if (!(flags & (1u << 11))) return 0;   /* WV_FLAG_INITIAL_BLOCK */
+    *index = wv_index(p);
+    *samples = AV_RL32(p + 20);
+    return *samples > 0 && *index >= first && (total <= 0 || *index - first < total);
+}
+
+/* Whether a block header follows straight on from the block at `index` holding `samples`: the next
+ * channel's of the same frame, or the next frame's. Audio that happens to read as a header has none. */
+static int wv_block_followed(const uint8_t *next, int64_t index, int64_t samples) {
+    if (AV_RL32(next) != MKTAG('w', 'v', 'p', 'k')) return 0;
+    int64_t i = wv_index(next);
+    return i == index || i == index + samples;
+}
+
+/* The first block to start at or after byte `at` (AVIO offset), believed when the block after it
+ * starts where it ends or it ends the stream. Every block is at most `kWVBlockLimit` long, so the
+ * block starts, and the next one ends, within twice that. `*pos` stays -1 when none was found (a
+ * failed read, or no block before the end). Returns STREAM_DECODE_OK, or a cancel or an interruption. */
+static int wv_block_after(StreamDecoder *d, int64_t at, int64_t first, int64_t total, int64_t *pos, int64_t *index,
                           int64_t *samples) {
     *pos = -1;
-    int cap = kWVBlockLimit + kWVHeaderBytes;
+    int cap = 2 * (kWVBlockLimit + kWVHeaderBytes);
     if ((int64_t)cap > d->media_bytes - at) cap = (int)(d->media_bytes - at);
     if (cap < kWVHeaderBytes) return STREAM_DECODE_OK;
     uint8_t *buf = av_malloc((size_t)cap);
@@ -51,10 +67,15 @@ static int wv_block_after(StreamDecoder *d, int64_t at, int64_t total, int64_t *
     if (avio_seek(d->fmt->pb, at, SEEK_SET) >= 0) {
         while (*pos < 0) {
             for (; scanned + kWVHeaderBytes <= have; scanned++) {
-                if (wv_block_header(buf + scanned, total, index, samples)) {
+                uint32_t size;
+                if (!wv_block_header(buf + scanned, first, total, index, samples, &size)) continue;
+                int64_t next = scanned + (int64_t)size + 8;
+                if ((total > 0 && *index + *samples >= first + total)
+                    || (next + kWVHeaderBytes <= have && wv_block_followed(buf + next, *index, *samples))) {
                     *pos = at + scanned;
                     break;
                 }
+                if (next + kWVHeaderBytes > have && have < cap) break;   /* read on to its successor */
             }
             if (*pos >= 0 || have == cap) break;
             int ask = cap - have < 4096 ? cap - have : 4096;
@@ -70,8 +91,10 @@ static int wv_block_after(StreamDecoder *d, int64_t at, int64_t total, int64_t *
 
 /*
  * The block at or before `target` (stream time base), found by probing at the target's share of
- * the stream's bytes and stepping back, twice as far each time, while the block found starts after
- * the target. `plan->anchor_pos` stays -1 when the stream has no length or the probes find none.
+ * the stream's bytes and stepping back, twice as far each time, while the probe finds no block or
+ * one that starts after the target. `plan->anchor_pos` stays -1 when the stream has no length or
+ * the probes find none. A block further before the target than a seek may decode lands where it
+ * is, as a FLAC frame does.
  */
 static int wv_place(StreamDecoder *d, int64_t target, SeekPlan *plan) {
     if (!sd_can_estimate_bytes(d)) return STREAM_DECODE_OK;
@@ -79,28 +102,38 @@ static int wv_place(StreamDecoder *d, int64_t target, SeekPlan *plan) {
     AVRational per_sample = { 1, st->codecpar->sample_rate };
     int64_t total = st->duration > 0 ? av_rescale_q(st->duration, st->time_base, per_sample)
                                      : llround(d->media_duration * per_sample.den);
+    /* Packets carry the block's own index, so the target is on that base, the first block's index
+     * where the stream starts. */
+    int64_t first = d->first_pkt_dts != AV_NOPTS_VALUE
+                        ? av_rescale_q(d->first_pkt_dts - d->start_time, d->time_base, per_sample) : 0;
     int64_t want = av_rescale_q(target - d->start_time, d->time_base, per_sample);
-    if (want < 0) want = 0;
-    if (total > 0 && want > total) want = total;
+    if (want < first) want = first;
+    if (total > 0 && want > first + total) want = first + total;
     double bytes_per_sample = (double)d->media_bytes / (double)(total > 0 ? total : 1);
-    int64_t at = (int64_t)(want * bytes_per_sample);
+    int64_t at = (int64_t)((want - first) * bytes_per_sample);
 
     for (int probe = 0; probe < kWVProbes; probe++) {
         int64_t pos, index, samples;
-        int rc = wv_block_after(d, at, total, &pos, &index, &samples);
-        if (rc != STREAM_DECODE_OK || pos < 0) return rc;
-        if (index <= want) {
+        int rc = wv_block_after(d, at, first, total, &pos, &index, &samples);
+        if (rc != STREAM_DECODE_OK) return rc;
+        if (pos >= 0 && index <= want) {
             plan->anchor_pos = pos;
             plan->anchor_dts = d->start_time + av_rescale_q(index, per_sample, d->time_base);
+            if ((double)(want - index) * bytes_per_sample > (double)kSeekBudgetBytes) plan->land_at = plan->anchor_dts;
             /* The generic seek reads on from the index's last entry rather than going to it: an
              * entry at the end keeps the anchor off the end, as for FLAC. */
-            int64_t end_dts = d->start_time + av_rescale_q(total, per_sample, d->time_base);
+            int64_t end_dts = d->start_time + av_rescale_q(first + total, per_sample, d->time_base);
             if (end_dts > plan->anchor_dts) av_add_index_entry(st, d->media_bytes, end_dts, 0, 0, AVINDEX_KEYFRAME);
             return STREAM_DECODE_OK;
         }
         if (at == 0) return STREAM_DECODE_OK;
-        int64_t back = (int64_t)((double)(index - want + samples) * bytes_per_sample) << probe;
-        at = at > back ? at - back : 0;
+        /* Back from the block found by its distance past the target and one block more; with none
+         * found, the target's block starts before everything this probe read. */
+        int64_t from = pos >= 0 ? pos : at;
+        int64_t back = pos >= 0 ? (int64_t)((double)(index - want + samples) * bytes_per_sample)
+                                : d->media_bytes - at;
+        back <<= probe;
+        at = from > back ? from - back : 0;
     }
     return STREAM_DECODE_OK;
 }
