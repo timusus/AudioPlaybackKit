@@ -30,8 +30,10 @@ public protocol ItemSource: AnyObject, Sendable {
     func open() throws -> PCMFormat
     /// Non-nil once the item's format has changed since `open()`, as a stream re-opened at a time
     /// offset may come back at another rate or channel count; read after every `seek(toFrame:)` and
-    /// `nextChunk()`. From the change on, frames (the one `seek` lands on, `frameCount`, and the ones
-    /// `seek` is given) count at the new rate; a change inside `nextChunk()` keeps time continuous.
+    /// `nextChunk()`, the only calls that may change it. The chunk returned by the `nextChunk()` that
+    /// changes it is already in the new format. From the change on, frames (the one `seek` lands on,
+    /// `frameCount`, and the ones `seek` is given) count at the new rate; a change inside `nextChunk()`
+    /// keeps time continuous.
     /// The transport drains and reconfigures the processors there, as media3's `DefaultAudioSink` does
     /// on an output format change within one period. Defaults to nil, a format fixed at `open()`.
     var currentFormat: PCMFormat? { get }
