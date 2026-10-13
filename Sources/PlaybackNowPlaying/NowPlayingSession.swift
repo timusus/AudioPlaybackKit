@@ -144,13 +144,15 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
 
     /// Asks `metadata` and `artwork` again for the current item and shows the result, for an app that
     /// edited the item's tags. Elapsed time, rate and commands are left alone; the old artwork stays
-    /// until the new one arrives. Does nothing with no current item or after `release()`.
+    /// until the new one arrives, and a nil from `artwork` clears it. Does nothing with no current item,
+    /// once the info was cleared elsewhere, or after `release()`.
     public func refreshMetadata() {
-        guard !released, let item = current?.item, player.currentItem == item else { return }
+        guard !released, let item = current?.item, player.currentItem == item,
+              var info = infoCenter.nowPlayingInfo, var shown = published else { return }
         let shownArtwork = current?.artwork
         load(item)
         current?.artwork = shownArtwork
-        guard var info = infoCenter.nowPlayingInfo, let current, var shown = published else { return }
+        guard let current else { return }
         shown.duration = player.isLive ? nil : player.duration ?? current.metadata.duration
         published = shown
         info[MPMediaItemPropertyTitle] = current.metadata.title

@@ -438,6 +438,20 @@ final class NowPlayingInfoTests: XCTestCase {
         XCTAssertNil(rig.info.nowPlayingInfo)
     }
 
+    func testRefreshingMetadataAfterTheInfoWasClearedElsewhereWritesNothing() async {
+        await playing()
+        await rig.session.artworkLoad?.value
+        rig.info.nowPlayingInfo = nil
+        let writes = rig.info.writes
+        rig.retitled["a"] = "Edited"
+
+        rig.session.refreshMetadata()
+        await rig.session.artworkLoad?.value
+
+        XCTAssertEqual(rig.info.writes, writes)
+        XCTAssertNil(rig.info.nowPlayingInfo)
+    }
+
     func testArtworkLoadedBeforeARefreshIsDropped() async {
         rig.heldArtwork = ["a"]
         rig.player.setItems(["a", "b"])
