@@ -181,6 +181,14 @@ final class AudioProcessingPipelineTests: XCTestCase {
         XCTAssertEqual(pipeline.getOutput()?.tags, [tag(1, 24, 2)])
     }
 
+    func testKeptFramesAfterAWholeDroppedChunkAreStillTagged() throws {
+        let pipeline = try started([DropRangesProcessor([0..<4]), TestProcessor()], format: mono)
+        pipeline.queueInput(chunk((0..<8).map(Float.init), format: mono, tags: [tag(1, 20, 4), tag(1, 24, 4)]))
+        let output = try XCTUnwrap(pipeline.getOutput())
+        XCTAssertEqual(output.samples, [4, 5, 6, 7])
+        XCTAssertEqual(output.tags, [tag(1, 24, 4)])
+    }
+
     func testAnInPlaceStageIsNeverLentAnEmptyBuffer() throws {
         let gain = InPlaceGainProcessor()
         let pipeline = try started([DropRangesProcessor([4..<8]), gain], format: mono)

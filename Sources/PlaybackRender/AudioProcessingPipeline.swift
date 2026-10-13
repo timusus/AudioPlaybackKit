@@ -202,7 +202,8 @@ final class AudioProcessingPipeline {
                 let taken = min(remaining, tag.frameCount)
                 remaining -= taken
                 if keep, taken > 0 {
-                    if let last = out.last, last.item == tag.item, last.mediaStartFrame + last.frameCount == tag.mediaStartFrame {
+                    // Never merge into a zero-frame tag: the cleanup below may delete it, kept frames and all.
+                    if let last = out.last, last.frameCount > 0, last.item == tag.item, last.mediaStartFrame + last.frameCount == tag.mediaStartFrame {
                         out[out.count - 1].frameCount += taken
                     } else {
                         out.append(SegmentTag(item: tag.item, mediaStartFrame: tag.mediaStartFrame, frameCount: taken))
