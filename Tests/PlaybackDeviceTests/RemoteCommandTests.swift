@@ -43,7 +43,8 @@ final class RemoteCommandTests: DeviceTestCase {
         await rig.settle()
         XCTAssertEqual(rig.shownTitle, Fixture.items[1])
         XCTAssertEqual(rig.shownDuration ?? 0, 8, accuracy: 0.05)
-        XCTAssertEqual(rig.shownElapsed ?? -1, 0, accuracy: 0.25, "elapsed starts at 0")
+        // Elapsed is the position when written (measured 0 on an iPhone 14); 0.1 s allows one position report.
+        XCTAssertEqual(rig.shownElapsed ?? -1, 0, accuracy: 0.1, "elapsed starts at 0")
 
         XCTAssertEqual(rig.send(.previousTrack), .success)
         await rig.waitUntil("item 1 heard") { rig.player.currentIndex == 0 && rig.player.isPlaying }
@@ -55,7 +56,7 @@ final class RemoteCommandTests: DeviceTestCase {
         await rig.waitUntil("restarted") { rig.player.position < 0.5 }
         XCTAssertEqual(rig.player.currentIndex, 0)
         await rig.settle()
-        XCTAssertEqual(rig.shownElapsed ?? -1, 0, accuracy: 0.25)
+        XCTAssertEqual(rig.shownElapsed ?? -1, 0, accuracy: 0.1)
         XCTAssertTrue(rig.remote(.previousTrack).isEnabled)
         await rig.assertAudible(over: 0.5)
     }
@@ -72,13 +73,13 @@ final class RemoteCommandTests: DeviceTestCase {
         var before = rig.player.position
         XCTAssertEqual(rig.send(.skipForward, .interval(3)), .success)
         await rig.waitUntil("skipped forward") { rig.player.position > before + 2.5 }
-        // Assumed: 0.25 s allows the transport's 100 ms position report plus the output latency.
-        XCTAssertEqual(rig.player.position, before + 3, accuracy: 0.25)
+        // A skip reports its target (measured 0 on an iPhone 14); 0.1 s allows one position report after it.
+        XCTAssertEqual(rig.player.position, before + 3, accuracy: 0.1)
 
         before = rig.player.position
         XCTAssertEqual(rig.send(.skipBackward, .interval(2)), .success)
         await rig.waitUntil("skipped back") { rig.player.position < before - 1.5 }
-        XCTAssertEqual(rig.player.position, before - 2, accuracy: 0.25)
+        XCTAssertEqual(rig.player.position, before - 2, accuracy: 0.1)
         await rig.assertAudible(over: 0.5)
     }
 
@@ -86,9 +87,11 @@ final class RemoteCommandTests: DeviceTestCase {
         await rig.startPlaying(at: 2)
         XCTAssertEqual(rig.send(.changePlaybackPosition, .position(6)), .success)
         await rig.waitUntil("seek landed") { rig.didSend { if case .seekLanded = $0 { true } else { false } } }
-        XCTAssertEqual(rig.player.position, 6, accuracy: 0.25)
+        // A landed seek reports its target and elapsed follows it (both measured 0 on an iPhone 14);
+        // 0.1 s allows one position report after it.
+        XCTAssertEqual(rig.player.position, 6, accuracy: 0.1)
         await rig.settle()
-        XCTAssertEqual(rig.shownElapsed ?? -1, 6, accuracy: 0.25)
+        XCTAssertEqual(rig.shownElapsed ?? -1, 6, accuracy: 0.1)
         XCTAssertEqual(rig.shownRate, 1, "keeps counting")
         await rig.assertAudible(over: 0.5)
     }
@@ -105,9 +108,9 @@ final class RemoteCommandTests: DeviceTestCase {
 
         XCTAssertEqual(rig.send(.changePlaybackPosition, .position(6)), .success)
         await rig.waitUntil("seek landed") { rig.didSend { if case .seekLanded = $0 { true } else { false } } }
-        XCTAssertEqual(rig.player.position, 6, accuracy: 0.25)
+        XCTAssertEqual(rig.player.position, 6, accuracy: 0.1)
         await rig.settle()
-        XCTAssertEqual(rig.shownElapsed ?? -1, 6, accuracy: 0.25)
+        XCTAssertEqual(rig.shownElapsed ?? -1, 6, accuracy: 0.1)
         await rig.assertAudible(over: 0.5)
     }
 

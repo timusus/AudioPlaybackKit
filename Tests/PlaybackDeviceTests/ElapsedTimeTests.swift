@@ -16,7 +16,8 @@ final class ElapsedTimeTests: DeviceTestCase {
         await rig.startPlaying(at: 2)
         rig.send(.changePlaybackPosition, .position(4))
         await rig.waitUntil("seek heard") { rig.didSend { if case .seekLanded = $0 { true } else { false } } }
-        XCTAssertEqual(rig.player.position, 4, accuracy: 0.25, "the app's position jumps with it")
+        // A landed seek reports its target (measured 0 on an iPhone 14); 0.1 s allows one position report after it.
+        XCTAssertEqual(rig.player.position, 4, accuracy: 0.1, "the app's position jumps with it")
         await assertElapsedInStep(over: 4.5)
     }
 
@@ -62,8 +63,8 @@ final class ElapsedTimeTests: DeviceTestCase {
         XCTAssertEqual(rig.shownDuration ?? 0, 8, accuracy: 0.05)
         // No gap: the output clock kept wall time across the join.
         let advanced = rig.output.currentTime() - start.clock
-        // Assumed: 0.15 s covers the clock's jitter, as in `assertAudible`.
-        XCTAssertEqual(advanced, Date().timeIntervalSince(start.wall), accuracy: 0.15)
+        // Measured under 1 ms on an iPhone 14, so 0.05 s is slack for a slower phone, not for a gap.
+        XCTAssertEqual(advanced, Date().timeIntervalSince(start.wall), accuracy: 0.05)
     }
 
     /// Every 50 ms for `seconds`, the shown elapsed plus rate times the time since it was written
@@ -92,7 +93,8 @@ final class ElapsedTimeTests: DeviceTestCase {
             XCTAssertEqual(rig.shownTitle, rig.player.currentItem, file: file, line: line)
             try? await Task.sleep(for: .milliseconds(50))
         }
-        // Assumed: 0.25 allows the transport's 100 ms position report plus a 0.15 s Bluetooth output latency.
+        // Measured up to 0.17 s on an iPhone 14, mostly the position's 100 ms steps against the
+        // smoothly extrapolated elapsed.
         XCTAssertLessThan(worst, 0.25, "largest gap between extrapolated elapsed and position", file: file, line: line)
         XCTAssertLessThan(longestStart, 0.6, "output start before the position moved", file: file, line: line)
     }
