@@ -109,8 +109,9 @@ Effects (skip-silence, Voice Boost) are `AudioProcessor`s you give the player; s
 
 ## Documentation
 
-- [Usage](docs/usage.md): decode a file, stream a URL, seek, cancel, show buffering state, play through the render layer, run a `Player`, show it on the lock screen, test it.
+- [Usage](docs/usage.md): decode a file, stream a URL, seek, cancel, handle errors, show buffering state, play through the render layer, run a `Player`, show it on the lock screen, test it.
 - [Migrating to Player](docs/migrating.md): moving Shuttle Podcasts and Shuttle2 off their `AVAudioEngine` players.
+- [Migrating to structured errors](docs/migration-errors.md): the error symbols that changed, and each app call site.
 - [Device checklist](docs/device-checklist.md): what no test covers, to run on an iPhone before relying on a release.
 - [Architecture](docs/architecture.md): how each layer works, from decoder to lock screen.
 - [Decisions](docs/decisions/README.md): why it is built this way.

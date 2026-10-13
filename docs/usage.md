@@ -57,7 +57,8 @@ scan would restart a `GrowingFileByteSource` download). Once `endReason == .eof`
 `Double(mediaFramesRead) / format.sampleRate` is the real length, as media3's `ConstantBitrateSeeker`
 re-emits its SeekMap when the decode reaches the garbage. A seek past the real end finishes at `.eof`.
 
-`open()` throws `StreamDecoderError`; a format the build lacks arrives as `.failed(status:)`. The probe
+`open()` throws `StreamDecoderError`; a format the build lacks arrives as `.failed` with category
+`.unsupported` (see [Handle errors](#handle-errors)). The probe
 is budgeted at 64 KiB / 1 s (libavformat's own is 5 MB / 5 s); a heavier file passes
 `probeBudget: StreamProbeBudget(bytes:analyzeDuration:)` to the initialiser. Header-described formats
 (FLAC, ALAC, WAV) skip the probe (`skippedProbe`); `forcesProbe: true` restores it.
@@ -97,7 +98,7 @@ while let chunk = decoder.nextChunk() { /* schedule it */ }
   While probing, that read answers end of file at once instead of cancelling the head download
   ([ADR-0003](decisions/0003-growing-file-playback.md)).
 - **The decoder blocks while it waits for bytes.** That is how buffering shows up. The source retries
-  drops itself; a read throws `StreamByteReaderError.transport` only when retries and the 30 s link
+  drops itself; a read throws `StreamByteReaderError.failed` only when retries and the 30 s link
   window are spent, after the bytes already downloaded have been read. Play out what you have decoded,
   then show an error at that position.
 - **Do not re-seek or recreate the source on a network change.** The source watches the network path and
@@ -112,7 +113,7 @@ while let chunk = decoder.nextChunk() { /* schedule it */ }
 - **Self-signed servers.** Pass `connectionPolicy: GrowingFileConnectionPolicy(trustedLeafSHA256: [...])`
   with the fingerprint the user trusted. It is an exception, not a pin: the system evaluates first,
   and only a certificate it refuses is accepted by fingerprint. Otherwise the read fails with
-  `transport("untrusted_certificate")`, unretried in every case. Other certificate, TLS, ATS and
+  a `.network` failure whose detail is `untrusted_certificate`, unretried in every case. Other certificate, TLS, ATS and
   bad-URL errors fail unretried too.
 - **Cache.** A download whose transactions together cover `[0, total)` is kept in a `GrowingFileStore` (default
   `.shared`, 1 GiB, least recently played out). Before streaming, ask
@@ -129,7 +130,7 @@ while let chunk = decoder.nextChunk() { /* schedule it */ }
   still download whole, and a file played to the end is cached as before ([ADR-0013](decisions/0013-read-ahead-on-expensive-paths.md)).
 - **Seeking to exactly the end** reads zero bytes even before the length is known, as media3's
   `DefaultHttpDataSource` does with the host's `416 bytes */N`. Seeking past the end, once the
-  host shows it, fails the read at once with a `transport("out_of_range ...")`, with no retry.
+  host shows it, fails the read at once with a `.malformed` failure (`out_of_range ...`), with no retry.
 
 ## Seek
 
@@ -146,11 +147,11 @@ output frame, not bit-identical to the uninterrupted decode.
 
 A forward-only source (a reader whose `seek(to:)` throws `StreamByteReaderError.unseekable`, such as
 an unknown-length chunked transcode) opens and decodes MP3, FLAC, Ogg and MP4 sequentially. A seek that needs a position it
-refuses throws `StreamDecoderError.unseekable`, distinct from `.failed(status:)` (a corrupt stream),
+refuses throws `StreamDecoderError.unseekable`, distinct from `.failed(_:)` (a corrupt stream or a source error),
 whether or not the reader knows its `totalLength`.
 The decoder has failed after it: `endReason` is `.failure` and reads return nothing, so open a new
 decoder over a seekable source. A seek that libavformat can serve from bytes it still holds succeeds.
-A seek or read that fails on a source error (`.failed(status:)`, say a network still down) is not
+A seek or read that fails on a source error (`.failed(_:)` with category `.network`, say) is not
 terminal: a later seek reads again, so a player resumes the same decoder once the source is back.
 
 Chained Ogg (streams concatenated byte for byte) decodes sequentially across its links, including a
@@ -174,6 +175,46 @@ Use `interrupt()` when the pull loop is stuck on a slow read and the user has se
 the nil as an end and call `seek(toSeconds:)`, which clears it. If that seek is to exactly the frame
 the interrupted read would have returned, the decode resumes without a flush (MP3 and MP4 bit-exactly).
 Use `cancel()` when you throw the decoder away.
+
+## Handle errors
+
+Every failure carries a `PlaybackErrorCategory`, modelled on media3's `PlaybackException` error-code
+groups ([ADR-0029](decisions/0029-structured-errors.md)). Act on the category; the rest is for logs.
+
+| Category | Means | Typical response |
+|---|---|---|
+| `.network` | No connection, a timeout, a dropped or refused TLS connection, a short body | Retry when the network is back |
+| `.http(status:)` | The server answered with a status no retry fixed | 401/403: refresh auth; 404/410: skip; 5xx: retry later |
+| `.io` | A local file could not be opened, read or written | Re-download or delete the file |
+| `.malformed` | The bytes are damaged or inconsistent (a range past the server's end) | Skip; re-download if cached |
+| `.unsupported` | No demuxer or decoder, no audio stream, a page where audio should be, no FFmpeg | Skip, and do not retry |
+| `.cancelled` | The source was cancelled under the decoder | Usually your own cancel: ignore |
+| `.internal` | Allocation, misuse, an error the library did not raise | Report |
+
+```swift
+switch error.category {                       // StreamDecoderError, StreamByteReaderError or PlaybackError
+case .network, .http(status: 500...): retryLater()
+case .http(status: 401), .http(status: 403): refreshAuthAndRetry()
+case .unsupported, .malformed, .http: skip()
+case .io: redownload()
+case .cancelled: break
+case .internal: report(error)
+}
+```
+
+- **`StreamDecoderError.failed(StreamFailure)`** carries the category, a `detail` for logs, the libav
+  `averror` when libavformat reported one, and the `urlError` behind a network failure. After a nil
+  `nextChunk()` with `endReason == .failure`, `decoder.error` is the failure.
+- **A reader's own failure keeps its category** through the decoder, whatever FFmpeg made of it: a
+  connection lost during the probe is `.network`, not "not a container". An app's reader throws
+  `StreamByteReaderError.failed(StreamFailure(...))` to choose the category; a `URLError` counts as
+  `.network` and any other error as `.io`.
+- **`PlaybackError.category`** on `itemFailed` and `Player.error` reads the same category off the
+  underlying error; a failure the library did not raise (your factory's, the output's, the session's)
+  is `.internal`.
+- **FFmpeg skips damage rather than failing.** A corrupt frame is dropped, and a truncated file or a
+  run of garbage ends at `.eof`, as media3's extractors do. `.malformed` therefore comes from the
+  source (a range past the end) far more often than from the decoder.
 
 ## Show buffering and download state
 

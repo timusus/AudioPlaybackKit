@@ -49,6 +49,6 @@
   <g stroke="#444" stroke-width="1.5" fill="none" marker-end="url(#a)">
     <path d="M210 293 L260 293"/><path d="M450 293 L500 293"/><path d="M690 293 L730 293"/>
   </g>
-  <text x="20" y="360" font-size="12" fill="#444">Retries exhausted: the read throws StreamByteReaderError.transport, after the bytes already downloaded are read.</text>
+  <text x="20" y="360" font-size="12" fill="#444">Retries exhausted: the read throws StreamByteReaderError.failed (.network), after the bytes already downloaded are read.</text>
   <text x="20" y="380" font-size="12" fill="#444">One sparse file per session; once every byte is in it, it is renamed to &lt;sha256(url)&gt;.audio and cached; partials are never reused.</text>
 </svg>
