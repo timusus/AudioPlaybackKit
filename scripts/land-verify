@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Verify command for `land` (see .claude/land.conf): build everything, then run the macOS-slice tests.
+# Verify command for `land` (see .claude/land.conf): build everything, run the macOS-slice tests, then compile the device suite.
 # Prints only the `verify:` protocol; full tool output goes to $LAND_ARTIFACT_DIR.
 set -uo pipefail
 
@@ -89,6 +89,17 @@ run_confirm_tests() {
     return "$missing"
 }
 
+# The device suite is an xcodegen project `swift test` never compiles; its own derived data keeps the phone's intact.
+# arm64 only: the committed FFmpeg xcframework has no x86_64 simulator slice.
+# shellcheck disable=SC2329 # called by name from run_phase
+build_device_suite() {
+    command -v xcodegen >/dev/null || { echo "xcodegen: command not found"; return 1; }
+    xcodegen generate --quiet --spec Tests/PlaybackDeviceTests/project.yml || return 1
+    xcodebuild build-for-testing -project Tests/PlaybackDeviceTests/PlaybackDeviceTests.xcodeproj \
+        -scheme PlaybackDeviceTests -destination 'generic/platform=iOS Simulator' \
+        -derivedDataPath .build/device-tests/sim-dd CODE_SIGNING_ALLOWED=NO ARCHS=arm64 -quiet
+}
+
 if [[ "${LAND_MODE:-}" == confirm ]]; then
     [[ -n "${LAND_ONLY:-}" ]] || { echo "verify: -- LAND_ONLY is empty" >&2; exit 2; }
     phase_wanted test && run_phase test test_failures run_confirm_tests
@@ -96,6 +107,7 @@ else
     echo "verify: confirm"
     phase_wanted build && run_phase build compile_failures swift build --build-tests -j 5
     phase_wanted test && run_phase test test_failures swift test --skip-build --parallel --num-workers 4
+    phase_wanted devbuild && run_phase devbuild compile_failures build_device_suite
 fi
 
 echo "verify: == end"
