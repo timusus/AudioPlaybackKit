@@ -207,6 +207,24 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(try read(source, 100), Data(), "the total itself is the end of the stream")
     }
 
+    func testASeekToTheEndAfterTheDownloadFinishedSendsNoRequest() throws {
+        let body = makeBody(48 * 1024)
+        let server = try startServer(body: body)
+        let source = makeSource(server.url)
+        XCTAssertEqual(try readToEnd(source), body)
+        XCTAssertTrue(waitUntil { source.snapshot.isComplete })
+        let requests = server.requestedRanges.count
+
+        try source.seek(to: 10)
+        XCTAssertEqual(try read(source, 4), body.subdata(in: 10..<14))
+        try source.seek(to: 48 * 1024)
+        XCTAssertEqual(try read(source, 100), Data())
+        try source.seek(to: 48 * 1024 - 1)
+        XCTAssertEqual(try read(source, 100), body.suffix(1))
+
+        XCTAssertEqual(server.requestedRanges.count, requests, "a finished download is served from the file: \(server.requestHeads)")
+    }
+
     /// A transcode with no length that ignores `Range` and is still arriving: a seek past what has
     /// come cannot be served by the origin, so it is unseekable, not a transport failure.
     func testASeekOnARangeIgnoringTranscodeIsUnseekableNotAFailure() throws {
