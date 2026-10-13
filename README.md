@@ -1,5 +1,6 @@
 # AudioPlaybackKit
 
+[![CI](https://github.com/timusus/AudioPlaybackKit/actions/workflows/ci.yml/badge.svg)](https://github.com/timusus/AudioPlaybackKit/actions/workflows/ci.yml)
 ![Swift 5.9](https://img.shields.io/badge/Swift-5.9-orange)
 ![Platforms](https://img.shields.io/badge/platforms-iOS%2017%20%7C%20macOS%2014-blue)
 ![SwiftPM](https://img.shields.io/badge/SwiftPM-compatible-brightgreen)

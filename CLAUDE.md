@@ -66,5 +66,5 @@ is a minor bump at 0.x; so is any decoder change that alters PCM, and the releas
 - Conventional commits (`feat:`, `fix:`, `refactor:`, `build:`, `docs:`, `test:`). Work happens on worktree
   branches and lands via `land <branch>` from a landing worktree (`git worktree add --detach
   .claude/worktrees/landing origin/main`, once), which verifies with `scripts/land-verify` and pushes
-  to `main`. No PRs, no AI attribution, no CI.
+  to `main`. Outside PRs are welcome and CI (`.github/workflows/ci.yml`) gates them. The owner's own work never waits on GitHub Actions: it lands on `main` via `land` and releases via `scripts/release.sh` run locally. No AI attribution.
 - Public API is the contract with two apps: `public` only when an app needs it, `Sendable`-friendly.

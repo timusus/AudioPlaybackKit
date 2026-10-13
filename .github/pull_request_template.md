@@ -2,6 +2,14 @@
 
 
 
+## How tested
+
+
+
 ## Checklist
 
-- [ ] `swift test` passes on macOS
+- [ ] The PR title is a conventional commit (`feat:`, `fix:`, `refactor:`, `build:`, `docs:`, `test:`)
+- [ ] Tests added or updated
+- [ ] `scripts/test-fast` passes
+- [ ] Goldens updated and the JSON diff reviewed, if decoded PCM changed
+- [ ] Docs updated
