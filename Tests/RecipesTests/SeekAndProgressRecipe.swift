@@ -6,7 +6,7 @@ import XCTest
 final class SeekAndProgressRecipe: XCTestCase {
     // The decoder: believe `landed`, not the target.
     func testASeekReturnsWhereItLanded() throws {
-        let decoder = FFmpegStreamDecoder(reader: try FileByteReader(url: try Tone.writeWAV(seconds: 4)))
+        let decoder = FFmpegStreamDecoder(reader: try FileByteReader(url: try writeWAV(seconds: 4)))
         _ = try decoder.open()
 
         let landed = try decoder.seek(toSeconds: 2.5)

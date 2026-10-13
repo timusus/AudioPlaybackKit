@@ -1,4 +1,5 @@
 import Foundation
+import XCTest
 
 /// A mono 16-bit WAV of a sine, so a recipe plays a real file without a bundled fixture.
 enum Tone {
@@ -18,9 +19,18 @@ enum Tone {
         return data
     }
 
-    static func writeWAV(seconds: Int, named name: String = UUID().uuidString) throws -> URL {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(name).wav")
-        try wav(seconds: seconds).write(to: url)
+}
+
+extension XCTestCase {
+    /// A file in the temp directory that the test removes when it ends.
+    func writeTemp(_ data: Data, ext: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).\(ext)")
+        try data.write(to: url)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
         return url
+    }
+
+    func writeWAV(seconds: Int) throws -> URL {
+        try writeTemp(Tone.wav(seconds: seconds), ext: "wav")
     }
 }
