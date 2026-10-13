@@ -6,25 +6,37 @@
 ![SwiftPM](https://img.shields.io/badge/SwiftPM-compatible-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)
 
-Play the audio AVPlayer won't, and own the PCM on the way out. A Swift package over FFmpeg for iOS and macOS:
-a decoder, a streaming byte source, an output layer, and a `Player` with the audio session and lock screen
-on top. Built for Shuttle Podcasts and Shuttle2.
+An audio playback engine for iOS and macOS apps that need more than AVPlayer gives them: formats it
+can't open, and access to the decoded samples before they reach the speaker. FFmpeg decodes; the
+package handles streaming, output, the audio session and the lock screen around it. It is the
+playback engine for Shuttle Podcasts and Shuttle2.
 
-It is built to be checked. 128 conformance fixtures are pinned to hashes of their decoded audio and run
-through a fault-injecting reader and a seek matrix modelled on androidx/media, among about 780 tests. The FFmpeg
-framework is about 1.7 MB per iOS slice, and the fakes let an app test its own player code.
+## Why use it
 
-What an app gets:
+AVPlayer plays a fixed set of formats and keeps the PCM to itself. Going to `AVAudioEngine` instead
+gets you the samples, but leaves you writing the decoder, the session handling and gapless playback
+yourself. This package is that layer, built once.
 
-- **Formats AVPlayer lacks.** Ogg Vorbis, Ogg Opus, FLAC in Ogg and Matroska/WebM audio, alongside MP3, AAC, M4A/ALAC, FLAC and WAV/AIFF. Also WavPack, WMA (v1/v2), DSD (DSF and DFF, decoded to PCM, no DoP passthrough) and Monkey's Audio (APE). APE is untested (no conformance fixture), and WavPack seeking is broken (#175).
-- **Playback before the download ends.** `GrowingFileByteSource` reads an HTTP(S) URL while it downloads, with range-request resume, stall detection and retry. An MP4 with its index at the end plays from range requests.
-- **Seeks that land on the sample** (VBR MP3 excepted), gapless joins between items (even at different sample rates), and decode that can be cancelled while blocked on the network.
-- **A decoder checked against goldens.** Over a hundred fixtures run through a faulting reader and a seek matrix against committed PCM hashes, modelled on androidx/media's tests ([ADR-0008](docs/decisions/0008-conformance-testing-modelled-on-media3.md)).
-- **An output layer to replace your `AVAudioEngine` graph** (`PlaybackRender`). One `Transport` drives an `AVSampleBufferAudioRenderer` and its synchronizer: play, pause, seek, speed, a gapless next item, and your effects as `AudioProcessor`s. Position comes back as the frame being heard. A failed renderer or a media-services reset is recovered once, landing paused where it was ([ADR-0018](docs/decisions/0018-render-layer.md)).
-- **A player on top** (`PlaybackPlayer`). `Player<Item>` takes your list and keeps the next item armed for a gapless join, with repeat, pause at the end of an item, seconds-based seeks across items, and observable `state`, `position` and `duration`. It owns the `AVAudioSession`: lazy activation, interruptions that resume only when they should, headphones and Bluetooth loss, media-services resets. A failed item stops with an event rather than skipping ([ADR-0019](docs/decisions/0019-player.md)).
-- **The lock screen.** `NowPlayingSession` (`PlaybackNowPlaying`) shows a `Player` in Now Playing and routes the remote commands back to it.
-- **Testable seams.** Bytes come from a `StreamByteReader`, items from an `ItemSource`, effects are `AudioProcessor`s, and `LoopbackMediaServer` is a fault-injecting local server for your own streaming tests.
-- **LGPL done for you.** FFmpeg ships as a dynamic framework Xcode embeds without a build-phase change, so users can relink ([ADR-0001](docs/decisions/0001-ffmpeg-for-demux-and-decode.md)).
+- **Formats AVPlayer can't play.** Ogg Vorbis, Opus, FLAC in Ogg, Matroska/WebM audio, WavPack, WMA
+  (v1/v2), DSD (DSF and DFF, decoded to PCM) and Monkey's Audio, alongside MP3, AAC, ALAC, FLAC and
+  WAV/AIFF. Each format but Monkey's Audio has a conformance fixture whose decoded output is pinned in
+  tests ([ADR-0008](docs/decisions/0008-conformance-testing-modelled-on-media3.md)).
+- **Your effects on every format.** Effects such as skip-silence, Voice Boost or EQ are
+  `AudioProcessor`s in the output chain, so they apply to whatever was decoded
+  ([ADR-0018](docs/decisions/0018-render-layer.md)).
+- **Play while downloading.** `GrowingFileByteSource` plays an HTTP(S) URL as it downloads, resuming
+  with range requests after a drop or a stall. An MP4 with its index at the end plays too.
+- **Accurate seeks and gapless joins.** Seeks land on the sample (a VBR MP3 without a seek table
+  excepted), and consecutive items join without a gap, even across sample rates.
+- **The session behaviour users notice.** `Player` owns the `AVAudioSession`: it resumes after an
+  interruption only when it should, pauses when headphones or Bluetooth drop, and recovers from a
+  media-services reset paused where it was. A failed item stops with an event rather than skipping
+  silently ([ADR-0019](docs/decisions/0019-player.md)). `NowPlayingSession` puts it on the lock
+  screen, Control Centre and CarPlay.
+- **Your player code is testable.** Fakes for the output, clock, audio session and Now Playing let an
+  app drive its own playback logic deterministically, without a device.
+- **Shippable in a closed-source app.** FFmpeg is built LGPL-only and embedded as a dynamic framework,
+  which is what the licence requires ([ADR-0001](docs/decisions/0001-ffmpeg-for-demux-and-decode.md)).
 
 ## What's inside
 
@@ -65,7 +77,7 @@ there is one maintainer. The package is young and so far proven in one shipping 
 ## Install
 
 ```swift
-.package(url: "https://github.com/timusus/AudioPlaybackKit.git", from: "0.12.0")
+.package(url: "https://github.com/timusus/AudioPlaybackKit.git", from: "0.13.0")
 ```
 
 ```swift
