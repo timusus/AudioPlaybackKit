@@ -92,6 +92,26 @@ final class StreamDecodeErrorCategoryTests: XCTestCase {
         }
     }
 
+    /// An open descriptor outlives the unlink, so playback finishes; only the next open fails, as `.io`.
+    func testAFileDeletedWhileItPlaysFinishesAndTheReopenIsIO() throws {
+        try XCTSkipUnless(FFmpegStreamDecoder.isAvailable, "this build has no FFmpeg xcframework")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("deleted-\(UUID().uuidString).mp3")
+        try FileManager.default.copyItem(at: Fixture.url(Fixture.mp3), to: url)
+        addTeardownBlock { try? FileManager.default.removeItem(at: url) }
+        let decoder = FFmpegStreamDecoder(reader: try FileByteReader(url: url))
+        let format = try decoder.open()
+        XCTAssertNotNil(decoder.nextChunk())
+
+        try FileManager.default.removeItem(at: url)
+        var frames = 0
+        while let chunk = decoder.nextChunk() { frames += chunk.count / format.channelCount }
+        XCTAssertGreaterThan(frames, Fixture.frameCount / 2)
+        XCTAssertEqual(decoder.endReason, .eof)
+        XCTAssertThrowsError(try FileByteReader(url: url)) { error in
+            XCTAssertEqual((error as? StreamByteReaderError)?.category, .io, "\(error)")
+        }
+    }
+
     func testAFileThatCannotBeOpenedIsIO() {
         let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         XCTAssertThrowsError(try FileByteReader(url: missing)) { error in

@@ -265,6 +265,25 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(source.snapshot.transactionGeneration, 1)
     }
 
+    /// The OS keeps an unlinked file's inode while a descriptor holds it, so a cleaner (or the user)
+    /// removing the files under the source cannot take bytes already fetched or still arriving.
+    func testFilesDeletedUnderAReadingSourceNeitherCrashNorHangIt() throws {
+        let body = makeBody(256 * 1024)
+        let server = try startServer(body: body)
+        server.bytesPerSecond = 512 * 1024
+        let source = makeSource(server.url)
+        XCTAssertEqual(try read(source, 1), body.prefix(1))
+
+        let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        XCTAssertFalse(files.isEmpty, "nothing on disk to delete")
+        for file in files { try FileManager.default.removeItem(at: file) }
+
+        let pending = readAsync(source, Int.max)
+        XCTAssertTrue(pending.finished(within: 10), "the read hung")
+        guard case .success(let data) = pending.result else { return XCTFail("\(pending.result)") }
+        XCTAssertEqual(data, body.dropFirst())
+    }
+
     func testAFullDiskFailsTheReadAndDeletesThePartial() throws {
         let body = makeBody(256 * 1024)
         let server = try startServer(body: body)
