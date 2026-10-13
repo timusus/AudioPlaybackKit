@@ -53,6 +53,20 @@ extension GrowingFileDownloadTests {
         }
     }
 
+    // The head is 12 bytes and iff_probe wants "DSD " at 12, so FRM8 alone is taken; a later demux
+    // failure on an FRM8 that is not DSDIFF is the accepted cost.
+    @Test("an FRM8 body is taken whatever follows it, the sniff head being too short to see DSD")
+    func frm8WithoutDSDIsTakenLoosely() {
+        let h = Harness()
+        _ = h.read()
+        #expect(h.respond(200, length: 100_000, mimeType: "application/octet-stream"))
+        h.body(12, head: Array("FRM8".utf8) + [UInt8](repeating: 0, count: 4) + Array("AIFF".utf8))
+        guard case .serve = h.read() else {
+            Issue.record("FRM8 was refused")
+            return
+        }
+    }
+
     private static let notAudio: [(name: String, head: [UInt8])] = [
         ("page", Array("<!DOCTYPE ht".utf8)),
         ("page after zero padding", [0, 0] + Array("<!DOCTYPE ".utf8)),
