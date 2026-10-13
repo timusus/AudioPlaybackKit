@@ -33,18 +33,16 @@ patches and linkage. The headers sit in `Sources/CFFmpeg/include`, also generate
 
 ```sh
 swift test --filter <Class>                         # iterate on the tests you touch
-scripts/test-fast                                   # the worker finish: all but conformance, parallel, about 90 s
+scripts/test-fast                                   # before you finish: all but conformance, parallel, about 90 s
 swift test --filter PlaybackDecodeConformance       # about 410-480 s (the matrix test alone about 234 s)
 GOLDEN_UPDATE=1 swift test --filter PlaybackDecodeConformance   # after an intended change; review the JSON diff
 xcodebuild test -scheme AudioPlaybackKit-Package -only-testing:PlaybackStreamingTests \
   -destination 'platform=iOS Simulator,id=<UDID>'   # a UDID no parallel-testing run clones (that shuts it down)
-land <branch>                                       # from the landing worktree: cherry-pick, verify, push
-scripts/release.sh 0.1.1 notes.md                   # any checkout, works in .claude/worktrees/release: tests, FFmpeg source, tag, push, publish
 ```
 
-Workers iterate with `--filter` and finish with one `scripts/test-fast` run (`--filter` and other args pass
+Iterate with `--filter` and finish with one `scripts/test-fast` run (`--filter` and other args pass
 through; `--with-conformance` adds the conformance bundle). Conformance runs only when decode or demux code
-changes. The full gate (`swift test`, conformance included) is `land`'s, once per batch; do not run it by hand.
+changes. CI runs the full gate on every PR.
 `scripts/test-fast` writes `.build/test-fast.log` and prints a verdict: read the log, and never pipe test
 output through `tail` or `head`, which hide the verdict (swift-testing's "Test run with 0 tests" is not the XCTest result).
 
@@ -63,8 +61,6 @@ is a minor bump at 0.x; so is any decoder change that alters PCM, and the releas
 - When in doubt follow androidx/media (media3): its `DataSource`, `Extractor` and
   `DefaultHttpDataSource` code and issues are the reference for edge cases. Cite the class or issue
   in the ADR or commit, and say why when deviating.
-- Conventional commits (`feat:`, `fix:`, `refactor:`, `build:`, `docs:`, `test:`). Work happens on worktree
-  branches and lands via `land <branch>` from a landing worktree (`git worktree add --detach
-  .claude/worktrees/landing origin/main`, once), which verifies with `scripts/land-verify` and pushes
-  to `main`. Outside PRs are welcome and CI (`.github/workflows/ci.yml`) gates them. The owner's own work never waits on GitHub Actions: it lands on `main` via `land` and releases via `scripts/release.sh` run locally. No AI attribution.
+- Conventional commits (`feat:`, `fix:`, `refactor:`, `build:`, `docs:`, `test:`). Work on a branch and
+  open a PR; CI (`.github/workflows/ci.yml`) gates it. No AI attribution in commits or PRs.
 - Public API is the contract with two apps: `public` only when an app needs it, `Sendable`-friendly.
