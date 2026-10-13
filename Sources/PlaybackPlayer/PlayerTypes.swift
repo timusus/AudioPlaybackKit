@@ -1,4 +1,5 @@
 import Foundation
+import PlaybackDecode
 import PlaybackRender
 
 /// Makes the PCM source for an item when the player is about to decode it. Called on the main
@@ -32,6 +33,16 @@ public struct PlaybackError: Error, Sendable {
 
     public var kind: Kind
     public var underlying: any Error
+
+    /// What a caller acts on: retry a network or HTTP failure, skip an unsupported or malformed
+    /// item. An error the library did not raise (an app's factory, the output, the session) is `.internal`.
+    public var category: PlaybackErrorCategory {
+        switch underlying {
+        case let error as StreamDecoderError: error.category
+        case let error as StreamByteReaderError: error.category
+        default: .internal
+        }
+    }
 }
 
 public enum TransitionReason: Sendable {

@@ -64,13 +64,13 @@ let package = Package(
             resources: [.copy("Dumps")]
         ),
         // Drives `Transport` through its public API only, so anything it needs is a render-layer change.
-        .target(name: "PlaybackPlayer", dependencies: ["PlaybackRender"]),
+        .target(name: "PlaybackPlayer", dependencies: ["PlaybackDecode", "PlaybackRender"]),
         // The fake session and a rig that builds a `Player` on the fake output and manual clock, for
         // an app's tests of its own coordinator. Imports the player's SPI so an app's test need not (ADR-0019).
         .target(name: "PlaybackPlayerTestSupport", dependencies: ["PlaybackPlayer", "PlaybackRender", "PlaybackRenderTestSupport"]),
         .testTarget(
             name: "PlaybackPlayerTests",
-            dependencies: ["PlaybackPlayer", "PlaybackPlayerTestSupport", "PlaybackRender", "PlaybackRenderTestSupport"]
+            dependencies: ["PlaybackDecode", "PlaybackPlayer", "PlaybackPlayerTestSupport", "PlaybackRender", "PlaybackRenderTestSupport"]
         ),
         // Public imports only, as an app's own target has them: the example an app copies, and the
         // check that the product needs no `@testable` (ADR-0019).
