@@ -6,8 +6,10 @@
 # The C shim (`Sources/CStreamDecode`) has no `#if` per codec, it asks FFmpeg to probe and find a
 # decoder, so a codec that is not compiled in simply means "FFmpeg said no".
 #
-#   decoders  mp3, AAC (ADTS and LATM), Opus, Vorbis, FLAC, ALAC, PCM (s16/s24/s32/f32/f64/u8)
-#   demuxers  mp3, aac, loas, mov (MP4/M4A), ogg, flac, wav, aiff, matroska (WebM)
+#   decoders  mp3, AAC (ADTS and LATM), Opus, Vorbis, FLAC, ALAC, PCM (s16/s24/s32/f32/f64/u8),
+#             Monkey's Audio (APE), WavPack, DSD (to PCM), WMA v1/v2
+#   demuxers  mp3, aac, loas, mov (MP4/M4A), ogg, flac, wav, aiff, matroska (WebM), ape, wv, dsf,
+#             iff (DFF), asf (WMA)
 #   zlib      the system zlib, for Matroska header compression
 #
 # Output, both COMMITTED (CLAUDE.md says why):
@@ -57,8 +59,8 @@ FRAMEWORK_VERSION="${FFMPEG_TAG#n}"
 # ── formats ──────────────────────────────────────────────────────────────────
 # The superset: Shuttle Podcasts' formats (mp3/aac/mov, Ogg Opus and Vorbis) plus Shuttle2's music
 # formats (FLAC, ALAC, WAV/AIFF PCM, Matroska). Shuttle2's own list is the floor.
-DECODERS=mp3,mp3float,aac,aac_latm,opus,vorbis,flac,alac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_s32be,pcm_f32le,pcm_f32be,pcm_f64le,pcm_f64be,pcm_u8
-DEMUXERS=mp3,aac,loas,mov,ogg,flac,wav,aiff,matroska
+DECODERS=mp3,mp3float,aac,aac_latm,opus,vorbis,flac,alac,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_s32be,pcm_f32le,pcm_f32be,pcm_f64le,pcm_f64be,pcm_u8,ape,wavpack,dsd_lsbf,dsd_msbf,dsd_lsbf_planar,dsd_msbf_planar,wmav1,wmav2
+DEMUXERS=mp3,aac,loas,mov,ogg,flac,wav,aiff,matroska,ape,wv,dsf,iff,asf
 PARSERS=mpegaudio,aac,aac_latm,opus,vorbis,flac
 XCFRAMEWORK_NAME="FFmpeg.xcframework"
 
