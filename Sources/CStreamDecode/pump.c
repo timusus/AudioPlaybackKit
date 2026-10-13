@@ -163,6 +163,18 @@ static int pump_decode_error(StreamDecoder *d, int rc) {
     return rc == AVERROR(ENOMEM) ? STREAM_DECODE_ERR_ALLOC : STREAM_DECODE_ERR_DECODER;
 }
 
+/* The wv demuxer finds a trailing APE tag only when it knows the file size; without one it reads
+ * `APETAGEX` as a block header and fails. libwavpack ends cleanly there, so the failure is the end
+ * when the 32-byte header the demuxer consumed begins with the APE preamble. */
+static int pump_at_wavpack_ape_tag(StreamDecoder *d) {
+    enum { kWavPackHeaderBytes = 32 };
+    if (strcmp(d->fmt->iformat->name, "wv") != 0) return 0;
+    int64_t at = avio_tell(d->fmt->pb) - kWavPackHeaderBytes;
+    uint8_t preamble[8];
+    if (at < 0 || avio_seek(d->fmt->pb, at, SEEK_SET) != at) return 0;
+    return avio_read(d->fmt->pb, preamble, 8) == 8 && memcmp(preamble, "APETAGEX", 8) == 0;
+}
+
 /* The codec wants input: the next audio packet (the held one first) to it, or the end of the
  * source to it as a NULL packet. Returns PUMP_AGAIN or an error status. */
 static int pump_feed_packet(StreamDecoder *d) {
@@ -178,7 +190,7 @@ static int pump_feed_packet(StreamDecoder *d) {
         if (d->cancelled) return STREAM_DECODE_ERR_CANCELLED;
         if (d->interrupted) return STREAM_DECODE_ERR_INTERRUPTED;
         if (read == AVERROR_EXIT) return STREAM_DECODE_ERR_CANCELLED;
-        if (read == AVERROR_EOF) {
+        if (read == AVERROR_EOF || (read == AVERROR_INVALIDDATA && pump_at_wavpack_ape_tag(d))) {
             avcodec_send_packet(d->dec, NULL);
             d->flushing = 1;
             return PUMP_AGAIN;

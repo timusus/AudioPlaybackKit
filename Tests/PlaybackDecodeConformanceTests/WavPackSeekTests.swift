@@ -49,8 +49,8 @@ final class WavPackSeekTests: XCTestCase {
 
     /// **With no length, the decode has every sample and ends at the end.**
     ///
-    /// The end is FFmpeg's: without a size the wv demuxer cannot find the APE tag after the last
-    /// block and reads it as a block header, which fails.
+    /// Without a size the wv demuxer reads the APE tag after the last block as a block header and
+    /// fails; the decoder ends there as libwavpack does.
     func testUnknownLengthDecodesEverySampleThenEnds() throws {
         try XCTSkipUnless(FFmpegStreamDecoder.isAvailable, "no FFmpeg in this build")
         let clean = FFmpegStreamDecoder(reader: try FileByteReader(url: url))
@@ -60,8 +60,24 @@ final class WavPackSeekTests: XCTestCase {
         let decoder = FFmpegStreamDecoder(reader: try FaultyByteReader(url: url, switches: .unknownLength))
         _ = try decoder.open()
         XCTAssertTrue(decodeAll(decoder) == reference, "PCM differs from the clean decode")
-        XCTExpectFailure("FFmpeg's wv demuxer fails on the APE tag: https://github.com/timusus/AudioPlaybackKit/issues/175") {
-            XCTAssertEqual(decoder.endReason, .eof)
-        }
+        XCTAssertEqual(decoder.endReason, .eof)
+    }
+
+    /// **Garbage after the last block is still a failure when the length is unknown.**
+    func testGarbageInPlaceOfTheApeTagStillFails() throws {
+        try XCTSkipUnless(FFmpegStreamDecoder.isAvailable, "no FFmpeg in this build")
+        var data = try Data(contentsOf: url)
+        let tag = try XCTUnwrap(data.range(of: Data("APETAGEX".utf8)), "fixture has no APE tag")
+        data.replaceSubrange(tag, with: Data("GARBAGE!".utf8))
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let corrupt = dir.appendingPathComponent("garbage_tail.wv")
+        try data.write(to: corrupt)
+
+        let decoder = FFmpegStreamDecoder(reader: try FaultyByteReader(url: corrupt, switches: .unknownLength))
+        _ = try decoder.open()
+        _ = decodeAll(decoder)
+        XCTAssertEqual(decoder.endReason, .failure)
     }
 }
