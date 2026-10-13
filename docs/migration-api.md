@@ -6,17 +6,23 @@ No behaviour or PCM changed; no golden moved.
 
 | Old | New | Why |
 |---|---|---|
-| `ItemSource.duration: Int64?` (also `FFmpegItemSource`, `FakeItemSource`) | `frameCount: Int64?` | It is a count of frames, not a time; the units rule in `usage.md` says a time is seconds. |
+| `ItemSource.duration: Int64?` (also `FFmpegItemSource`, `FakeItemSource`) | `frameCount: Int64?`, now required of every conformer (no default) | It is a count of frames, not a time; the units rule in `usage.md` says a time is seconds. A conformer still implementing `duration` fails to compile instead of silently reporting an unknown length. |
 | `Player.hasNext`, `Player.hasPrevious` (public) | internal | No app or test used them; `availableCommands` reports the same facts. |
+| `PlaybackSuppression.none` | `.unsuppressed` | `.none` collides with `Optional.none`. |
 
 ## App call sites
 
-Shuttle Podcasts:
+Shuttle Podcasts (`mobile/ios/`):
 
-- `mobile/ios/.../GrowingFileItemSource.swift:54`: `var duration: Int64? { lock.withLock { opened?.source.duration } }` becomes
-  `var frameCount: Int64? { lock.withLock { opened?.source.frameCount } }`.
+- `ShuttlePodcasts/Platform/Audio/Playback/GrowingFileItemSource.swift:54`: `var duration: Int64? { lock.withLock { opened?.source.duration } }`
+  becomes `var frameCount: Int64? { lock.withLock { opened?.source.frameCount } }`.
+- `ShuttlePodcastsTests/GrowingFileItemSourceTests.swift:160` (`RecordingSource`): `var duration: Int64? { inner.duration }`
+  becomes `var frameCount: Int64? { inner.frameCount }`.
+- `ShuttlePodcastsTests/GrowingFileItemSourceTests.swift:178` (`FailingSource`): `var duration: Int64? { nil }` becomes `var frameCount: Int64? { nil }`.
+- `ShuttlePodcastsTests/PlayerProcessorChainTests.swift:257` (`GappedSource`): `var duration: Int64? { total }` becomes `var frameCount: Int64? { total }`.
 
-Shuttle2: none.
+Shuttle2: no `ItemSource` conformer on `main` and no use of `PlaybackSuppression` or `hasNext`/`hasPrevious`.
+Neither app uses `PlaybackSuppression.none`.
 
 ## Kept on purpose
 
@@ -28,4 +34,3 @@ Shuttle2: none.
 ## Left for later
 
 - `pauseAtEndOfItem` to `pausesAtEndOfItem` (about 25 uses, mostly tests).
-- `PlaybackSuppression.none` collides with `Optional.none`.

@@ -134,12 +134,13 @@ while let chunk = decoder.nextChunk() { /* schedule it */ }
 
 ## Units
 
-One rule across every module: **a time is a `TimeInterval` in seconds; anything else carries its unit
-in the name.** Where an API also deals in frames or bytes, the label says `Seconds` (`seek(toSeconds:)`,
-`Transport.setCurrent(startSeconds:)`); the `Player` layer, which has only seconds, does not
-(`seek(to:)`, `position`, `duration`). Counts of PCM frames are `Int64` and say so (`frameCount`,
-`mediaStartFrame`, `mediaFramesRead`, `maxFrames`), counts of bytes say `bytes` or `Length`, and a
-parameter taking either bytes or seconds is labelled with its unit (`GrowingFileReadAhead`).
+**A time is a `TimeInterval` in seconds.** Where an API also deals in frames or bytes, the label says
+`Seconds` (`seek(toSeconds:)`, `Transport.setCurrent(startSeconds:)`); the `Player` layer, which has only
+seconds, does not (`seek(to:)`, `position`, `duration`). Counts of PCM frames are `Int64` and named for
+frames (`frameCount`, `mediaStartFrame`, `mediaFramesRead`, `maxFrames`). The byte-source APIs
+(`StreamByteReader`, `FileByteReader`, `GrowingFileByteSource`, `GrowingFileSnapshot`: `position`,
+`seek(to:)`, `fetchedEnd`, `base`, `frontier`) are byte offsets, and a parameter taking either bytes or
+seconds is labelled with its unit (`GrowingFileReadAhead`).
 
 ## Seek
 
@@ -416,11 +417,11 @@ struct NowPlayingBar: View {
 - **`state`** is `.idle` (nothing prepared, or stopped on an error), `.buffering` (waiting for audio: a load or
   seek not yet decoded, or decode behind; paused or not, as media3; set by the call itself, so it never
   describes the item before), `.ready` or `.ended` (the last item finished; `play()` restarts at 0).
-  `isPlaying` is `state == .ready && playWhenReady && suppression == .none`. Show a play button from
+  `isPlaying` is `state == .ready && playWhenReady && suppression == .unsuppressed`. Show a play button from
   `playWhenReady`, not from `isPlaying`, or the button flickers while buffering.
 - **`position`** is what is heard, in seconds of the current item's media time, written on every pump
   while it changes. `duration` is nil until the item opens and whenever the source does not know it.
-  `isSeekable` is the source's, known once it opens; a server transcode seeks with no `frameCount`.
+  `isSeekable` is the source's, known once it opens; a server transcode seeks with no `duration`.
   `isLive` is an opened item that neither seeks nor has a duration (ADR-0022).
 - **`audioFormat`** (media3 `getAudioFormat()`) is the current item's sample rate and channel count as
   decoded, the format your processors are configured with for it: draw an EQ curve at its rate. It is nil

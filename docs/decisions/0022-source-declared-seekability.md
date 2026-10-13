@@ -17,8 +17,7 @@ other than asked is reported as `DISCONTINUITY_REASON_SEEK_ADJUSTMENT`.
 
 ## Decision
 
-`ItemSource.isSeekable` is read once `open()` returns, like `frameCount` (the length in frames, formerly
-`duration`); it defaults to a known length. `FFmpegItemSource` is seekable when the container has a duration or the byte source a
+`ItemSource.isSeekable` is read once `open()` returns, like `frameCount` (the length in frames); it defaults to a known length. `FFmpegItemSource` is seekable when the container has a duration or the byte source a
 length, ADR-0017's rule. Transport carries it on each `.position` event.
 
 The player derives `isLive` as neither seekable nor of known duration, and exposes `isSeekable`.

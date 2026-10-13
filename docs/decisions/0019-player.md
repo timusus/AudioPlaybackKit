@@ -163,7 +163,7 @@ public final class Player<Item: Hashable & Sendable> {
     public func play(); public func pause()
     public private(set) var state: PlaybackState
     public private(set) var suppression: PlaybackSuppression
-    public var isPlaying: Bool { state == .ready && playWhenReady && suppression == .none }
+    public var isPlaying: Bool { state == .ready && playWhenReady && suppression == .unsuppressed }
     public private(set) var error: PlaybackError?
     public func stop()                              // `.idle`, session deactivated, items kept
     public func prepare()                           // from `.idle`, loads the current item at `position` (ADR-0024)
@@ -360,8 +360,8 @@ Rules, taken from Shuttle2's `AudioSessionController` and media3's `AudioFocusMa
   the interruption clears `suppression`, which is the memory of wanting to resume (Shuttle2's "no user
   action in between").
 - **Interruption ended** while still suppressed: with `shouldResume`, `setActive(true)`, then
-  `Transport.play()` and `suppression = .none`; if reactivation throws the player stays suppressed, with
-  no error, and retries on the next `play()`. Without `shouldResume`: `suppression = .none` and
+  `Transport.play()` and `suppression = .unsuppressed`; if reactivation throws the player stays suppressed, with
+  no error, and retries on the next `play()`. Without `shouldResume`: `suppression = .unsuppressed` and
   `playWhenReady = false` with reason `.interruptionEnded`, so the UI shows paused. A `play()` during the
   interruption reactivates at once (media3's regular gain); if that throws it too stays suppressed.
 - **Route change**: `oldDeviceUnavailable` pauses only when a personal output kind (headphones,
@@ -482,7 +482,7 @@ become:
 
 | # | Title | Scope | Size | Depends on |
 |---|---|---|---|---|
-| 1 | Transport in seconds | `Transport.setCurrent(startSeconds:)` and `seek(item:toSeconds:)` (converted after open, frames kept inside); a failed next item is reported and dropped without pausing the current. Duration has landed (#115): `ItemSource.duration` in frames, carried by `TransportEvent.position(…, duration:)`. Useful alone: an app on `Transport` stops storing frames | S | #115 (landed) |
+| 1 | Transport in seconds | `Transport.setCurrent(startSeconds:)` and `seek(item:toSeconds:)` (converted after open, frames kept inside); a failed next item is reported and dropped without pausing the current. Duration has landed (#115): `ItemSource.frameCount` in frames, carried by `TransportEvent.position(…, duration:)`. Useful alone: an app on `Transport` stops storing frames | S | #115 (landed) |
 | 2 | `Player` core | product, item list and edits, state and `playWhenReady`, position and duration, seek within and across items, rate, volume, processors, `events`, `@Observable`; `FakeItemFactory`; the core and edit tests | M | 1, #116 |
 | 3 | Advance, repeat, pause at end | pre-arm and `setNext` handoff, `.crossed` to `itemTransition`, `repeatMode`, `pauseAtEndOfItem`, `.ended`, per-item failure rules; the advance and error tests | M | 2 |
 | 4 | Audio session | `AudioSessionControlling`, `SystemAudioSession`, `AudioSessionConfiguration`, activation, interruptions, route changes, media-services reset interplay; `FakeAudioSession`; the session tests | M | 2 |

@@ -16,10 +16,10 @@ Start playing, then:
 
 | Steps | Expected | Covered by |
 |---|---|---|
-| A call arrives (from a second phone); decline it | Audio stops when it rings; `suppression == .interruption`; after it ends, playback resumes by itself and `suppression` is `.none` | Manual: declining needs a second phone; `testInterruptionEndingWithShouldResumeResumes` posts the same notifications |
+| A call arrives (from a second phone); decline it | Audio stops when it rings; `suppression == .interruption`; after it ends, playback resumes by itself and `suppression` is `.unsuppressed` | Manual: declining needs a second phone; `testInterruptionEndingWithShouldResumeResumes` posts the same notifications |
 | A call arrives; answer it, hang up | As above, resuming after the hang-up | `RealCallTests.testCallInterruptsAndPlaybackResumesWhenItEnds` |
 | Siri ("Hey Siri", ask the time); depends on whether iOS sends `.shouldResume` when Siri ends, so note which you saw | With `.shouldResume`: audio stops, then resumes when Siri finishes. Without it: audio stops and the player lands paused with `playWhenReady` false, and does not restart on its own | Manual |
-| Interruption that ends with `.shouldResume`: FaceTime or phone call from a second phone, ended from the other side (or declined) | Audio stops; `suppression == .interruption`; after it ends, playback resumes by itself and `suppression` is `.none` | `SessionNotificationTests.testInterruptionEndingWithShouldResumeResumes` |
+| Interruption that ends with `.shouldResume`: FaceTime or phone call from a second phone, ended from the other side (or declined) | Audio stops; `suppression == .interruption`; after it ends, playback resumes by itself and `suppression` is `.unsuppressed` | `SessionNotificationTests.testInterruptionEndingWithShouldResumeResumes` |
 | Interruption that ends without `.shouldResume`: open Music or YouTube and start playback, then pause or stop it there | Audio stops; the app shows paused by another app; the player lands paused with `playWhenReady` false and does not restart on its own | `RealCallTests.testNonMixablePlaybackInterruptsAndNothingResumes`, `SessionNotificationTests.testInterruptionEndingWithoutShouldResumeLandsPaused` |
 | Same, but press pause in the app during the interruption, then end it | Nothing resumes | `SessionNotificationTests.testPauseDuringInterruptionResumesNothing` |
 | Pause first, then trigger a call | Nothing shows "paused by another app"; nothing resumes afterwards | `SessionNotificationTests.testPauseBeforeInterruptionShowsNoSuppressionAndResumesNothing` |
