@@ -28,14 +28,15 @@ public final class ManualPumpTimer: @unchecked Sendable {
 
     /// Runs one pump and returns once it has finished.
     public func fire() {
-        let (queue, tick) = lock.withLock { (queue!, tick!) }
+        // `self.` here and below: Swift 6.2 binds a bare name to the local being declared.
+        let (queue, tick) = lock.withLock { (self.queue!, self.tick!) }
         queue.sync(execute: tick)
     }
 
     /// Queues one pump, as a real timer tick lands, and holds it until the returned release is called,
     /// so a call made in between queues behind a tick that fired first.
     public func fireHeld() -> () -> Void {
-        let (queue, tick) = lock.withLock { (queue!, tick!) }
+        let (queue, tick) = lock.withLock { (self.queue!, self.tick!) }
         queue.suspend()
         queue.async(execute: tick)
         return { queue.resume() }
