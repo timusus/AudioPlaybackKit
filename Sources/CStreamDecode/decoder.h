@@ -164,7 +164,7 @@ void sd_hold_first_packet(StreamDecoder *d);
 int  sd_read_audio_packet(StreamDecoder *d);
 int  sd_read_failure_status(StreamDecoder *d);
 int  sd_hold_first_audio_packet(StreamDecoder *d);
-int  sd_open_codec(const StreamDecoder *d, const AVCodec *codec, int flags2, AVCodecContext **out);
+int  sd_open_codec(const StreamDecoder *d, const AVCodec *codec, int flags2, AVCodecContext **out, int *averror);
 int  sd_reopen_codec(StreamDecoder *d);
 
 /* resample.c */

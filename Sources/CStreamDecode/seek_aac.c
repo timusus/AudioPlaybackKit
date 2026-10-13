@@ -145,7 +145,7 @@ static int64_t aac_decoder_trim(const StreamDecoder *d, const AVCodecParameters 
     AVCodecContext *dec = NULL;
     AVFrame *frame = av_frame_alloc();
     int64_t trim = 0;
-    if (codec && frame && sd_open_codec(d, codec, AV_CODEC_FLAG2_SKIP_MANUAL, &dec) == STREAM_DECODE_OK) {
+    if (codec && frame && sd_open_codec(d, codec, AV_CODEC_FLAG2_SKIP_MANUAL, &dec, NULL) == STREAM_DECODE_OK) {
         if (avcodec_send_packet(dec, d->held) >= 0 && avcodec_receive_frame(dec, frame) >= 0) {
             const AVFrameSideData *sd = av_frame_get_side_data(frame, AV_FRAME_DATA_SKIP_SAMPLES);
             if (sd && sd->size >= 4) {

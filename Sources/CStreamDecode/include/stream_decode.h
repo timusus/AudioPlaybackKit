@@ -137,8 +137,8 @@ int stream_decoder_seek(StreamDecoder *decoder, double seconds, double *landed_s
  * its Xing TOC or bitrate estimate. Meaningful only after a seek returned OK or EOF. */
 int stream_decoder_last_seek_exact(const StreamDecoder *decoder);
 
-/** The libav error (`AVERROR`) behind the last read or seek that failed, or 0 when it reported
- *  none: the status says what failed, this says what libav saw. */
+/** The libav error (`AVERROR`) behind the last open, read or seek that failed, or 0 when it
+ *  reported none: the status says what failed, this says what libav saw. */
 int stream_decoder_last_averror(const StreamDecoder *decoder);
 
 /**

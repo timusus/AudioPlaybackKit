@@ -25,6 +25,11 @@ static int seek_failure(const StreamDecoder *d) {
     return STREAM_DECODE_ERR_SEEK;
 }
 
+/* Keeps the libav error of a failed call; a later fallback that succeeds clears it at the end of the seek. */
+static void note_averror(StreamDecoder *d, int rc) {
+    if (rc < 0) d->last_averror = rc;
+}
+
 /* Finish a seek: flush the codec and the resampler and clear the pull loop's state. */
 static void after_seek_reset(StreamDecoder *d) {
     avcodec_flush_buffers(d->dec);
@@ -98,6 +103,7 @@ static int resume_after_last_packet(StreamDecoder *d) {
         if (found) return STREAM_DECODE_OK;
         if (past) break;
     }
+    note_averror(d, rc);
     return seek_failure(d);
 }
 
@@ -109,6 +115,7 @@ static int budgeted_seek(StreamDecoder *d, int64_t min_ts, int64_t ts, int64_t m
     d->seek_budget_armed = 1;
     d->source_eof = 0;
     int rc = avformat_seek_file(d->fmt, d->audio_idx, min_ts, ts, max_ts, flags);
+    note_averror(d, rc);
     *walked = d->seek_budget_blown;
     d->seek_budget_armed = 0;
     /* The refusal that abandoned the walk is latched in the AVIO context; what follows has to
@@ -124,6 +131,7 @@ static int budgeted_seek(StreamDecoder *d, int64_t min_ts, int64_t ts, int64_t m
 static int seek_back_to(StreamDecoder *d, int64_t target) {
     int64_t failed = d->failed_seeks;
     int rc = avformat_seek_file(d->fmt, d->audio_idx, INT64_MIN, target, target, AVSEEK_FLAG_BACKWARD);
+    note_averror(d, rc);
     return rc >= 0 && d->failed_seeks != failed ? AVERROR(EIO) : rc;
 }
 
@@ -138,6 +146,7 @@ static int seek_to_byte(StreamDecoder *d, int64_t byte) {
     sd_avio_arm_jump(d);
     int rc = avformat_seek_file(d->fmt, d->audio_idx, INT64_MIN, byte, byte,
                                 AVSEEK_FLAG_BYTE | AVSEEK_FLAG_BACKWARD);
+    note_averror(d, rc);
     if (rc < 0 || d->failed_seeks != failed) return seek_failure(d);
     after_seek_reset(d);
     return sd_init_swr(d);
@@ -181,6 +190,7 @@ int stream_decoder_seek(StreamDecoder *decoder, double seconds, double *landed_s
         status = STREAM_DECODE_ERR_UNSEEKABLE;
     }
     if (status == STREAM_DECODE_OK || status == STREAM_DECODE_EOF) {
+        decoder->last_averror = 0;
         decoder->position_frames = llround(*landed_seconds * decoder->out_rate);
     }
     return status;

@@ -70,7 +70,7 @@ StreamDecoder *stream_decoder_open_with(const StreamDecodeCallbacks *callbacks,
     const AVCodec *codec = avcodec_find_decoder(par->codec_id);
     if (!codec) { local_status = STREAM_DECODE_ERR_DECODER; goto fail; }
 
-    local_status = sd_open_codec(d, codec, 0, &d->dec);
+    local_status = sd_open_codec(d, codec, 0, &d->dec, &d->last_averror);
     if (local_status != STREAM_DECODE_OK) goto fail;
 
     d->sample_rate = d->dec->sample_rate > 0 ? d->dec->sample_rate : par->sample_rate;

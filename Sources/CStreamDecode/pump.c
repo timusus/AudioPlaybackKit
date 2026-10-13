@@ -302,18 +302,22 @@ int sd_hold_first_audio_packet(StreamDecoder *d) {
  * the start is labelled as though the trimmed samples were still in it. `flags2` is added to the
  * context's. Returns STREAM_DECODE_OK with `*out` set, or STREAM_DECODE_ERR_ALLOC or _DECODER.
  */
-int sd_open_codec(const StreamDecoder *d, const AVCodec *codec, int flags2, AVCodecContext **out) {
+int sd_open_codec(const StreamDecoder *d, const AVCodec *codec, int flags2, AVCodecContext **out, int *averror) {
     const AVStream *stream = d->fmt->streams[d->audio_idx];
     AVCodecContext *dec = avcodec_alloc_context3(codec);
     if (!dec) return STREAM_DECODE_ERR_ALLOC;
-    if (avcodec_parameters_to_context(dec, stream->codecpar) < 0) {
+    int rc = avcodec_parameters_to_context(dec, stream->codecpar);
+    if (rc < 0) {
+        if (averror) *averror = rc;
         avcodec_free_context(&dec);
         return STREAM_DECODE_ERR_DECODER;
     }
     dec->thread_count = 1;
     dec->pkt_timebase = stream->time_base;
     dec->flags2 |= flags2;
-    if (avcodec_open2(dec, codec, NULL) < 0) {
+    rc = avcodec_open2(dec, codec, NULL);
+    if (rc < 0) {
+        if (averror) *averror = rc;
         avcodec_free_context(&dec);
         return STREAM_DECODE_ERR_DECODER;
     }
@@ -324,7 +328,7 @@ int sd_open_codec(const StreamDecoder *d, const AVCodec *codec, int flags2, AVCo
 /* Replace the codec with a freshly opened one, for a seek strategy whose codec outlives a flush. */
 int sd_reopen_codec(StreamDecoder *d) {
     AVCodecContext *dec = NULL;
-    int rc = sd_open_codec(d, d->dec->codec, 0, &dec);
+    int rc = sd_open_codec(d, d->dec->codec, 0, &dec, &d->last_averror);
     if (rc != STREAM_DECODE_OK) return rc;
     avcodec_free_context(&d->dec);
     d->dec = dec;
