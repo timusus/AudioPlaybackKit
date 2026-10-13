@@ -16,6 +16,7 @@ private final class ReencodedSource: ItemSource, @unchecked Sendable {
     private let chunkFrames: Int64
     private var index = 0
     private var position: Int64 = 0
+    private(set) var seeks: [Int64] = []
 
     init(switchFrames: [Int64], formats: [PCMFormat] = [before, after], chunkFrames: Int64 = 2) {
         self.switchFrames = switchFrames
@@ -31,6 +32,7 @@ private final class ReencodedSource: ItemSource, @unchecked Sendable {
     func open() throws -> PCMFormat { formats[0] }
 
     func seek(toFrame frame: Int64) throws -> Int64 {
+        seeks.append(frame)
         let seconds = Double(frame) / format.sampleRate
         index = max(index, 1)
         position = Int64((seconds * format.sampleRate).rounded())
@@ -103,6 +105,12 @@ final class TransportFormatChangeTests: XCTestCase {
 
     private var positions: [TimeInterval] {
         recorder.events.compactMap { if case let .position(_, seconds, _, _) = $0 { seconds } else { nil } }
+    }
+
+    private var itemPositions: [(item: String, seconds: TimeInterval, duration: TimeInterval?)] {
+        recorder.events.compactMap {
+            if case let .position(item, seconds, duration, _) = $0 { (item, seconds, duration) } else { nil }
+        }
     }
 
     private var ended: Bool {
@@ -185,5 +193,101 @@ final class TransportFormatChangeTests: XCTestCase {
         XCTAssertEqual(positions, positions.sorted())
         XCTAssertEqual(positions.last, 3)
         XCTAssertTrue(ended)
+    }
+
+    func testAChangeInTheLastChunkJoinsTheNextItemFromItsStartWithNoGap() {
+        // Down from 16 Hz stereo to 8 Hz mono at frame 44, so the last chunk alone is in the new format.
+        let formats = [ReencodedSource.after, ReencodedSource.before]
+        start(ReencodedSource(switchFrames: [44], formats: formats))
+        transport.setNext(item: "b", source: ReencodedSource(switchFrames: [], formats: formats))
+        pump()
+        run(for: 7)
+
+        XCTAssertEqual(failures, 0)
+        XCTAssertEqual(processor.configured, [ReencodedSource.after, ReencodedSource.before, ReencodedSource.after])
+        XCTAssertEqual(processor.events.filter { if case .flush = $0 { true } else { false } },
+                       [flush(0), flush(22), .flush(StreamMetadata(item: "b", mediaStartFrame: 0))])
+        let aLast = output.enqueues.suffix(25).first, bFirst = output.enqueues.suffix(24).first
+        XCTAssertEqual(aLast?.samples, [1022, 1023])
+        XCTAssertEqual(aLast?.format, ReencodedSource.before)
+        XCTAssertEqual(aLast?.time, 2.75)
+        XCTAssertEqual(bFirst?.samples, [0, 1, 2, 3])
+        XCTAssertEqual(bFirst?.format, ReencodedSource.after)
+        XCTAssertEqual(bFirst?.time, 3, "b starts at its first frame straight after a's last, in its own format")
+        XCTAssertEqual(itemPositions.filter { $0.item == "b" }.first?.seconds, 0)
+        XCTAssertEqual(itemPositions.filter { $0.item == "b" }.last?.seconds, 3)
+        XCTAssertTrue(ended)
+    }
+
+    func testASeekBackReplaysTheJoinIntoANextItemAlreadyOpened() {
+        start(ReencodedSource(switchFrames: [22]))
+        let next = ReencodedSource(switchFrames: [])
+        transport.setNext(item: "b", source: next)
+        pump()
+        run(for: 2.5)
+        let configured = processor.configured.count
+        let events = processor.events.count
+        let enqueues = output.enqueues.count
+
+        transport.seek(item: "a", toSeconds: 2.75)
+        pump()
+        run(for: 4)
+
+        XCTAssertEqual(failures, 0)
+        XCTAssertEqual(next.seeks, [0], "the join rewinds a next item opened before the seek")
+        XCTAssertEqual(processor.events.dropFirst(events).filter { if case .flush = $0 { true } else { false } },
+                       [flush(44), .flush(StreamMetadata(item: "b", mediaStartFrame: 0))])
+        XCTAssertEqual(firstSample(after: enqueues), 1088)
+        // This source re-opens at 16 Hz stereo on any seek, so the rewound b adopts that from frame 0.
+        XCTAssertEqual(processor.configured.dropFirst(configured), [ReencodedSource.after, ReencodedSource.after])
+        XCTAssertEqual(itemPositions.filter { $0.item == "b" }.last?.seconds, 3)
+        XCTAssertTrue(ended)
+    }
+
+    func testThePositionsDurationStaysInSecondsAcrossTheChange() {
+        start(ReencodedSource(switchFrames: [8]))
+        run(for: 4)
+
+        XCTAssertEqual(Set(itemPositions.map(\.duration)), [3])
+    }
+
+    func testAChangeAfterASeekThatChangedFormatRescalesFromTheLandedFrame() {
+        let third = PCMFormat(sampleRate: 32, channelCount: 2)
+        start(ReencodedSource(switchFrames: [40], formats: [ReencodedSource.before, ReencodedSource.after, third]))
+        run(for: 0.5)
+        let events = processor.events.count
+
+        transport.seek(item: "a", toSeconds: 2)
+        pump()
+        run(for: 2)
+
+        XCTAssertEqual(failures, 0)
+        XCTAssertEqual(processor.configured.suffix(2), [ReencodedSource.after, third])
+        XCTAssertEqual(processor.events.dropFirst(events).filter { if case .flush = $0 { true } else { false } }, [flush(32), flush(80)])
+        XCTAssertEqual(positions, positions.sorted())
+        XCTAssertEqual(itemPositions.last?.seconds, 3)
+        XCTAssertEqual(Set(itemPositions.map(\.duration)), [3])
+        XCTAssertTrue(ended)
+    }
+
+    func testA44100To48000ChangeRoundsToTheNearestFrame() {
+        let cd = PCMFormat(sampleRate: 44100, channelCount: 1)
+        let dat = PCMFormat(sampleRate: 48000, channelCount: 1)
+        start(ReencodedSource(switchFrames: [12000], formats: [cd, dat], chunkFrames: 3000))
+        run(for: 0.25)
+        let enqueues = output.enqueues.count
+        let before = itemPositions.last
+
+        output.injectAutoFlush()
+        pump()
+        run(for: 4)
+
+        XCTAssertEqual(failures, 0)
+        XCTAssertTrue(processor.events.contains(flush(13061)), "12000 at 44.1 kHz is 13061.22 at 48 kHz")
+        XCTAssertEqual(before?.seconds, 5513.0 / 44100)
+        XCTAssertEqual(firstSample(after: enqueues), 1000 + 6001, "frame 5513 at 44.1 kHz is 6000.54 at 48 kHz")
+        XCTAssertEqual(positions, positions.sorted())
+        XCTAssertEqual(positions.last, 3)
+        XCTAssertEqual(Set(itemPositions.map(\.duration)), [3])
     }
 }
