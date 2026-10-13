@@ -202,6 +202,7 @@ $FF -i "$TMP/s44.wav" -c:a vorbis -strict -2 -b:a 48k -map_metadata -1 vorbis_st
 # is not packaged, so there is no APE fixture: the only public sample found has no stated licence.
 $FF -i "$TMP/s44.wav" -c:a wavpack -map_metadata -1 wavpack_stereo.wv
 $FF -i "$TMP/s44.wav" -c:a wmav2 -b:a 96k -map_metadata -1 wma_v2_stereo.wma
+$FF -i "$TMP/s44.wav" -t 3 -c:a wmav1 -b:a 64k -map_metadata -1 wma_v1_stereo.wma
 
 # DSD64 stereo DSF, written by hand (ffmpeg has no DSD encoder or DSF muxer): a 2nd-order
 # delta-sigma modulation of a 440/660 Hz sine pair, 36 blocks of 4096 bytes per channel (about
@@ -232,6 +233,37 @@ fmt = struct.pack('<4sQIIIIIIQII', b'fmt ', 52, 1, 0, 2, 2, RATE, 1, BITS, BLOCK
 body = struct.pack('<4sQ', b'data', 12 + len(data)) + data
 head = struct.pack('<4sQQQ', b'DSD ', 28, 28 + len(fmt) + len(body), 0)
 open('dsf_dsd64_stereo.dsf', 'wb').write(head + fmt + body)
+PY
+
+# DSD64 stereo DSDIFF (FRM8/DSD): the same modulator, MSB first, bytes interleaved per channel.
+python3 -I - <<'PY'
+import math, struct
+RATE, BYTES = 2822400, 65536
+
+def modulate(freq):
+    out = bytearray(BYTES)
+    i1 = i2 = 0.0
+    for n in range(BYTES * 8):
+        x = 0.5 * math.sin(2 * math.pi * freq * n / RATE)
+        y = 1.0 if i2 >= 0 else -1.0
+        i1 += x - y
+        i2 += i1 - y
+        if y > 0:
+            out[n >> 3] |= 0x80 >> (n & 7)
+    return out
+
+def chunk(tag, body):
+    return tag + struct.pack('>Q', len(body)) + body + (b'\0' if len(body) % 2 else b'')
+
+left, right = modulate(440), modulate(660)
+data = bytearray()
+for a, b in zip(left, right):
+    data += bytes((a, b))
+prop = b'SND ' + chunk(b'FS  ', struct.pack('>I', RATE)) \
+    + chunk(b'CHNL', struct.pack('>H', 2) + b'SLFTSRGT') \
+    + chunk(b'CMPR', b'DSD ' + bytes((14,)) + b'not compressed')
+body = b'DSD ' + chunk(b'FVER', struct.pack('>I', 0x01050000)) + chunk(b'PROP', prop) + chunk(b'DSD ', bytes(data))
+open('dsdiff_dsd64_stereo.dff', 'wb').write(b'FRM8' + struct.pack('>Q', len(body)) + body)
 PY
 
 ls -l *.mp3 *.m4a *.aac *.opus *.ogg *.flac *.wav *.aiff *.mka *.webm | awk '{print $5, $9}'

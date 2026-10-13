@@ -23,10 +23,10 @@ extension KnownIssues {
     }
 
     static let codecRules: [Rule] = [
-        wv(.seek, cleanAndPartial, "seek to 2.6666666666666665 threw streaming decode failed, status 7"),
-        wv(.seek, cleanAndPartial, "seek to 3.9 threw streaming decode failed, status 7"),
+        wv(.seek, cleanAndPartial, "seek to 2.6666666666666665 threw streaming decode failed: malformed: the demuxer could not read a packet averror=-1094995529"),
+        wv(.seek, cleanAndPartial, "seek to 3.9 threw streaming decode failed: malformed: the demuxer could not read a packet averror=-1094995529"),
         wv(.outcome, unknownLength, "outcome decoded(end: \"failure\"), clean decoded(end: \"eof\")"),
-        wv(.seek, unknownLength, "seek to 4.0 threw streaming decode failed, status 7"),
+        wv(.seek, unknownLength, "seek to 4.0 threw streaming decode failed: malformed: the demuxer could not read a packet averror=-1094995529"),
         wv(.seek, unknownLength, "seek count 4 vs 3"),
         wv(.seekLanding, unknownLength, "seek to 4.0s landed 2.6666666666666665s"),
         wv(.seek, ioError, "seek count 5 vs 3"),
