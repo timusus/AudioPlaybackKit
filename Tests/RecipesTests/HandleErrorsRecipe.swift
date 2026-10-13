@@ -19,7 +19,8 @@ enum Recovery: Equatable {
         switch category {
         case .network where urlError.map(Recovery.noRetryFixes) ?? false: self = .skip
         case .network, .http(status: 500...), .http(status: 408), .http(status: 429): self = retry
-        case .http(status: 401), .http(status: 403), .http(status: 404), .http(status: 410): self = .refreshURL
+        case .http(status: 401), .http(status: 403): self = .refreshURL
+        // 404/410 say the episode is gone; any other status is one the same request repeats.
         case .unsupported, .malformed, .http: self = .skip
         case .io: self = .redownload
         case .cancelled: self = .ignore
@@ -46,7 +47,11 @@ final class HandleErrorsRecipe: XCTestCase {
         XCTAssertEqual(Recovery(.network), .retryLater)
         XCTAssertEqual(Recovery(.http(status: 503)), .retryLater)
         XCTAssertEqual(Recovery(.http(status: 401)), .refreshURL)
-        XCTAssertEqual(Recovery(.http(status: 404)), .refreshURL)
+        XCTAssertEqual(Recovery(.http(status: 403)), .refreshURL)
+        XCTAssertEqual(Recovery(.http(status: 404)), .skip)
+        XCTAssertEqual(Recovery(.http(status: 410)), .skip)
+        XCTAssertEqual(Recovery(.http(status: 408)), .retryLater)
+        XCTAssertEqual(Recovery(.http(status: 429)), .retryLater)
         XCTAssertEqual(Recovery(.http(status: 416)), .skip)
         XCTAssertEqual(Recovery(.unsupported), .skip)
         XCTAssertEqual(Recovery(.io), .redownload)
@@ -77,7 +82,7 @@ final class HandleErrorsRecipe: XCTestCase {
         }
     }
 
-    // A server answer arrives as `.http`: a missing episode asks for a fresh URL, an outage is retried.
+    // A server answer arrives as `.http`: a missing episode is skipped, an outage is retried.
     func testAServerStatusIsAnHTTPCategory() throws {
         let server = try LoopbackMediaServer(body: Tone.wav(seconds: 1), mimeType: "audio/wav")
         defer { server.stop() }
@@ -89,7 +94,7 @@ final class HandleErrorsRecipe: XCTestCase {
         XCTAssertThrowsError(try decoder.open()) { error in
             let category = (error as? StreamDecoderError)?.category
             XCTAssertEqual(category, .http(status: 404))
-            XCTAssertEqual(category.map { Recovery($0) }, .refreshURL)
+            XCTAssertEqual(category.map { Recovery($0) }, .skip)
         }
     }
 
