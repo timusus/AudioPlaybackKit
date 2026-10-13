@@ -22,10 +22,6 @@ final class SequencedUpstream: FeederUpstream {
     /// Where `Sequencer.setCurrent` already starts decode, so the feeder's restart there needs no seek.
     private var freshStart: SeekTarget?
 
-    /// Each item's decoded format, the one the processors are configured with, known once its first
-    /// chunk is pulled. Processors cannot resample, so its rate is also that of the item's output.
-    private(set) var formats: [Int: PCMFormat] = [:]
-
     /// `item` maps an id to the app's item for `StreamMetadata`.
     init(
         sequencer: Sequencer,
@@ -38,7 +34,6 @@ final class SequencedUpstream: FeederUpstream {
     }
 
     func setCurrent(item: Int, source: any ItemSource, startSeconds: TimeInterval) {
-        formats = [:]
         sequencer.setCurrent(item: item, source: source, start: startSeconds == 0 ? nil : .seconds(startSeconds))
         freshStart = SeekTarget(item: item, offset: .seconds(startSeconds))
     }
@@ -52,19 +47,16 @@ final class SequencedUpstream: FeederUpstream {
     /// Empties the window and drops what the pipeline holds, so nothing more is supplied.
     func stop() {
         sequencer.clear()
-        formats = [:]
         restartPipeline()
     }
 
     func release(before item: Int) {
         sequencer.release(before: item)
-        formats = formats.filter { $0.key >= item }
     }
 
     /// Forgets a next item that failed before it was heard. False when audio of it may be queued, so
     /// the caller re-feeds from what is heard.
     func drop(item: Int) -> Bool {
-        formats[item] = nil
         guard sequencer.drop(item: item) else { return false }
         failed = false
         return true
@@ -72,7 +64,11 @@ final class SequencedUpstream: FeederUpstream {
 
     func pull() -> UpstreamSupply {
         while !failed {
-            if let chunk = pipeline.getOutput() { return .chunk(chunk) }
+            // Output only follows a `configure`, and a drain empties it before the next one.
+            if var chunk = pipeline.getOutput() {
+                chunk.decodedFormat = pipelineFormat!
+                return .chunk(chunk)
+            }
             if let error = pipeline.failure, let pipelineItem {
                 fail(pipelineItem, error)
                 return .pending
@@ -90,7 +86,6 @@ final class SequencedUpstream: FeederUpstream {
             } else {
                 switch sequencer.pull() {
                 case let .chunk(chunk):
-                    for tag in chunk.tags { formats[tag.item] = chunk.format }
                     next = chunk
                 case .pending:
                     return .pending

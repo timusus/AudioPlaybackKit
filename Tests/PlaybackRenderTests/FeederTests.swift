@@ -54,7 +54,7 @@ final class FeederTests: XCTestCase {
     }
 
     private var crossed: [Int] {
-        events.compactMap { if case let .crossed(item) = $0 { item } else { nil } }
+        events.compactMap { if case let .heard(.item(item, _)) = $0 { item } else { nil } }
     }
 
     private var failures: [any Error] {

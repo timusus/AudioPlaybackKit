@@ -45,7 +45,8 @@ public final class Player<Item: Hashable & Sendable> {
     /// Neither seekable nor of known duration once opened (ADR-0022).
     public var isLive: Bool { seekable == false && duration == nil }
     /// media3 `getAudioFormat()`: the current item's decoded format, the one the processors run at
-    /// for it. Nil until its audio is heard; a next item's replaces it when the join is heard.
+    /// for it. Nil until its audio is heard; a next item's replaces it when the join is heard, and a
+    /// change within the item (`ItemSource.currentFormat`) when that is heard.
     public private(set) var audioFormat: PCMFormat?
     /// media3 `getTotalBufferedDuration()`: seconds of PCM written past what is heard, into the next
     /// item too. Not observed: it changes every pump, so poll it.
@@ -533,6 +534,8 @@ public final class Player<Item: Hashable & Sendable> {
             failed(key, underlying)
         case let .crossed(key, format):
             crossed(into: key)
+            if key == loadedKey, audioFormat != format { audioFormat = format }
+        case let .formatChanged(key, format):
             if key == loadedKey, audioFormat != format { audioFormat = format }
         case .recovered:
             recoveredPaused()

@@ -113,6 +113,17 @@ final class TransportFormatChangeTests: XCTestCase {
         }
     }
 
+    /// The formats reported as heard, in order: `.crossed` and `.formatChanged`.
+    private var heardFormats: [String] {
+        recorder.events.compactMap {
+            switch $0 {
+            case let .crossed(item, format): "crossed \(item) \(format.sampleRate)x\(format.channelCount)"
+            case let .formatChanged(item, format): "changed \(item) \(format.sampleRate)x\(format.channelCount)"
+            default: nil
+            }
+        }
+    }
+
     private var ended: Bool {
         recorder.events.contains { if case .status(.ended) = $0 { true } else { false } }
     }
@@ -142,6 +153,42 @@ final class TransportFormatChangeTests: XCTestCase {
         XCTAssertTrue(positions.contains(1))
         XCTAssertEqual(positions.last, 3)
         XCTAssertTrue(ended)
+    }
+
+    // #181: b's change 1 s in is decoded about two seconds ahead of the playhead, so before b is heard.
+    func testTheCrossingCarriesTheStartingFormatAndTheChangeIsReportedWhenHeard() {
+        start(ReencodedSource(switchFrames: []))
+        transport.setNext(item: "b", source: ReencodedSource(switchFrames: [8]))
+        pump()
+        run(for: 2.875)
+        XCTAssertTrue(output.enqueues.contains { $0.format == ReencodedSource.after }, "b's change is decoded ahead")
+        XCTAssertEqual(heardFormats, ["crossed a 8.0x1"])
+
+        run(for: 0.125)
+        XCTAssertEqual(heardFormats, ["crossed a 8.0x1", "crossed b 8.0x1"], "b starts in its first format")
+
+        run(for: 0.875)
+        XCTAssertEqual(heardFormats.count, 2, "the change is not heard yet")
+
+        run(for: 0.125)
+        XCTAssertEqual(itemPositions.last?.item, "b")
+        XCTAssertEqual(itemPositions.last?.seconds, 1)
+        XCTAssertEqual(heardFormats, ["crossed a 8.0x1", "crossed b 8.0x1", "changed b 16.0x2"])
+
+        run(for: 3)
+        XCTAssertEqual(heardFormats.count, 3, "reported once")
+        XCTAssertTrue(ended)
+    }
+
+    func testASeekThatReopensInAnotherFormatReportsItOnceItsAudioIsHeard() {
+        start(ReencodedSource(switchFrames: []))
+        run(for: 0.5)
+
+        transport.seek(item: "a", toSeconds: 2)
+        pump()
+        run(for: 2)
+
+        XCTAssertEqual(heardFormats, ["crossed a 8.0x1", "changed a 16.0x2"])
     }
 
     func testASeekThatReopensInAnotherFormatPlaysOnFromTheTarget() {

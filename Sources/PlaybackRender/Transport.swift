@@ -21,9 +21,14 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     /// Playing; nil when unknown. `isSeekable` is the source's `ItemSource.isSeekable`.
     case position(item: Item, seconds: TimeInterval, duration: TimeInterval?, isSeekable: Bool)
     /// `item` is now the one at the playhead: the gapless join reached the speaker, or the first
-    /// item's audio was written there, playing or paused. `format` is the item's decoded format, the
-    /// one the processors run at for it.
+    /// item's audio was written there, playing or paused. `format` is the decoded format its first
+    /// audio heard was in, the one the processors run at for it.
     case crossed(item: Item, format: PCMFormat)
+    /// `item`, already crossed, is now heard in another decoded format: its source changed format
+    /// (`ItemSource.currentFormat`), heard about two seconds after it was decoded, or a seek or
+    /// re-feed landed on audio in another format. media3 `AnalyticsListener.onAudioInputFormatChanged`,
+    /// but sent when heard rather than decoded.
+    case formatChanged(item: Item, format: PCMFormat)
     case status(TransportStatus)
     /// A `setCurrent` or `seek` was taken, in call order, before anything it caused: events before it
     /// predate the call, and the next `.position` for `item` is the call's first audio. Every call is
@@ -311,12 +316,13 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
 
     private func handle(_ event: FeederEvent) {
         switch event {
-        case let .crossed(id):
+        case let .heard(.item(id, format)):
             // Nothing can seek behind the item now heard, so the sequencer may forget those.
             upstream.release(before: id)
             ids = ids.filter { $0.key >= id }
-            // Its first chunk was pulled before it was heard, so its format is known.
-            if let item = ids[id], let format = upstream.formats[id] { onEvent(.crossed(item: item, format: format)) }
+            if let item = ids[id] { onEvent(.crossed(item: item, format: format)) }
+        case let .heard(.format(id, format)):
+            if let item = ids[id] { onEvent(.formatChanged(item: item, format: format)) }
         case let .position(position):
             report(position)
         case let .status(status):

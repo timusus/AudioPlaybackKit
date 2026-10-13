@@ -256,6 +256,7 @@ let transport = Transport<Track.ID> { event in          // called on the transpo
     switch event {
     case .position(let id, let seconds, let duration, let isSeekable): break   // media time of `id`; duration nil when unknown
     case .crossed(let id, let format): break            // `id` is now heard, decoded at `format`; advance your queue
+    case .formatChanged(let id, let format): break      // `id` is now heard in another decoded format
     case .status(let status): break                     // .paused, .buffering, .playing, .ended
     case .sought(let id, let seconds, let applied): break  // a setCurrent or seek was taken; if applied, events before it are stale
     case .failed(let id, let error): break              // paused, unless `id` is a next item not yet heard; `id` is nil when the output refused audio
@@ -434,7 +435,7 @@ struct NowPlayingBar: View {
 - **`audioFormat`** (media3 `getAudioFormat()`) is the current item's sample rate and channel count as
   decoded, the format your processors are configured with for it: draw an EQ curve at its rate. It is nil
   until the item is heard, and changes when a join into the next item is heard, not when it is decoded
-  ahead (ADR-0025). A format change within an item does not update it.
+  ahead (ADR-0025). A format change within an item updates it when the change is heard.
 - **A seek not made as asked** is reported as `seekAdjusted(_:requested:position:)`: a target
   clamped to `0...duration`, a seek an unseekable item refused (it stays put), or a source that landed
   elsewhere, as on a keyframe (sent after `seekLanded`). An unseekable item never fails for a seek.

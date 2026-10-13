@@ -20,7 +20,7 @@ final class SampleBufferAudioOutputTests: XCTestCase {
                 return pts
             }
             previous = pts
-            map.append(SegmentTag(item: 1, mediaStartFrame: mediaFrame, frameCount: chunkFrames), sampleRate: sampleRate)
+            map.append(SegmentTag(item: 1, mediaStartFrame: mediaFrame, frameCount: chunkFrames), format: PCMFormat(sampleRate: sampleRate, channelCount: 1))
             mediaFrame += chunkFrames
         }
         return presentationTime(map.writtenEnd, sampleRate: sampleRate)

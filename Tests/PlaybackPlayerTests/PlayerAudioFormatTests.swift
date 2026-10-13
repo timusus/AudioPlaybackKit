@@ -1,5 +1,6 @@
 import Foundation
 import PlaybackRender
+@_spi(Testing) import PlaybackPlayerTestSupport
 import XCTest
 @_spi(Testing) @testable import PlaybackPlayer
 
@@ -55,6 +56,21 @@ final class PlayerAudioFormatTests: XCTestCase {
         XCTAssertEqual(player.audioFormat, stereo16)
     }
 
+    // #181: a server transcode re-opened mid-item; the change is decoded about two seconds ahead.
+    func testTheFormatChangesWithinAnItemWhenTheChangeIsHeard() {
+        let stereo8 = PCMFormat(sampleRate: 8, channelCount: 2)
+        let rig = PlayerTestRig<String> { _ in RechannelledSource(changeFrame: 40, to: stereo8) }
+        rig.player.setItems(["a"])
+        rig.player.play()
+        rig.run(for: 4)
+        XCTAssertTrue(rig.output.enqueues.contains { $0.format == stereo8 }, "the change is decoded")
+        XCTAssertEqual(rig.player.audioFormat, mono8, "but not heard")
+
+        rig.run(for: 1.5)
+        XCTAssertEqual(rig.player.audioFormat, stereo8)
+        XCTAssertEqual(rig.player.currentIndex, 0)
+    }
+
     // Set late, the join into b is heard, but the player stays on a (ADR-0023).
     func testPauseAtEndSetLateKeepsTheFinishedItemsFormat() {
         rig.factory.formats = ["b": stereo16]
@@ -66,6 +82,39 @@ final class PlayerAudioFormatTests: XCTestCase {
         XCTAssertEqual(player.currentIndex, 0)
         XCTAssertEqual(player.audioFormat, mono8)
     }
+}
+
+/// Ten seconds at 8 Hz, mono until `changeFrame` and `format` from the chunk there on.
+private final class RechannelledSource: ItemSource, @unchecked Sendable {
+    private let changeFrame: Int64
+    private let changed: PCMFormat
+    private var position: Int64 = 0
+    private(set) var currentFormat: PCMFormat?
+
+    init(changeFrame: Int64, to format: PCMFormat) {
+        self.changeFrame = changeFrame
+        changed = format
+    }
+
+    var frameCount: Int64? { 80 }
+    func begin(epoch: UInt64) {}
+    func open() throws -> PCMFormat { PCMFormat(sampleRate: 8, channelCount: 1) }
+
+    func seek(toFrame frame: Int64) throws -> Int64 {
+        position = frame
+        return frame
+    }
+
+    func nextChunk() throws -> [Float]? {
+        if position >= changeFrame { currentFormat = changed }
+        guard position < 80 else { return nil }
+        let end = min(position + 2, 80)
+        defer { position = end }
+        return [Float](repeating: 0, count: Int(end - position) * (currentFormat?.channelCount ?? 1))
+    }
+
+    func interrupt(through epoch: UInt64) {}
+    func release() {}
 }
 
 /// Passes audio through and records each format it is configured with.

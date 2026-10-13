@@ -22,7 +22,7 @@ enum FeederStatus: Equatable, Sendable {
 }
 
 enum FeederEvent {
-    case crossed(item: Int)
+    case heard(MediaPositionMap.Heard)
     case position(MediaPositionMap.Position)
     case status(FeederStatus)
     /// The output refused a chunk. The feeder has paused and pulls nothing more until the next flush
@@ -295,12 +295,12 @@ final class Feeder {
                 return fail(error)
             }
         }
-        for tag in chunk.tags { map.append(tag, sampleRate: chunk.format.sampleRate) }
+        for tag in chunk.tags { map.append(tag, format: chunk.decodedFormat) }
     }
 
     private func report() {
         let playhead = playhead()
-        for item in map.advance(to: playhead) { onEvent(.crossed(item: item)) }
+        for heard in map.advance(to: playhead) { onEvent(.heard(heard)) }
         // Within an item the position only goes forward, as media3's renderers take
         // max(current, new) unless a seek allowed a discontinuity: the clock steps back on a rate
         // change, a resume or a re-anchor, and apps count listening time from position deltas.

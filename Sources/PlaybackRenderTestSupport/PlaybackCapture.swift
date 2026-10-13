@@ -62,6 +62,8 @@ public final class PlaybackCaptureRecorder<Item: Hashable & Sendable>: @unchecke
             "position \(item) \(seconds) duration=\(duration.map { "\($0)" } ?? "nil") seekable=\(isSeekable)"
         case let .crossed(item, format):
             "crossed \(item) \(format.sampleRate)Hz x\(format.channelCount)"
+        case let .formatChanged(item, format):
+            "formatChanged \(item) \(format.sampleRate)Hz x\(format.channelCount)"
         case let .status(status):
             "status \(status)"
         case let .sought(item, seconds, applied):

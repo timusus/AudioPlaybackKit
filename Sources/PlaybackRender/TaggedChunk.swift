@@ -7,6 +7,16 @@ struct TaggedChunk: Sendable {
     var samples: [Float]
     var format: PCMFormat
     var tags: [SegmentTag]
+    /// The format the frames were decoded in, which the processors ran at: what the transport reports
+    /// as heard. A processor may change the channel count of `format`, never its rate.
+    var decodedFormat: PCMFormat
+
+    init(samples: [Float], format: PCMFormat, tags: [SegmentTag]) {
+        self.samples = samples
+        self.format = format
+        self.tags = tags
+        decodedFormat = format
+    }
 
     var frameCount: Int64 { Int64(samples.count / format.channelCount) }
 }

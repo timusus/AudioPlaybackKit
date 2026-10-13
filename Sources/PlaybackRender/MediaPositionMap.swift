@@ -32,10 +32,20 @@ struct MediaPositionMap: Sendable {
         var seconds: TimeInterval { Double(mediaFrame) / sampleRate }
     }
 
+    /// What the playhead reached, as `advance` returns it.
+    enum Heard: Equatable, Sendable {
+        /// Another item, in the format its first frames were decoded in.
+        case item(Int, PCMFormat)
+        /// Another decoded format within the item heard.
+        case format(item: Int, PCMFormat)
+    }
+
     private struct Segment: Sendable {
         var tag: SegmentTag
-        var sampleRate: Double
+        /// Decoded; processors cannot resample, so its rate is also the output's.
+        var format: PCMFormat
         var start: TimeInterval
+        var sampleRate: Double { format.sampleRate }
         var end: TimeInterval { start + Double(tag.frameCount) / sampleRate }
     }
 
@@ -43,6 +53,7 @@ struct MediaPositionMap: Sendable {
     private(set) var writtenEnd: TimeInterval
     private var segments: [Segment] = []
     private var reportedItem: Int?
+    private var reportedFormat: PCMFormat?
 
     init(epochStart: TimeInterval = 0) {
         self.epochStart = epochStart
@@ -50,7 +61,7 @@ struct MediaPositionMap: Sendable {
     }
 
     /// A flush, seek or auto-flush: everything written is gone and writing restarts at `time`. The
-    /// reported item is kept, so re-anchoring inside an item does not report it again.
+    /// reported item and format are kept, so re-anchoring inside an item reports only a format it changes.
     mutating func reset(at time: TimeInterval) {
         segments = []
         epochStart = time
@@ -63,12 +74,12 @@ struct MediaPositionMap: Sendable {
         epochStart = writtenEnd
     }
 
-    mutating func append(_ tag: SegmentTag, sampleRate: Double) {
-        if let last = segments.last, last.tag.item == tag.item, last.sampleRate == sampleRate,
+    mutating func append(_ tag: SegmentTag, format: PCMFormat) {
+        if let last = segments.last, last.tag.item == tag.item, last.format == format,
            last.tag.mediaStartFrame + last.tag.frameCount == tag.mediaStartFrame {
             segments[segments.count - 1].tag.frameCount += tag.frameCount
         } else {
-            segments.append(Segment(tag: tag, sampleRate: sampleRate, start: writtenEnd))
+            segments.append(Segment(tag: tag, format: format, start: writtenEnd))
         }
         writtenEnd = segments[segments.count - 1].end
     }
@@ -92,14 +103,20 @@ struct MediaPositionMap: Sendable {
         )
     }
 
-    /// Moves to `playhead` and returns the items it entered since the last call, in order, a
-    /// zero-frame item included. Positions behind `playhead` are forgotten.
-    mutating func advance(to playhead: TimeInterval) -> [Int] {
+    /// Moves to `playhead` and returns the items and formats it entered since the last call, in order,
+    /// a zero-frame item included. Positions behind `playhead` are forgotten.
+    mutating func advance(to playhead: TimeInterval) -> [Heard] {
         guard let index = segmentIndex(at: playhead) else { return [] }
-        var entered: [Int] = []
-        for segment in segments[...index] where segment.tag.item != reportedItem {
-            entered.append(segment.tag.item)
-            reportedItem = segment.tag.item
+        var entered: [Heard] = []
+        for segment in segments[...index] {
+            let item = segment.tag.item
+            if item != reportedItem {
+                entered.append(.item(item, segment.format))
+            } else if segment.format != reportedFormat {
+                entered.append(.format(item: item, segment.format))
+            }
+            reportedItem = item
+            reportedFormat = segment.format
         }
         segments.removeFirst(index)
         return entered
