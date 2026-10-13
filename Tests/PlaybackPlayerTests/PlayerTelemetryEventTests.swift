@@ -112,6 +112,45 @@ final class PlayerTelemetryEventTests: XCTestCase {
         XCTAssertTrue(player.isPlaying)
     }
 
+    /// The grace on a starved upstream is what is already written: the output plays every queued
+    /// second before it runs dry, and only then is `.buffering` reported. Decode jobs are simply not
+    /// run, so no wall clock is involved. Fake items are 8 Hz mono.
+    func testAnUnderrunIsReportedOnlyOnceEverythingWrittenHasBeenHeard() {
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 3)
+        events = []
+
+        var steps = 0
+        while player.state != .buffering, steps < 40 {
+            rig.timer.fire()
+            rig.output.advance(by: 0.25)
+            rig.timer.fire()
+            player.drainTransportEvents()
+            steps += 1
+            if player.state != .buffering { XCTAssertEqual(telemetry, [], "reported before the queue ran dry, at \(player.position)s") }
+        }
+        XCTAssertEqual(player.state, .buffering)
+        XCTAssertEqual(telemetry, ["bufferingStarted"])
+        guard case let .bufferingStarted(ref, position) = events.first else { return XCTFail("\(events)") }
+        XCTAssertEqual(ref.index, 0)
+        let written = Double(rig.output.enqueues.map(\.samples.count).reduce(0, +)) / 8
+        XCTAssertEqual(player.position, written, accuracy: 1e-9, "buffering began before the written audio was heard")
+        XCTAssertEqual(position, written, accuracy: 0.25)
+        XCTAssertGreaterThanOrEqual(steps, 8, "two seconds of queue were heard first")
+
+        // Supply returns: audio resumes once half a second is written again.
+        rig.executor.runNext()
+        rig.timer.fire()
+        player.drainTransportEvents()
+        XCTAssertEqual(telemetry, ["bufferingStarted"])
+        rig.executor.runNext()
+        rig.timer.fire()
+        player.drainTransportEvents()
+        XCTAssertEqual(telemetry, ["bufferingStarted", "bufferingEnded"])
+        XCTAssertEqual(player.state, .ready)
+    }
+
     func testAPlainPauseSendsNoBufferingEvent() {
         player.setItems(["a"])
         player.play()
