@@ -58,7 +58,7 @@ force it, and the per-category test at `itemFailed` pins it through the byte sou
 ## Consequences
 
 `StreamDecoderError.failed(status:)` and `StreamByteReaderError.transport(_:)` are gone (a minor bump at
-0.x); [migration-errors](../migration-errors.md) lists every change. A reader failure swallowed by a
+0.x); [migrating](../migrating.md#migrating-from-011-to-012) lists every change. A reader failure swallowed by a
 read-ahead can still be attributed to a later C failure before the next seek, which names the right
 cause in practice; a successful read cannot tell a buffered-frames return from a recovery. A seek that fails on a ladder step but lands on a fallback clears its AVERROR.
 

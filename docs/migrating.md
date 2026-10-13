@@ -6,9 +6,83 @@ not onto `Transport` first: each would write the session, state machine and adva
 page has what each app does today, where it goes, and the order of work. Paths are relative to each app's
 iOS directory (`mobile/ios` in `timusus/shuttle-podcasts`, `ios` in `timusus/shuttle2`).
 
+## Migrating from 0.11 to 0.12
+
+Paths are relative to each app's iOS directory, as above. Call sites were listed against the apps' `main`.
+
+### Changed symbols
+
+| Old | New |
+|---|---|
+| `ItemSource.duration: Int64?` (also `FFmpegItemSource`, `FakeItemSource`) | `frameCount: Int64?`, required of every conformer, no default. It counts frames, not time; a conformer still implementing `duration` fails to compile instead of reporting an unknown length |
+| `Player.hasNext`, `Player.hasPrevious` | internal; `availableCommands` reports the same facts |
+| `PlaybackSuppression.none` | `.unsuppressed` (`.none` collides with `Optional.none`) |
+| `ItemSource.release()` default no-op | required, no default; a wrapper forwards it to the source it wraps |
+| `GrowingFileListener.playerWillSeek(toMs ms: Int64, generation:)` | `playerWillSeek(to time: TimeInterval, generation:)`: seconds, like every other time in the module |
+| `GrowingFileStore.init(directory:budgetBytes:write:availableCapacity:)`, `WriteFunction` | `init(directory:budgetBytes:)`; the four-argument form and `WriteFunction` are `@_spi(Testing) public` (`@_spi(Testing) import PlaybackStreaming`), and `write` has no default there |
+| `GrowingFileByteSource: URLSessionDataDelegate` | no conformance; an internal delegate is set on each task |
+| `GrowingFileStore.budget`, `removeRetiredRunCache(applicationSupport:)` | internal; removed (the app deletes its own retired folder) |
+| `StreamDecoderError.failed(status: Int32)` | `failed(StreamFailure)`; the libav code is `failure.averror` (the real AVERROR, no longer `-1`) |
+| `StreamByteReaderError.transport(String)` | `failed(StreamFailure)`; the old string is `failure.detail` |
+| `GrowingFileByteSource` read failures, all `.transport` | `.failed` with `.network`, `.http(status:)`, `.unsupported` (not audio), `.malformed` (out of range) or `.io` (disk) |
+| `FileByteReader` open and read failures | `.failed` with `.io` |
+| `GrowingFileConnectionPolicy.untrustedCertificateReason` as the `.transport` reason | the `detail` of a `.network` `.failed`; the value is unchanged |
+| C `stream_decoder_open_with(..., int *status)` | gains a trailing `int *averror`, set when libav failed |
+| `PlayerEvent` without telemetry | adds `firstAudioRendered`, `bufferingStarted`, `bufferingEnded`; an exhaustive `switch` needs them |
+| `isReadyForMoreData` on the output | removed |
+| `AudioProcessingError` | three new cases: `inPlaceStageChangedFormat`, `misreportedFrames`, `endedWithInputPending` |
+
+New: `PlaybackErrorCategory` (`io`, `network`, `http(status:)`, `malformed`, `unsupported`, `cancelled`,
+`internal`); `StreamFailure` (`category`, `detail`, `averror`, `urlError`); `StreamDecoderError.category`
+and `StreamByteReaderError.category` (`cancelled` is `.cancelled`; `unavailable` and `unseekable` are
+`.unsupported`; `interrupted` and `invalidState` are `.internal`); `FFmpegStreamDecoder.error`, the failure
+behind a nil `nextChunk()` with `endReason == .failure`; `PlaybackError.category` (`.internal` for an error
+the library did not raise; `PlaybackPlayer` now depends on `PlaybackDecode`); C `stream_decoder_last_averror`.
+`.network` includes the permanent errors (certificate, bad URL, ATS); `urlError` tells them from a lost
+connection. [ADR-0029](decisions/0029-structured-errors.md) and [usage](usage.md#handle-errors) have the rules.
+
+The cases `cancelled`, `interrupted`, `unseekable`, `invalidState` and `unavailable` keep their meaning, so an
+app's reader that throws them needs no change. Any other error an app's reader throws now reaches the
+caller as `.failed` with `.io`, or `.network` for a `URLError`, instead of `.failed(status: -1)`.
+
+Kept on purpose: `StreamAudioFormat` (what the container says about the source) and `PCMFormat` (the decoded
+output) stay apart; `seekToNext()` / `seekToPrevious()` beside `skipToNext()` mirror media3; both
+`FFmpegStreamDecoder.read(into:maxFrames:)` and `nextChunk()` are in use. `pauseAtEndOfItem` keeps its name.
+Public although only tests use them: `GrowingFileByteSource.idleTimeoutSeconds`, `throughputWindowSeconds`,
+`recheckSeconds`.
+
+### Shuttle Podcasts (`mobile/ios/`)
+
+- `ShuttlePodcasts/Platform/Audio/Playback/GrowingFileItemSource.swift:54`: `var duration: Int64? { lock.withLock { opened?.source.duration } }`
+  becomes `var frameCount: Int64? { lock.withLock { opened?.source.frameCount } }`.
+- `ShuttlePodcastsTests/GrowingFileItemSourceTests.swift:160` (`RecordingSource`) and `:178` (`FailingSource`),
+  `ShuttlePodcastsTests/PlayerProcessorChainTests.swift:257` (`GappedSource`): `duration` becomes `frameCount`.
+- `playerWillSeek` divides by 1000 no longer: implementations at `ShuttlePodcasts/Platform/Audio/Spine/GrowingFileSpineCapture.swift:125`
+  and `GrowingFileSpineSource.swift:114` (doc at :49); the call at `Platform/Audio/Playback/GrowingFileItemSource.swift:89`;
+  `Playback/Sources/Playback/StreamingPCMReader.swift:357` passes `target` instead of `Int64(target * 1000)` (doc at :334).
+  Tests: `Playback/Tests/PlaybackTests/StreamingPCMReaderTests.swift:80`, `ShuttlePodcastsTests/GrowingFileItemSourceTests.swift:139`,
+  `PlayerSkipTests.swift:215`, `GrowingFileSpineSourceTests.swift:246,248,256,264,271,494,514,563`.
+- Errors compile unchanged (nothing matches `.failed(status:)` or `.transport`). Optional adoption:
+  `Platform/Audio/Playback/PlayerStateBridge.swift:138, 165-169` can branch on `error.category` for retry versus
+  skip instead of reading `error.underlying`; `StreamingPCMReader.swift:97, 318, 444, 462` and
+  `AVAudioEnginePlaybackController+Producing.swift:107-108, 405, 426` can log `decoder.error` on `.failure`.
+  `GrowingFileItemSource.swift:72-75, 113, 131` and `StreamingPCMReaderTests.swift:111` match unchanged cases.
+- `GrowingFileItemSource` must implement `release()`, forwarding it to the wrapped `FFmpegItemSource`.
+- No `PlaybackSuppression.none`, `hasNext` or `hasPrevious` use.
+
+### Shuttle2 (`ios/`)
+
+- No `ItemSource` conformer on `main`, no use of `PlaybackSuppression`, `hasNext`/`hasPrevious` or `playerWillSeek`.
+  `Playback/Sources/S2Playback/Streaming/StreamStore.swift:13` calls `GrowingFileStore(directory:budgetBytes:)`, which is unchanged.
+- Errors compile unchanged. `Playback/Sources/S2Playback/Streaming/StreamedTrackReader.swift:8, 37, 49, 54` throws
+  `.interrupted` and lets other errors pass; those now arrive as `.failed` with `.io`, or `.network` for a
+  `URLError`. To keep an HTTP status, throw `.failed(StreamFailure(.http(status:), ...))`.
+  `Engine/TrackPCMSource.swift:155-184` catches `cancelled`, `interrupted`, `unseekable`; a catch-all there can branch on `category`.
+  `FFmpegMusicDecodeTests.swift:168, 186` and `StreamedPlaybackTests.swift:249` match unchanged cases.
+
 ## Prerequisites
 
-- **Pin the 0.11.0 tag or later**, never a branch. Add `PlaybackPlayer` and `PlaybackNowPlaying` next to
+- **Pin the 0.12.0 tag or later**, never a branch. Add `PlaybackPlayer` and `PlaybackNowPlaying` next to
   `PlaybackDecode` and `PlaybackStreaming`; the test targets add `PlaybackPlayerTestSupport`.
 - **Embed `FFmpeg.framework` once**, in the app target. Both apps already do; check that the package's
   `FFmpeg` product and any FFmpeg of the app's own are not both linked.
