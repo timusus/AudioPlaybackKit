@@ -310,6 +310,16 @@ ducking you; `.longFormAudio` keeps long-form route sharing for AirPlay 2. On iO
 `AudioSessionConfiguration(category:mode:routeSharingPolicy:options:)` builds a custom one; macOS has only
 the two presets. `timePitchAlgorithm:` picks the `AVAudioTimePitchAlgorithm` for rate changes.
 
+#### AirPlay
+
+Both presets set `.playback` with `routeSharingPolicy: .longFormAudio`, and output is an
+`AVSampleBufferAudioRenderer` on an `AVSampleBufferRenderSynchronizer`, so AirPlay 2 buffered and
+multi-room playback work with no further code. The app must:
+
+- list `audio` in `UIBackgroundModes` in Info.plist, or playback stops when the app leaves the foreground;
+- show an `AVRoutePickerView` (or `MPVolumeView`'s route button) so the user can pick a speaker;
+- keep `options` free of `.mixWithOthers` and `.duckOthers` if it builds its own configuration, which do not belong with long-form route sharing.
+
 ### The list and its edits
 
 `items` is a mirror of your queue, in play order, and `currentIndex` points into it. The app owns the

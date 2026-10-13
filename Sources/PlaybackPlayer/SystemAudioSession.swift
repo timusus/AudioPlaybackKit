@@ -65,12 +65,7 @@ final class SystemAudioSession: AudioSessionControlling {
     }
 
     private nonisolated static func apply(_ configuration: AudioSessionConfiguration) throws {
-        try AVAudioSession.sharedInstance().setCategory(
-            configuration.category,
-            mode: configuration.mode,
-            policy: configuration.routeSharingPolicy,
-            options: configuration.options
-        )
+        try configuration.apply(to: AVAudioSession.sharedInstance())
     }
 
     private static func event(_ note: Notification) -> AudioSessionEvent? {

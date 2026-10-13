@@ -21,6 +21,11 @@ public struct AudioSessionConfiguration: Sendable {
         self.options = options
     }
 
+    // One call carries category, mode and policy together: the policy is only valid set with them.
+    func apply(to session: some CategorySetting) throws {
+        try session.setCategory(category, mode: mode, policy: routeSharingPolicy, options: options)
+    }
+
     /// Music: `.playback` with long-form route sharing, so the system offers AirPlay 2 and the
     /// long-form route picker.
     public static let longFormAudio = AudioSessionConfiguration()
@@ -33,6 +38,20 @@ public struct AudioSessionConfiguration: Sendable {
     public static let spokenAudio = AudioSessionConfiguration()
     #endif
 }
+
+#if os(iOS)
+/// The one `AVAudioSession` call that sets the configuration, so a test can see what reaches it.
+protocol CategorySetting {
+    func setCategory(
+        _ category: AVAudioSession.Category,
+        mode: AVAudioSession.Mode,
+        policy: AVAudioSession.RouteSharingPolicy,
+        options: AVAudioSession.CategoryOptions
+    ) throws
+}
+
+extension AVAudioSession: CategorySetting {}
+#endif
 
 /// What the session reports, on the main actor.
 @_spi(Testing) public enum AudioSessionEvent: Equatable {
