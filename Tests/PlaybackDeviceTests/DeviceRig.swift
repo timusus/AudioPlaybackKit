@@ -113,6 +113,7 @@ final class UnknownLengthSource: ItemSource, @unchecked Sendable {
         self.base = base
     }
 
+    var frameCount: Int64? { nil }
     var isSeekable: Bool { true }
     func begin(epoch: UInt64) { base.begin(epoch: epoch) }
     func open() throws -> PCMFormat { try base.open() }
