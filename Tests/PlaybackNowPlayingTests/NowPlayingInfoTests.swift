@@ -350,6 +350,7 @@ final class NowPlayingInfoTests: XCTestCase {
         rig.player.skipToNext()
         await rig.settle()
         await rig.session.artworkLoad?.value
+        await rig.waitForArtworkRequests(for: "a", count: 1)
         rig.deliverArtwork(for: "a")
         await loadA?.value
 
@@ -369,6 +370,7 @@ final class NowPlayingInfoTests: XCTestCase {
         rig.player.skipToPrevious()
         await rig.settle()
         let secondLoad = rig.session.artworkLoad
+        await rig.waitForArtworkRequests(for: "a", count: 2)
 
         rig.deliverArtwork(for: "a")
         await secondLoad?.value
@@ -443,7 +445,7 @@ final class NowPlayingInfoTests: XCTestCase {
         let first = rig.session.artworkLoad
         rig.session.refreshMetadata()
         let second = rig.session.artworkLoad
-        await Task.yield()
+        await rig.waitForArtworkRequests(for: "a", count: 2)
 
         rig.deliverArtwork(for: "a")
         await second?.value

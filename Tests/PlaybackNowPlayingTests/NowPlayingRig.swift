@@ -11,6 +11,7 @@ import PlaybackPlayerTestSupport
 import PlaybackRender
 import PlaybackNowPlayingTestSupport
 import PlaybackRenderTestSupport
+import XCTest
 @testable import PlaybackNowPlaying
 
 /// An app's policy over the player, as Shuttle2's `SessionPlayer`: everything else forwards.
@@ -65,6 +66,7 @@ final class NowPlayingRig {
     /// Titles the metadata closure returns in place of the default, as an app's edited tags.
     var retitled: [String: String] = [:]
     private var artworkWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+    private var requestWaiters: [(item: String, count: Int, continuation: CheckedContinuation<Void, Never>)] = []
     private(set) var artworks: [String: MPMediaItemArtwork] = [:]
     /// The session's clock, moved with the output's by `run`; a test moves it alone for output that starts late.
     var wall: TimeInterval = 0
@@ -133,14 +135,32 @@ final class NowPlayingRig {
         await session.settle()
     }
 
+    /// Returns once `count` held loads of `item` are waiting. A load starts in a task, so one requested
+    /// by a call need not be waiting yet when the call returns.
+    func waitForArtworkRequests(for item: String, count: Int) async {
+        guard artworkWaiters[item, default: []].count < count else { return }
+        await withCheckedContinuation { requestWaiters.append((item, count, $0)) }
+    }
+
     /// Resumes the latest held load of `item`, so loads can finish newest first.
     func deliverArtwork(for item: String) {
-        artworkWaiters[item]?.popLast()?.resume()
+        guard let waiter = artworkWaiters[item]?.popLast() else {
+            return XCTFail("No artwork load of \(item) is waiting; call waitForArtworkRequests first")
+        }
+        waiter.resume()
     }
 
     private func loadArtwork(_ item: String) async -> MPMediaItemArtwork? {
         if heldArtwork.contains(item) {
-            await withCheckedContinuation { artworkWaiters[item, default: []].append($0) }
+            await withCheckedContinuation {
+                artworkWaiters[item, default: []].append($0)
+                let waiting = artworkWaiters[item]!.count
+                requestWaiters.removeAll { request in
+                    guard request.item == item, request.count <= waiting else { return false }
+                    request.continuation.resume()
+                    return true
+                }
+            }
         }
         let artwork = MPMediaItemArtwork(boundsSize: CGSize(width: 1, height: 1)) { _ in Self.image() }
         artworks[item] = artwork
