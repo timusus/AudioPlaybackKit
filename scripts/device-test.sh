@@ -8,6 +8,7 @@
 #
 # On a phone it also installs the Interruptor app, which RealCallTests drives for a real CallKit
 # call. The signing team is DEVELOPMENT_TEAM, else read from the keychain; it is never committed.
+# ASC_API_KEY_PATH, ASC_KEY_ID and ASC_ISSUER_ID (an App Store Connect key) sign when Xcode has no Apple ID.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -64,7 +65,12 @@ if [ -z "$team" ]; then
 fi
 
 build=(-project "$project" -scheme PlaybackDeviceTests -derivedDataPath "$derived" -destination "id=$udid"
-  -allowProvisioningUpdates "DEVELOPMENT_TEAM=$team")
+  -allowProvisioningUpdates -allowProvisioningDeviceRegistration "DEVELOPMENT_TEAM=$team")
+# With no Apple ID in Xcode, an App Store Connect API key lets xcodebuild register the phone and mint profiles.
+if [ -n "${ASC_API_KEY_PATH:-}" ]; then
+  build+=(-authenticationKeyPath "$ASC_API_KEY_PATH" -authenticationKeyID "${ASC_KEY_ID:?}"
+    -authenticationKeyIssuerID "${ASC_ISSUER_ID:?}")
+fi
 lease -- xcodebuild build-for-testing "${build[@]}" -quiet
 lease --class device -- xcrun devicectl device install app --device "$udid" --quiet "$derived/Build/Products/Debug-iphoneos/Interruptor.app"
 check_unlocked
