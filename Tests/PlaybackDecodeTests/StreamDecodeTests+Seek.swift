@@ -182,6 +182,24 @@ extension StreamDecodeTests {
         }
     }
 
+    /// **After a partial read, a seek to the declared end lands on that duration and plays nothing.**
+    func testASeekToTheEndAfterAPartialReadKeepsTheDuration() throws {
+        try skipUnlessAvailable()
+        for name in Fixture.all {
+            let decoder = FFmpegStreamDecoder(reader: try FileByteReader(url: try Fixture.url(name)))
+            let format = try decoder.open()
+            let duration = try XCTUnwrap(format.duration, name)
+            var frames = 0
+            while frames < 100_000, let chunk = decoder.nextChunk() { frames += chunk.count / format.channelCount }
+            XCTAssertGreaterThanOrEqual(frames, 100_000, name)
+
+            let landed = try decoder.seek(toSeconds: duration)
+            XCTAssertEqual(landed, duration, accuracy: 0.05, "\(name): seek to the end landed \(landed)s of \(duration)s")
+            XCTAssertTrue(decodeAll(decoder).isEmpty, "\(name): PCM after a seek to the end")
+            XCTAssertEqual(decoder.endReason, .eof, name)
+        }
+    }
+
     /// **A frame with no timestamp after a seek is timed from where the seek went.**
     ///
     /// The pre-roll before a seek's target is dropped by the frames' timestamps. A frame with none
