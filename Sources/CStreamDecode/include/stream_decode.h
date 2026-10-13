@@ -101,7 +101,7 @@ typedef struct {
 /**
  * Open `callbacks` as an audio stream within `options`' probe budget (NULL takes the defaults).
  * Returns a handle on success and writes `info`; returns NULL on failure and writes the reason to
- * `status`. A larger budget buys more container analysis (better stream info for unusual files) at
+ * `status` and the libav error behind it, or 0, to `averror` (either may be NULL). A larger budget buys more container analysis (better stream info for unusual files) at
  * the cost of bytes read before the first frame.
  *
  * A failed open is ALWAYS a failure, never silence: a caller can fall back to another player on
@@ -112,7 +112,8 @@ StreamDecoder *stream_decoder_open_with(const StreamDecodeCallbacks *callbacks,
                                         void *opaque,
                                         const StreamDecodeOptions *options,
                                         StreamAudioInfo *info,
-                                        int *status);
+                                        int *status,
+                                        int *averror);
 
 /**
  * Seek to `seconds` and report where the stream actually landed in `landed_seconds`.
@@ -135,6 +136,10 @@ int stream_decoder_seek(StreamDecoder *decoder, double seconds, double *landed_s
 /** Whether the last seek that placed the demuxer landed sample-exact; 0 for a VBR MP3 placed by
  * its Xing TOC or bitrate estimate. Meaningful only after a seek returned OK or EOF. */
 int stream_decoder_last_seek_exact(const StreamDecoder *decoder);
+
+/** The libav error (`AVERROR`) behind the last read or seek that failed, or 0 when it reported
+ *  none: the status says what failed, this says what libav saw. */
+int stream_decoder_last_averror(const StreamDecoder *decoder);
 
 /**
  * Fill `out` with up to `max_frames` frames of interleaved float32 in [-1, 1] at the output rate

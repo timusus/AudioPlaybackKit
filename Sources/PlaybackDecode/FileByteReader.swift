@@ -25,11 +25,13 @@ public final class FileByteReader: StreamByteReader {
             guard let path else { return -1 }
             return Foundation.open(path, O_RDONLY)
         }
-        guard fd >= 0 else { throw StreamByteReaderError.transport("open failed: \(url.lastPathComponent)") }
+        guard fd >= 0 else {
+            throw StreamByteReaderError.failed(StreamFailure(.io, detail: "open failed: \(url.lastPathComponent) errno=\(errno)"))
+        }
         var info = stat()
         guard fstat(fd, &info) == 0 else {
             Foundation.close(fd)
-            throw StreamByteReaderError.transport("fstat failed: \(url.lastPathComponent)")
+            throw StreamByteReaderError.failed(StreamFailure(.io, detail: "fstat failed: \(url.lastPathComponent)"))
         }
         descriptor = fd
         length = Int64(info.st_size)
@@ -55,7 +57,7 @@ public final class FileByteReader: StreamByteReader {
         if interrupted { throw StreamByteReaderError.interrupted }
         guard maxLength > 0 else { return 0 }
         let n = pread(descriptor, buffer, maxLength, off_t(offset))
-        if n < 0 { throw StreamByteReaderError.transport("pread failed at \(offset)") }
+        if n < 0 { throw StreamByteReaderError.failed(StreamFailure(.io, detail: "pread failed at \(offset) errno=\(errno)")) }
         offset += Int64(n)
         return n
     }

@@ -1,4 +1,5 @@
 import Foundation
+import PlaybackDecode
 import Testing
 
 @testable import PlaybackStreaming
@@ -57,6 +58,6 @@ extension GrowingFileDownloadTests {
         #expect(h.read() == .park)
         h.clock.advance(by: 0.25)
         #expect(h.requests.count == 3)
-        #expect(h.read() == .fail(.transport("no_response_s=1")))
+        #expect(h.read() == .fail(.failed(StreamFailure(.network, detail: "no_response_s=1"))))
     }
 }

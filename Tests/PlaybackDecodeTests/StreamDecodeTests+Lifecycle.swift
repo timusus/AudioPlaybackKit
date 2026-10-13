@@ -191,7 +191,9 @@ extension StreamDecodeTests {
             _ = try decoder.seek(toSeconds: 25)
             XCTFail("a seek into a broken body succeeded with endReason \(decoder.endReason)")
         } catch {
-            XCTAssertEqual(error as? StreamDecoderError, .failed(status: Int32(STREAM_DECODE_ERR_SEEK.rawValue)))
+            guard case let .failed(failure)? = error as? StreamDecoderError else { return XCTFail("\(error)") }
+            XCTAssertEqual(failure.category, .network, "the broken body is the reader's failure, not the demuxer's")
+            XCTAssertEqual(failure.urlError?.code, .networkConnectionLost)
         }
         XCTAssertNotEqual(decoder.endReason, .eof, "a truncated body read as the end of the stream")
     }

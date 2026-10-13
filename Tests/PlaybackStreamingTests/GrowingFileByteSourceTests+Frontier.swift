@@ -344,8 +344,9 @@ extension GrowingFileByteSourceTests {
         source.certificateRejected(task: try XCTUnwrap(source.currentTask))
 
         XCTAssertTrue(pending.finished(within: 5), "a refused certificate fails the read without waiting out a retry")
-        guard case .transport(let reason)? = readerError(pending.result) else { return XCTFail("\(pending.result)") }
-        XCTAssertEqual(reason, GrowingFileConnectionPolicy.untrustedCertificateReason)
+        guard case .failed(let failure)? = readerError(pending.result) else { return XCTFail("\(pending.result)") }
+        XCTAssertEqual(failure.category, .network)
+        XCTAssertEqual(failure.detail, GrowingFileConnectionPolicy.untrustedCertificateReason)
         clock.advance(by: GrowingFileDownload.Retry.linkWindowSeconds)
         XCTAssertEqual(source.requestsSentForTest, 1, "no retry")
     }

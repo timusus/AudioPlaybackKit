@@ -130,8 +130,9 @@ final class ForwardOnlySourceTests: XCTestCase {
     }
 
     /// A connection that drops inside the leading ID3 tag, while the probe reads past it or seeks
-    /// over it, fails the open as I/O: the caller retries rather than taking the file as unsupported.
-    func testATransportErrorInsideTheID3TagFailsTheOpenAsIO() throws {
+    /// over it, fails the open as the reader's failure: the caller retries rather than taking the
+    /// file as unsupported.
+    func testATransportErrorInsideTheID3TagFailsTheOpenAsTheReadersFailure() throws {
         let tagged = Self.id3Tag(size: 3000) + (try Data(contentsOf: fixtureURL("tone.mp3")))
         let reading = ForwardOnlyByteReader(tagged, refusesAllSeeks: true)
         reading.outageFrom = 1000
@@ -139,7 +140,9 @@ final class ForwardOnlySourceTests: XCTestCase {
         seeking.seeksFail = true
         for (name, source) in [("read", reading), ("seek", seeking)] {
             XCTAssertThrowsError(try FFmpegStreamDecoder(reader: source).open(), name) { error in
-                XCTAssertEqual(error as? StreamDecoderError, .failed(status: Int32(STREAM_DECODE_ERR_IO.rawValue)), name)
+                guard case let .failed(failure)? = error as? StreamDecoderError else { return XCTFail("\(name): \(error)") }
+                XCTAssertEqual(failure.category, .network, name)
+                XCTAssertEqual(failure.urlError?.code, .networkConnectionLost, name)
             }
         }
     }

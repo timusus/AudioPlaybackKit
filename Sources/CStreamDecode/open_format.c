@@ -150,6 +150,7 @@ int sd_open_format(StreamDecoder *d, const StreamDecodeOptions *options) {
     int opened = avformat_open_input(&d->fmt, NULL, NULL, NULL);
     if (opened < 0) {
         d->fmt = NULL;   /* avformat_open_input freed it; the AVIO context is still ours */
+        d->last_averror = opened;
         if (d->cancelled) return STREAM_DECODE_ERR_CANCELLED;
         /* Not "unsupported": the caller answers that with another player, and an interrupt is
          * only a seek arriving while the stream opens. */

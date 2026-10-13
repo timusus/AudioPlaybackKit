@@ -1,4 +1,5 @@
 import Foundation
+import PlaybackDecode
 import Testing
 
 @testable import PlaybackStreaming
@@ -75,7 +76,7 @@ struct GrowingFileDownloadRedirectTests {
         h.read()
         #expect(h.respond(200, length: 500, mimeType: "text/html") == false)
         #expect(!h.log.contains { if case .schedule(.retry, _) = $0 { true } else { false } })
-        #expect(h.read() == .fail(.transport("not audio: content-type=text/html")))
+        #expect(h.read() == .fail(.failed(StreamFailure(.unsupported, detail: "not audio: content-type=text/html"))))
     }
 
     @Test("a page on the resume's retry, now from the requested URL, fails the read: the retry is not repeated")
@@ -93,6 +94,6 @@ struct GrowingFileDownloadRedirectTests {
 
         h.clock.advance(by: 10)
         #expect(h.requests.count == 3, "no fourth request")
-        #expect(h.read() == .fail(.transport("not audio: content-type=text/html")))
+        #expect(h.read() == .fail(.failed(StreamFailure(.unsupported, detail: "not audio: content-type=text/html"))))
     }
 }

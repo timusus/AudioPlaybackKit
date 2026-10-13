@@ -144,8 +144,8 @@ final class GrowingFileByteSourceTests: XCTestCase {
     }
 
     func assertTransport(_ result: Result<Data, Error>, file: StaticString = #filePath, line: UInt = #line) {
-        guard case .transport? = readerError(result) else {
-            return XCTFail("expected .transport, got \(result)", file: file, line: line)
+        guard case .failed? = readerError(result) else {
+            return XCTFail("expected .failed, got \(result)", file: file, line: line)
         }
     }
 

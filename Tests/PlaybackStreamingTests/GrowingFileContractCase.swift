@@ -212,8 +212,8 @@ class GrowingFileContractCase: XCTestCase {
     func assertTransport(
         _ result: Result<Data, Error>, _ context: String, file: StaticString = #filePath, line: UInt = #line
     ) {
-        guard case .transport? = readerError(result) else {
-            return XCTFail("\(context): expected .transport, got \(result)", file: file, line: line)
+        guard case .failed? = readerError(result) else {
+            return XCTFail("\(context): expected .failed, got \(result)", file: file, line: line)
         }
     }
 

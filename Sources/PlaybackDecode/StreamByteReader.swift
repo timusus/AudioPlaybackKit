@@ -54,11 +54,22 @@ public extension StreamByteReader {
     var fetchedEnd: Int64? { nil }
 }
 
-public enum StreamByteReaderError: Error, Equatable {
+public enum StreamByteReaderError: Error, Equatable, Sendable {
     case cancelled
     /// The call was ended early by ``StreamByteReader/interrupt()``. Recoverable: unlike
     /// `cancelled` the reader may be read from again after ``StreamByteReader/clearInterrupt()``.
     case interrupted
     case unseekable
-    case transport(String)
+    /// The source could not deliver: `.io` for local storage, `.network` or `.http` for a transport,
+    /// `.unsupported` for a page served where audio should be. The decoder passes it on unchanged.
+    case failed(StreamFailure)
+
+    public var category: PlaybackErrorCategory {
+        switch self {
+        case .cancelled: .cancelled
+        case .interrupted: .internal
+        case .unseekable: .unsupported
+        case let .failed(failure): failure.category
+        }
+    }
 }

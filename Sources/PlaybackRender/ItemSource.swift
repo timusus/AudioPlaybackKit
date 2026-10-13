@@ -117,8 +117,8 @@ public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
         case .eof: return nil
         case .cancelled: throw StreamDecoderError.cancelled
         case .interrupted: throw StreamDecoderError.interrupted
-        // `nextChunk()` does not surface FFmpeg's status, so -1 stands for "unknown".
-        case .running, .failure: throw StreamDecoderError.failed(status: -1)
+        case .failure: throw decoder.error ?? StreamDecoderError.invalidState("failed with no error")
+        case .running: throw StreamDecoderError.invalidState("no chunk while running")
         }
     }
 

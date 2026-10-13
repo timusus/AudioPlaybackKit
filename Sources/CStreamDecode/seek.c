@@ -172,6 +172,7 @@ int stream_decoder_seek(StreamDecoder *decoder, double seconds, double *landed_s
     if (!decoder || !landed_seconds) return STREAM_DECODE_ERR_ARGS;
     decoder->output_fixed = 1;
     decoder->unseekable = 0;
+    decoder->last_averror = 0;
     int status = seek_to(decoder, seconds, landed_seconds);
     sd_avio_set_direct(decoder, 0);   /* a jump the seek never made must not outlive it */
     /* Only a seek that ended in a seek or I/O failure: the C code recovers from some refused

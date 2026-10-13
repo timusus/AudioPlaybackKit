@@ -1,4 +1,5 @@
 import Foundation
+import PlaybackDecode
 import Testing
 
 @testable import PlaybackStreaming
@@ -74,6 +75,6 @@ extension GrowingFileDownloadTests {
         h.read()
         #expect(h.respond(204, length: 0, mimeType: "application/octet-stream"))
         h.end()
-        #expect(h.read() == .fail(.transport("not audio: body of 0 bytes")))
+        #expect(h.read() == .fail(.failed(StreamFailure(.unsupported, detail: "not audio: body of 0 bytes"))))
     }
 }

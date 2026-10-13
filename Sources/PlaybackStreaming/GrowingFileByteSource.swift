@@ -19,7 +19,7 @@ import PlaybackDecode
 ///   than ``GrowingFileDownload/unknownLengthWindowBytes`` behind the reader is dropped and its
 ///   blocks punched out.
 /// - A dropped connection, a silent body or a refused status is tried again after the backoff
-///   ``GrowingFileDownload/Retry`` decides, until it says the read fails with `.transport`: a few
+///   ``GrowingFileDownload/Retry`` decides, until it says the read fails with `.failed(_:)`: a few
 ///   attempts for failures the host answered, the link window for ones nothing answered. A request
 ///   nothing answers in time (``requestTimeoutSeconds`` for a transaction's first, the shorter
 ///   ``retryRequestTimeoutSeconds`` for a retry, neither past the link window's end) is ended as
@@ -331,7 +331,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
             performUnlocked(runLocked(step.effects))
             switch step.action {
             case .serve(let fileOffset, let count, let landed):
-                guard let file else { throw StreamByteReaderError.transport("no file") }
+                guard let file else { throw StreamByteReaderError.failed(StreamFailure(.io, detail: "no file")) }
                 condition.unlock()
                 if let landed { onEvent?(.seekLanded(seekGeneration: landed)) }
                 var got: Int
@@ -339,7 +339,9 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
                     got = pread(file.descriptor, buffer, count, off_t(fileOffset))
                 } while got < 0 && errno == EINTR
                 condition.lock()
-                guard got > 0 else { throw StreamByteReaderError.transport("pread failed at \(fileOffset)") }
+                guard got > 0 else {
+                    throw StreamByteReaderError.failed(StreamFailure(.io, detail: "pread failed at \(fileOffset) errno=\(errno)"))
+                }
                 machine.advance(by: got)
                 return got
             case .endOfStream(let landed):

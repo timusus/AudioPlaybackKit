@@ -279,7 +279,7 @@ struct GrowingFileDownloadTests {
         }
         #expect(h.requests.count == 4)
         #expect(h.respond(503) == false)
-        let failed = GrowingFileDownload.ReadStep.Action.fail(.transport("status=503 content-range=-"))
+        let failed = GrowingFileDownload.ReadStep.Action.fail(.failed(StreamFailure(.http(status: 503), detail: "status=503 content-range=-")))
         #expect(h.read() == failed)
         #expect(h.read() == failed, "no transaction nobody asked for")
         #expect(h.opens == 4)
@@ -357,7 +357,14 @@ struct GrowingFileDownloadTests {
         #expect(h.read() == .endOfStream(landed: nil), "nothing is owed at the total length")
 
         // The end read changed nothing: a byte below the total is still owed, and fails.
-        let failed = GrowingFileDownload.ReadStep.Action.fail(.transport(GrowingFileConnectionPolicy.untrustedCertificateReason))
+        let failed = GrowingFileDownload.ReadStep.Action.fail(
+            .failed(
+                StreamFailure(
+                    .network, detail: GrowingFileConnectionPolicy.untrustedCertificateReason,
+                    urlError: URLError(.serverCertificateUntrusted)
+                )
+            )
+        )
         try? h.machine.seek(to: 9999)
         #expect(h.read() == failed)
     }

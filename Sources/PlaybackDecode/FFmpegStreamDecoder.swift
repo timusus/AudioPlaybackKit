@@ -59,8 +59,9 @@ public enum StreamDecoderError: Error, Equatable, Sendable, CustomStringConverti
     case unavailable
     /// `open()` was called twice, or a read/seek was asked for before `open()`.
     case invalidState(String)
-    /// FFmpeg refused the bytes. `status` is a `StreamDecodeStatus`.
-    case failed(status: Int32)
+    /// The bytes could not be decoded, or the reader could not deliver them: a reader's own
+    /// ``StreamByteReaderError/failed(_:)`` arrives here unchanged, with the AVERROR it caused.
+    case failed(StreamFailure)
     /// The reader was cancelled while the decoder was waiting on it.
     case cancelled
     /// The call was ended early by ``FFmpegStreamDecoder/interrupt()`` so the caller could seek.
@@ -77,10 +78,19 @@ public enum StreamDecoderError: Error, Equatable, Sendable, CustomStringConverti
         switch self {
         case .unavailable: return "no streaming decode path in this build"
         case let .invalidState(why): return "streaming decoder: \(why)"
-        case let .failed(status): return "streaming decode failed, status \(status)"
+        case let .failed(failure): return "streaming decode failed: \(failure)"
         case .cancelled: return "streaming decode cancelled"
         case .interrupted: return "streaming decode interrupted for a seek"
         case .unseekable: return "streaming decode: the source cannot seek"
+        }
+    }
+
+    public var category: PlaybackErrorCategory {
+        switch self {
+        case .unavailable, .unseekable: .unsupported
+        case .invalidState, .interrupted: .internal
+        case let .failed(failure): failure.category
+        case .cancelled: .cancelled
         }
     }
 }
@@ -126,11 +136,6 @@ public final class FFmpegStreamDecoder {
     private let box: ReaderBox
     private var format: StreamAudioFormat?
     private var reason: EndReason = .running
-    /// What a seek reports once the reader has refused one (a forward-only source): the decoder is
-    /// terminal, so it refuses without touching the demuxer (a forward seek could otherwise
-    /// "succeed" over a broken one). A failed read, or a seek that failed on a read or I/O error,
-    /// sets no failure here: the source may come back, and a seek is how a player resumes the same
-    /// decoder once it has.
     private var failure: StreamDecoderError?
     /// Whether the most recent seek landed sample-exact. False only after a VBR MP3 seek placed by
     /// Xing TOC or bitrate estimate, whose end-of-file time can then be skewed; true before any
@@ -173,6 +178,10 @@ public final class FFmpegStreamDecoder {
     }
 
     public var endReason: EndReason { reason }
+
+    /// Why the decoder failed while ``endReason`` is `.failure`; nil otherwise. A pull loop that got
+    /// nil from ``nextChunk()`` throws this.
+    public var error: StreamDecoderError? { reason == .failure ? failure : nil }
 
     /// Frames of *media* handed to the caller so far, at the output rate. Media time, not wall time:
     /// position is this divided by the output rate, which is why silence a later effect drops never
@@ -219,13 +228,15 @@ public final class FFmpegStreamDecoder {
             )
             var info = StreamAudioInfo()
             var status: Int32 = 0
+            var averror: Int32 = 0
+            box.failure = nil
             let opaque = Unmanaged.passUnretained(box).toOpaque()
             var options = StreamDecodeOptions(
                 probe_bytes: probeBudget.bytes,
                 max_analyze_duration_us: Int64((probeBudget.analyzeDuration * 1_000_000).rounded()),
                 force_probe: forcesProbe ? 1 : 0
             )
-            guard let opened = stream_decoder_open_with(&callbacks, opaque, &options, &info, &status) else {
+            guard let opened = stream_decoder_open_with(&callbacks, opaque, &options, &info, &status, &averror) else {
                 // An interrupt is a seek arriving while the stream opens, not a format this build
                 // cannot play: `.failed` would send the caller to its fallback player.
                 switch status {
@@ -237,7 +248,9 @@ public final class FFmpegStreamDecoder {
                     throw StreamDecoderError.interrupted
                 default:
                     reason = .failure
-                    throw StreamDecoderError.failed(status: status)
+                    let failure = fail(status: status, averror: averror, opening: true)
+                    self.failure = failure
+                    throw failure
                 }
             }
             interruptLock.withLock {
@@ -273,13 +286,15 @@ public final class FFmpegStreamDecoder {
     /// played.
     ///
     /// A seek the reader refuses (``StreamDecoderError/unseekable``) is terminal: every later seek
-    /// rethrows it without reading. Any other failure (``StreamDecoderError/failed(status:)``, such
-    /// as a source still offline) ends this call only; the next seek reads again.
+    /// rethrows it without reading, and without touching the demuxer, which a forward seek could
+    /// otherwise "succeed" over. Any other failure (``StreamDecoderError/failed(_:)``, such as a
+    /// source still offline) ends this call only; the next seek reads again, as a player resumes the
+    /// same decoder once the source is back.
     @discardableResult
     public func seek(toSeconds seconds: TimeInterval) throws -> TimeInterval {
         #if canImport(CStreamDecode)
             guard let handle else { throw StreamDecoderError.invalidState("not open") }
-            if reason == .failure, let failure { throw failure }
+            if reason == .failure, failure == .unseekable { throw StreamDecoderError.unseekable }
             // The seek is the answer to an interruption, so both sides of it are cleared before
             // anything reads: leaving either latched would make one interrupted read permanent.
             // Not one aimed at this generation, though: that is meant for this seek, so it is raised
@@ -293,6 +308,7 @@ public final class FFmpegStreamDecoder {
                 }
             }
             var landed: Double = 0
+            box.failure = nil
             let status = stream_decoder_seek(handle, seconds, &landed)
             switch status {
             case Int32(STREAM_DECODE_OK.rawValue):
@@ -319,7 +335,9 @@ public final class FFmpegStreamDecoder {
                 // Not latched: a source still offline fails the seek, and the next seek, once it
                 // is back, must read again rather than rethrow.
                 reason = .failure
-                throw StreamDecoderError.failed(status: status)
+                let failure = fail(status: status, averror: stream_decoder_last_averror(handle), opening: false)
+                self.failure = failure
+                throw failure
             }
         #else
             throw StreamDecoderError.unavailable
@@ -354,7 +372,7 @@ public final class FFmpegStreamDecoder {
             case Int32(STREAM_DECODE_ERR_ARGS.rawValue):
                 throw StreamDecoderError.invalidState("output format set after the first read or seek")
             default:
-                throw StreamDecoderError.failed(status: status)
+                throw fail(status: status, averror: 0, opening: false)
             }
         #else
             throw StreamDecoderError.unavailable
@@ -426,12 +444,42 @@ public final class FFmpegStreamDecoder {
                 case Int32(STREAM_DECODE_EOF.rawValue): reason = .eof
                 case Int32(STREAM_DECODE_ERR_CANCELLED.rawValue): reason = .cancelled
                 case Int32(STREAM_DECODE_ERR_INTERRUPTED.rawValue): reason = .interrupted
-                default: reason = .failure
+                default:
+                    reason = .failure
+                    failure = fail(status: status, averror: stream_decoder_last_averror(handle), opening: false)
                 }
                 return 0
             }
             framesRead += Int64(frames)
             return Int(frames)
+        }
+
+        /// The one mapping from a failed C call to an error. A reader failure during the call is the
+        /// cause, whatever status it surfaced as (a dropped connection mid-probe reads as "not a
+        /// container"); without one, the status says whether the bytes were damaged or unplayable.
+        private func fail(status: Int32, averror: Int32, opening: Bool) -> StreamDecoderError {
+            let averror = averror == 0 ? nil : averror
+            if var failure = box.failure {
+                failure.averror = averror
+                return .failed(failure)
+            }
+            let category: PlaybackErrorCategory
+            let detail: String
+            switch UInt32(bitPattern: status) {
+            case STREAM_DECODE_ERR_OPEN.rawValue: (category, detail) = (.unsupported, "no demuxer recognised the stream")
+            case STREAM_DECODE_ERR_NO_AUDIO.rawValue: (category, detail) = (.unsupported, "no audio stream")
+            // At open the codec is missing or refused the stream's parameters; later it is a run of
+            // undecodable frames.
+            case STREAM_DECODE_ERR_DECODER.rawValue where opening: (category, detail) = (.unsupported, "no decoder for the codec")
+            case STREAM_DECODE_ERR_DECODER.rawValue: (category, detail) = (.malformed, "frames the codec cannot decode")
+            case STREAM_DECODE_ERR_RESAMPLE.rawValue: (category, detail) = (.unsupported, "cannot convert to the output format")
+            // The reader delivered, so a demuxer read error is the bytes'.
+            case STREAM_DECODE_ERR_IO.rawValue: (category, detail) = (.malformed, "the demuxer could not read a packet")
+            case STREAM_DECODE_ERR_SEEK.rawValue: (category, detail) = (.malformed, "the demuxer could not seek")
+            case STREAM_DECODE_ERR_ALLOC.rawValue: (category, detail) = (.internal, "out of memory")
+            default: (category, detail) = (.internal, "status \(status)")
+            }
+            return .failed(StreamFailure(category, detail: detail, averror: averror))
         }
     #endif
 
@@ -496,6 +544,9 @@ public final class FFmpegStreamDecoder {
 /// class to recover from their `void *` — a Swift closure with captured state cannot be one.
 private final class ReaderBox {
     private let reader: StreamByteReader
+    /// The reader's last failure, which C sees only as `STREAM_READ_ERROR`. libavformat may read
+    /// ahead and surface it a call later, so only an open or a seek, which restart reading, clear it.
+    var failure: StreamFailure?
 
     init(reader: StreamByteReader) { self.reader = reader }
 
@@ -518,7 +569,7 @@ private final class ReaderBox {
         } catch StreamByteReaderError.interrupted {
             return Int32(STREAM_READ_INTERRUPTED)
         } catch {
-            return Int32(STREAM_READ_ERROR)
+            return record(error)
         }
     }
 
@@ -533,8 +584,20 @@ private final class ReaderBox {
         } catch StreamByteReaderError.unseekable {
             return Int32(STREAM_READ_UNSEEKABLE)
         } catch {
-            return Int32(STREAM_READ_ERROR)
+            return record(error)
         }
+    }
+
+    /// An app's reader may throw its own errors: a `URLError` counts as the network's, any other as
+    /// local I/O.
+    private func record(_ error: Error) -> Int32 {
+        switch error {
+        case let StreamByteReaderError.failed(failure): self.failure = failure
+        case let error as StreamByteReaderError: failure = StreamFailure(error.category, detail: "\(error)")
+        case let error as URLError: failure = StreamFailure(.network, detail: "\(error.code.rawValue)", urlError: error)
+        default: failure = StreamFailure(.io, detail: "\(error)")
+        }
+        return Int32(STREAM_READ_ERROR)
     }
 
     func size() -> Int64 {

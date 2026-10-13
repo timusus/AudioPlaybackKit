@@ -89,7 +89,10 @@ int sd_convert_through_swr(StreamDecoder *d, AVFrame *frame) {
     int converted = swr_convert(d->swr, &out, out_samples,
                                 frame ? (const uint8_t **)frame->extended_data : NULL, in_samples);
     /* Dropping the frame quietly would be a gap in the audio that reports nothing wrong. */
-    if (converted < 0) return converted == AVERROR(ENOMEM) ? STREAM_DECODE_ERR_ALLOC : STREAM_DECODE_ERR_RESAMPLE;
+    if (converted < 0) {
+        d->last_averror = converted;
+        return converted == AVERROR(ENOMEM) ? STREAM_DECODE_ERR_ALLOC : STREAM_DECODE_ERR_RESAMPLE;
+    }
     d->pending_frames += converted;
     return STREAM_DECODE_OK;
 }

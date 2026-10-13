@@ -51,7 +51,7 @@ extension GrowingFileByteSourceTests {
                     if n == 0 { break }
                     got.append(contentsOf: buffer[0..<n])
                 }
-            } catch StreamByteReaderError.transport {
+            } catch StreamByteReaderError.failed {
                 // The retries are spent.
             }
             return got

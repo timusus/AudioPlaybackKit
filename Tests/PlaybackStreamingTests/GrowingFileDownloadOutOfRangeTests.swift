@@ -1,4 +1,5 @@
 import Foundation
+import PlaybackDecode
 import Testing
 
 @testable import PlaybackStreaming
@@ -8,11 +9,12 @@ import Testing
 extension GrowingFileDownloadTests {
 
     private static func failsOutOfRangeOnce(_ h: Harness, _ action: GrowingFileDownload.ReadStep.Action) {
-        guard case .fail(.transport(let reason)) = action else {
+        guard case .fail(.failed(let failure)) = action else {
             Issue.record("\(action) is no failure")
             return
         }
-        #expect(reason.hasPrefix("out_of_range"), "\(reason)")
+        #expect(failure.category == .malformed, "\(failure)")
+        #expect(failure.detail.hasPrefix("out_of_range"), "\(failure)")
         h.clock.advance(by: 60)
         #expect(h.requests.count == 1, "no retry")
     }

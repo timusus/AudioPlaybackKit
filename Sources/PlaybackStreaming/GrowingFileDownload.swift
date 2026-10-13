@@ -51,10 +51,10 @@ struct GrowingFileDownload {
     /// A parked read's recheck is scheduled; one at a time however often the read wakes.
     private var recheckPending = false
     /// Why the current transaction cannot deliver more; a read at its frontier throws it.
-    private var failure: String?
+    private var failure: StreamFailure?
     /// The failure a read threw, until the next ``seek(to:)`` or ``willSeek(generation:)``: a read
     /// after the throw throws it again instead of opening a transaction nobody asked for.
-    private var stickyFailure: String?
+    private var stickyFailure: StreamFailure?
     /// The resource's length as the last accepted response gave it: what ``totalLength`` and the
     /// snapshot answer once a failed read has dropped the transaction that knew it.
     private var lastKnownTotalLength: Int64?
@@ -182,8 +182,8 @@ struct GrowingFileDownload {
         for range in file.dropBehind(offset, totalLength: totalLength) { effects.append(.punchHole(range)) }
         let run = file.ranges.run(containing: offset)
         guard current != nil || run != nil else {
-            if opened { return step(.fail(.transport(failure ?? "no transaction"))) }
-            if let reason = stickyFailure { return step(.fail(.transport(reason))) }
+            if opened { return step(.fail(.failed(failure ?? StreamFailure(.internal, detail: "no transaction")))) }
+            if let reason = stickyFailure { return step(.fail(.failed(reason))) }
             start(at: offset, seekGeneration: claimSeek())
             readOpened = true
             return step(.again)
@@ -192,7 +192,7 @@ struct GrowingFileDownload {
         // The end, learned after the seek (a host that ignored its range), is before the read:
         // media3's DefaultHttpDataSource.skipFully fails that as out of range.
         if let total = tx?.totalLength, offset > total {
-            return reportFailure("out_of_range at=\(offset) total=\(total)")
+            return reportFailure(StreamFailure(.malformed, detail: "out_of_range at=\(offset) total=\(total)"))
         }
         // A failure that deleted the file (a page, a full disk) took its frontier with it, so the
         // decoder's next read is no seek ahead: it gets the failure, unless the total length says
@@ -244,7 +244,7 @@ struct GrowingFileDownload {
     /// The failed transaction goes with the error. The error stays until a seek (Play once the
     /// player shows it seeks to where it stopped), whose read opens a fresh one there with a fresh
     /// budget; the total length stays known.
-    private mutating func reportFailure(_ reason: String) -> ReadStep {
+    private mutating func reportFailure(_ reason: StreamFailure) -> ReadStep {
         // The file's bytes stay for a seek to read; a file with none is not kept.
         retireCurrent(discardingFile: file.ranges.ranges.isEmpty)
         current = nil
@@ -252,7 +252,7 @@ struct GrowingFileDownload {
         failure = nil
         stickyFailure = reason
         retry.reset()
-        return step(.fail(.transport(reason)))
+        return step(.fail(.failed(reason)))
     }
 
     /// A served read copied `count` bytes.
@@ -290,7 +290,7 @@ struct GrowingFileDownload {
         guard let open = pendingOpen else { return [] }
         pendingOpen = nil
         guard fileReady else {
-            failure = "cannot open a partial"
+            failure = StreamFailure(.io, detail: "cannot open a partial")
             return takeEffects() + [.wake]
         }
         file.exists = true
@@ -370,7 +370,7 @@ struct GrowingFileDownload {
         current?.ended = true
         effects.append(.cancelTask)
         downloadLog.error("download: failed out_of_range \(reason, privacy: .public)")
-        failure = "out_of_range \(reason)"
+        failure = StreamFailure(.malformed, detail: "out_of_range \(reason)")
         effects.append(.wake)
     }
 
@@ -397,7 +397,7 @@ struct GrowingFileDownload {
     /// the chain's remembered end forgets it: a signed hop may have expired. `pathChanged`: the
     /// source ended the request itself for a new network path, so no answer yet is not the end's.
     private mutating func end(
-        _ reason: String, retryable: Bool, refused: Bool = false, pathChanged: Bool = false,
+        _ reason: StreamFailure, retryable: Bool, refused: Bool = false, pathChanged: Bool = false,
         quietSince: TimeInterval? = nil, now: TimeInterval
     ) {
         guard let tx = current else { return }
@@ -413,7 +413,7 @@ struct GrowingFileDownload {
             quietSince: quietSince ?? (tx.answered ? nil : tx.attemptStartedAt), now: now
         )
         guard case .retry(let backoff) = decision else {
-            downloadLog.error("download: failed gen=\(tx.generation) \(reason, privacy: .public)")
+            downloadLog.error("download: failed gen=\(tx.generation) \(reason.detail, privacy: .public)")
             if !retryable { retireCurrent(discardingFile: true) }
             failure = reason
             effects.append(.wake)
@@ -421,7 +421,7 @@ struct GrowingFileDownload {
         }
         let attempt = retry.failuresInRow
         downloadLog.error(
-            "download: retry gen=\(tx.generation) attempt=\(attempt) answered=\(tx.answered) \(reason, privacy: .public)"
+            "download: retry gen=\(tx.generation) attempt=\(attempt) answered=\(tx.answered) \(reason.detail, privacy: .public)"
         )
         effects.append(.schedule(.retry(transaction: tx.id), after: backoff))
     }
@@ -535,7 +535,7 @@ struct GrowingFileDownload {
             retryCurrent(now: now)
         case .response(let attempt):
             guard !cancelled, let tx = current, tx.attempt == attempt, !tx.answered, !tx.ended else { break }
-            end("no_response_s=\(Int(now - tx.attemptStartedAt))", retryable: true, now: now)
+            end(StreamFailure(.network, detail: "no_response_s=\(Int(now - tx.attemptStartedAt))"), retryable: true, now: now)
         case .idle(let id):
             // Ends the body once it has been silent for the idle timeout: a failure like a drop,
             // into the retry. Looks again when a chunk came in the meantime, and stops once the
@@ -552,7 +552,10 @@ struct GrowingFileDownload {
                 scheduleIdleCheck(after: GrowingFileByteSource.idleTimeoutSeconds - silent)
                 break
             }
-            end("idle_s=\(Int(silent)) at=\(tx.frontier)", retryable: true, quietSince: tx.lastByteAt, now: now)
+            end(
+                StreamFailure(.network, detail: "idle_s=\(Int(silent)) at=\(tx.frontier)"), retryable: true,
+                quietSince: tx.lastByteAt, now: now
+            )
         }
         return takeEffects()
     }
@@ -566,7 +569,7 @@ struct GrowingFileDownload {
     mutating func pathChanged(now: TimeInterval) -> [Effect] {
         guard !cancelled, let tx = current, !tx.ended, !tx.isComplete,
               tx.frontier < min(tx.totalLength ?? .max, tx.bodyEnd ?? .max) else { return [] }
-        end("path_changed at=\(tx.frontier)", retryable: true, pathChanged: true, now: now)
+        end(StreamFailure(.network, detail: "path_changed at=\(tx.frontier)"), retryable: true, pathChanged: true, now: now)
         return takeEffects()
     }
 
@@ -589,7 +592,13 @@ struct GrowingFileDownload {
     /// at once, with no retry.
     mutating func certificateRejected(attempt: Int, now: TimeInterval) -> [Effect] {
         guard !cancelled, let tx = current, tx.attempt == attempt, !tx.ended else { return [] }
-        end(GrowingFileConnectionPolicy.untrustedCertificateReason, retryable: false, now: now)
+        end(
+            StreamFailure(
+                .network, detail: GrowingFileConnectionPolicy.untrustedCertificateReason,
+                urlError: URLError(.serverCertificateUntrusted)
+            ),
+            retryable: false, now: now
+        )
         return takeEffects()
     }
 
@@ -655,14 +664,11 @@ struct GrowingFileDownload {
                 start(at: offset, seekGeneration: nil, retrying: true, discardingFile: true)
                 return false
             default:
-                end(
-                    "status=\(status) content-range=\(contentRange ?? "-")", retryable: true,
-                    refused: (400..<500).contains(status), now: now
-                )
+                end(Self.statusFailure(status, contentRange), retryable: true, refused: (400..<500).contains(status), now: now)
                 return false
             }
             if Self.isMedia(mimeType: response.mimeType) == false {
-                end("not audio: content-type=\(response.mimeType ?? "?")", retryable: tx.remembered, refused: true, now: now)
+                end(Self.notAudio("content-type=\(response.mimeType ?? "?")"), retryable: tx.remembered, refused: true, now: now)
                 return false
             }
             if tx.totalLength == nil { current?.totalLength = range?.total ?? (status == 206 ? nil : wholeLength) }
@@ -704,17 +710,14 @@ struct GrowingFileDownload {
                 current?.seekGeneration = nil
             }
         default:
-            end(
-                "status=\(status) content-range=\(contentRange ?? "-")", retryable: true,
-                refused: (400..<500).contains(status), now: now
-            )
+            end(Self.statusFailure(status, contentRange), retryable: true, refused: (400..<500).contains(status), now: now)
             return false
         }
         guard let accepted = current else { return false }
         switch Self.isMedia(mimeType: response.mimeType) {
         case false?:
             // From the remembered end of the chain, the page may be its signature expiring.
-            end("not audio: content-type=\(response.mimeType ?? "?")", retryable: accepted.remembered, refused: true, now: now)
+            end(Self.notAudio("content-type=\(response.mimeType ?? "?")"), retryable: accepted.remembered, refused: true, now: now)
             return false
         case nil: current?.sniffPending = accepted.base == 0
         case true?: break
@@ -749,6 +752,15 @@ struct GrowingFileDownload {
         return true
     }
 
+    private static func statusFailure(_ status: Int, _ contentRange: String?) -> StreamFailure {
+        StreamFailure(.http(status: status), detail: "status=\(status) content-range=\(contentRange ?? "-")")
+    }
+
+    /// A page served where audio should be: media3's `IO_INVALID_HTTP_CONTENT_TYPE`.
+    private static func notAudio(_ why: String) -> StreamFailure {
+        StreamFailure(.unsupported, detail: "not audio: \(why)")
+    }
+
     /// An accepted response to `tx`'s current request: its latency, and the startup's first answer.
     private mutating func recordResponse(_ tx: Transaction, status: Int, now: TimeInterval) {
         responseLatency = now - tx.attemptStartedAt
@@ -770,7 +782,7 @@ struct GrowingFileDownload {
         // gone out from the frontier this chunk would move, under the same transaction.
         guard let tx = current, tx.attempt == attempt, !tx.ended else { return [] }
         if let writeError {
-            end("write failed errno=\(writeError)", retryable: false, now: now)
+            end(StreamFailure(.io, detail: "write failed errno=\(writeError)"), retryable: false, now: now)
             return takeEffects()
         }
         guard overlapMatches else {
@@ -787,7 +799,7 @@ struct GrowingFileDownload {
         current?.rateAtPause = nil
         if tx.sniffPending, tx.written + placed >= Int64(GrowingFileByteSource.sniffBytes) {
             guard let bytes = head(), Self.isMedia(mimeType: nil, head: bytes) == true else {
-                end("not audio: body sniff", retryable: tx.remembered, refused: true, now: now)
+                end(Self.notAudio("body sniff"), retryable: tx.remembered, refused: true, now: now)
                 return takeEffects()
             }
             current?.sniffPending = false
@@ -824,19 +836,20 @@ struct GrowingFileDownload {
     ) -> [Effect] {
         guard !cancelled, let tx = current, tx.attempt == attempt, !tx.ended else { return [] }
         if let errorCode {
+            let urlError = errorDomain == NSURLErrorDomain ? URLError(URLError.Code(rawValue: errorCode)) : nil
             end(
-                "error=\(errorCode)", retryable: !Self.isPermanent(domain: errorDomain, code: errorCode),
-                now: now
+                StreamFailure(.network, detail: "error=\(errorCode)", urlError: urlError),
+                retryable: !Self.isPermanent(domain: errorDomain, code: errorCode), now: now
             )
             return takeEffects()
         }
         if tx.sniffPending {
-            end("not audio: body of \(tx.written) bytes", retryable: tx.remembered, refused: true, now: now)
+            end(Self.notAudio("body of \(tx.written) bytes"), retryable: tx.remembered, refused: true, now: now)
             return takeEffects()
         }
         let expectedEnd = min(tx.bodyEnd ?? .max, tx.totalLength ?? .max)
         if expectedEnd < .max, tx.frontier < expectedEnd {
-            end("short body ended=\(tx.frontier) expected=\(expectedEnd)", retryable: true, now: now)
+            end(StreamFailure(.network, detail: "short body ended=\(tx.frontier) expected=\(expectedEnd)"), retryable: true, now: now)
             return takeEffects()
         }
         current?.ended = true

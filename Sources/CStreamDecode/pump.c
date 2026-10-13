@@ -158,9 +158,9 @@ static int pump_finish(StreamDecoder *d, int64_t *skip) {
  * MAX_CONSECUTIVE_DECODE_ERRORS failures with no good frame between is garbage, not
  * damage, so that ends with an error rather than spinning to the end of the file. */
 static int pump_decode_error(StreamDecoder *d, int rc) {
-    if (rc == AVERROR(ENOMEM)) return STREAM_DECODE_ERR_ALLOC;
-    if (++d->decode_errors > MAX_CONSECUTIVE_DECODE_ERRORS) return STREAM_DECODE_ERR_DECODER;
-    return PUMP_AGAIN;
+    if (rc != AVERROR(ENOMEM) && ++d->decode_errors <= MAX_CONSECUTIVE_DECODE_ERRORS) return PUMP_AGAIN;
+    d->last_averror = rc;
+    return rc == AVERROR(ENOMEM) ? STREAM_DECODE_ERR_ALLOC : STREAM_DECODE_ERR_DECODER;
 }
 
 /* The codec wants input: the next audio packet (the held one first) to it, or the end of the
@@ -183,6 +183,7 @@ static int pump_feed_packet(StreamDecoder *d) {
             d->flushing = 1;
             return PUMP_AGAIN;
         }
+        d->last_averror = read;
         return STREAM_DECODE_ERR_IO;
     }
     /* A read that was cut short still hands back what it had: `av_get_packet` returns the

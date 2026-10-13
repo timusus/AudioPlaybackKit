@@ -22,7 +22,9 @@ StreamDecoder *stream_decoder_open_with(const StreamDecodeCallbacks *callbacks,
                                         void *opaque,
                                         const StreamDecodeOptions *options,
                                         StreamAudioInfo *info,
-                                        int *status) {
+                                        int *status,
+                                        int *averror) {
+    if (averror) *averror = 0;
     int local_status = STREAM_DECODE_ERR_ALLOC;
     if (!callbacks || !callbacks->read || !callbacks->seek || !callbacks->size || !info) {
         if (status) *status = STREAM_DECODE_ERR_ARGS;
@@ -129,6 +131,7 @@ StreamDecoder *stream_decoder_open_with(const StreamDecodeCallbacks *callbacks,
 
 fail:
     if (status) *status = local_status;
+    if (averror) *averror = d->last_averror;
     stream_decoder_close(d);
     return NULL;
 }
@@ -137,6 +140,7 @@ int stream_decoder_read(StreamDecoder *decoder, float *out, int max_frames, int 
     if (!decoder || !out || !frames || max_frames <= 0) return STREAM_DECODE_ERR_ARGS;
     *frames = 0;
     decoder->output_fixed = 1;
+    decoder->last_averror = 0;
     int channels = decoder->out_channels;
     int written = 0;
     int status = STREAM_DECODE_OK;
@@ -200,6 +204,10 @@ int64_t stream_decoder_position_bytes(const StreamDecoder *decoder) {
 
 int stream_decoder_last_seek_exact(const StreamDecoder *decoder) {
     return decoder ? decoder->landing_exact : 1;
+}
+
+int stream_decoder_last_averror(const StreamDecoder *decoder) {
+    return decoder ? decoder->last_averror : 0;
 }
 
 void stream_decoder_set_seek_budget_bytes(StreamDecoder *decoder, int64_t bytes) {

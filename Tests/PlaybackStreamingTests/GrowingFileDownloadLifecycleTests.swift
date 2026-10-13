@@ -18,7 +18,7 @@ struct GrowingFileDownloadLifecycleTests {
         h.run(h.machine.opened(fileReady: false, now: h.now))
         #expect(h.requests.isEmpty)
         let second = h.machine.read(maxLength: 1000, now: h.now)
-        #expect(second.action == .fail(.transport("cannot open a partial")))
+        #expect(second.action == .fail(.failed(StreamFailure(.io, detail: "cannot open a partial"))))
         #expect(h.machine.current == nil)
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import PlaybackDecode
 import Testing
 
 @testable import PlaybackStreaming
@@ -11,7 +12,8 @@ struct GrowingFileDownloadPermanentErrorTests {
         let h = Harness()
         #expect(h.read() == .park)
         h.end(error: code)
-        #expect(h.read() == .fail(.transport("error=\(code)")))
+        let failure = StreamFailure(.network, detail: "error=\(code)", urlError: URLError(URLError.Code(rawValue: code)))
+        #expect(h.read() == .fail(.failed(failure)))
         #expect(h.requests.count == 1)
         #expect(h.machine.retry.failuresInRow == 0)
     }
