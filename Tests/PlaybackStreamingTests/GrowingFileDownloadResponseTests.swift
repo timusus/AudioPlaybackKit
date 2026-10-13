@@ -69,10 +69,9 @@ extension GrowingFileDownloadTests {
         #expect(resumed.opens == 1, "no restart")
     }
 
-    /// media3's `HttpUtil.getContentLength` (used by DefaultHttpDataSource) warns on a `Content-Length`
-    /// that disagrees with the `Content-Range` span and takes the larger. This engine deviates on
-    /// the total: the range's own total is the resource's length and the body's header is only
-    /// what is left to send, so neither a short nor a long header changes it or fails the read.
+    /// media3's `HttpUtil.getContentLength` takes the larger of the two as the bytes left to read and
+    /// never derives a total from them; the total here comes from `Content-Range` alone, so neither a
+    /// short nor a long `Content-Length` changes it or fails the read.
     @Test("a Content-Length that disagrees with the Content-Range leaves the range's total and the read intact")
     func aContentLengthDisagreeingWithTheContentRangeKeepsTheRangesTotal() {
         for lie: Int64 in [400, 5000] {
