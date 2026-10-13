@@ -337,7 +337,7 @@ final class Sequencer: @unchecked Sendable {
 
     /// Decodes one chunk, joining first if the cursor's item has ended.
     private func step(_ jobEpoch: UInt64) {
-        guard let cursor: Cursor = lock.withLock({
+        guard let cursor = lock.withLock({ () -> Cursor? in
             guard jobEpoch == epoch, let cursor = self.cursor else { return nil }
             guard cursor.ended else { return cursor }
             // The next item was cleared after this job was queued; decoding the ended one again

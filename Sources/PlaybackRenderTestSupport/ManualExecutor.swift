@@ -16,7 +16,7 @@ public final class ManualExecutor: @unchecked Sendable {
 
     @discardableResult
     public func runNext() -> Bool {
-        guard let job = lock.withLock({ jobs.isEmpty ? nil : jobs.removeFirst() }) else { return false }
+        guard let job = lock.withLock({ () -> (@Sendable () -> Void)? in jobs.isEmpty ? nil : jobs.removeFirst() }) else { return false }
         job()
         return true
     }
