@@ -96,7 +96,7 @@ enum KnownIssues {
         // The same bug in the seek pass: the seek to 1.0 s reads past the real end and throws.
         Rule(issue: "https://github.com/timusus/AudioPlaybackKit/issues/60 (sample_mdat_too_long: unknown length ends in failure)",
              fixture: "sample_mdat_too_long.mp4", kind: .seek, switches: unknownLengthCombos,
-             messages: ["seek to 1.0 threw streaming decode failed, status 7", "seek count 4 vs 5"]),
+             messages: ["seek to 1.0 threw streaming decode failed: malformed: the demuxer could not read a packet averror=-1094995529", "seek count 4 vs 5"]),
         // Fragmented Opus in MP4 stops after 0.5 s without a length; every seek lands there.
         Rule(issue: "https://github.com/timusus/AudioPlaybackKit/issues/61 (sample_opus_fragmented: unknown length stops after 0.5 s)",
              fixture: "sample_opus_fragmented.mp4", kind: .frameCount, switches: unknownLengthCombos,

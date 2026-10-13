@@ -3,7 +3,7 @@
   "channels" : 0,
   "durationAtEofS" : 0,
   "durationS" : 0,
-  "expect" : "error:streaming decode failed, status 4",
+  "expect" : "error:streaming decode failed: unsupported: no audio stream",
   "fixture" : "sample_missing_stsd.mp4",
   "frames" : 0,
   "pcmSha256PerSecondInt16" : [
