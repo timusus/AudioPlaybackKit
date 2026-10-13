@@ -55,6 +55,8 @@ public extension ItemSource {
 
 /// `FFmpegStreamDecoder` as an item source. The decoder already trims encoder delay and padding
 /// (the gapless goldens), so its frames are the item's frames and the join adds no trim.
+///
+/// `@unchecked Sendable`: the decoder and epoch are guarded by `lock`; the rest is touched only by the executor.
 public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
     private let reader: StreamByteReader
     private let lock = NSLock()

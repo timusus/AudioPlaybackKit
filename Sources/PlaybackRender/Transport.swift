@@ -55,6 +55,8 @@ let pumpInterval: TimeInterval = 0.1
 /// Positions are seconds here and frames at the item's own rate below (ADR-0019): a start or seek
 /// becomes the nearest frame once the item's source has opened, so it stays sample-accurate
 /// (ADR-0009) and a reported position seeks back to the frame it came from.
+///
+/// `@unchecked Sendable`: mutable state is confined to its serial `queue` or guarded by a lock.
 public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private let queue = DispatchQueue(label: "PlaybackRender.Transport", qos: .userInitiated)
     private let output: any AudioOutput
