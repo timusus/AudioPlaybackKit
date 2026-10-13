@@ -40,7 +40,8 @@ before the end and the end are compared with `Goldens/<fixture>.json` (Int16 per
 frame count, seek landings, the fixture's sha256). `GOLDEN_UPDATE=1` writes a golden only if the
 fault matrix passes against it. Seeks are sample-accurate (`alignFrames` is 0 in every golden); the
 exception is a VBR MP3 seek far from a frame of known time, which lands by Xing TOC or bitrate
-estimate. A pinned finding in `KnownIssues.swift` names fixture, kind, exact fault combinations and
+estimate. With no Xing frame, every frame already read is one of known time, so a seek inside the
+read range is exact (`testXinglessVBRMP3SeeksExactlyWithinTheReadRange`). A pinned finding in `KnownIssues.swift` names fixture, kind, exact fault combinations and
 issue number under `XCTExpectFailure`: a different value, or a finding that stops happening, fails.
 A resumed decode must match the clean one per second outside the warm-ups. Bytes before the first audio
 are budgeted under every fault combination. A seek to the end lands where the clean decode ends, with an

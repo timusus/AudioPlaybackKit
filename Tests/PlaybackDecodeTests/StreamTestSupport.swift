@@ -476,6 +476,12 @@ enum GeneratedFixture {
                      source: "aevalsrc=0.3*sin(440*2*PI*t)+0.2*mod(floor(t)\\,2)*(2*random(0)-1):d=300:s=44100")
     }
 
+    /// `xingVBRMP3` without its Xing frame: no frame count and no TOC, so a time is placed by bitrate.
+    static func xinglessVBRMP3() throws -> URL {
+        try generate("vbr-no-xing-varied-300s.mp3", encoding: ["-q:a", "6", "-write_xing", "0"],
+                     source: "aevalsrc=0.3*sin(440*2*PI*t)+0.2*mod(floor(t)\\,2)*(2*random(0)-1):d=300:s=44100")
+    }
+
     private static func generate(_ name: String, encoding: [String],
                                  source: String = "sine=frequency=440:duration=1800") throws -> URL {
         let url = directory.appendingPathComponent(name)

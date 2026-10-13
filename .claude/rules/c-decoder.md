@@ -13,7 +13,8 @@ paths:
 - One seek path per format (`seek_mp3.c`, `seek_aac.c`, `seek_flac.c`, `seek_ogg.c`) behind
   `seek.c`; add a format there rather than special-casing in `stream_decode.c`.
 - A VBR MP3 seek further from a frame of known time than one seek's byte budget lands by Xing TOC or
-  bitrate estimate and is the one inexact landing.
+  bitrate estimate and is the one inexact landing; with no Xing frame, frames already read count as
+  known (`mp3_index_anchor`).
 - Any decoder change shows as a golden diff: run the conformance suite
   (`swift test --filter PlaybackDecodeConformance`) and review it. A bug found and not fixed is
   pinned in `KnownIssues.swift`, not left red.

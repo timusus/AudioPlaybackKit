@@ -136,6 +136,46 @@ extension StreamDecodeTests {
         XCTAssertNotNil(decoder.nextChunk(), "nothing decoded after the far seek")
     }
 
+    /// A VBR MP3 with no Xing frame seeks exactly within what it has already read, like media3's
+    /// `Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING`, and by estimate beyond it.
+    func testXinglessVBRMP3SeeksExactlyWithinTheReadRange() throws {
+        try skipUnlessAvailable()
+        let url = try GeneratedFixture.xinglessVBRMP3()
+        let counting = CountingByteReader(try FileByteReader(url: url))
+        let decoder = FFmpegStreamDecoder(reader: counting)
+        let format = try decoder.open()
+        let channels = format.channelCount, rate = Int(format.sampleRate), window = 4096
+
+        /* 30 s is far past the bytes a seek may decode from the first frame. */
+        let readTo = 60 * rate
+        var continuous: [Float] = []
+        while continuous.count < readTo * channels, let chunk = decoder.nextChunk() {
+            continuous.append(contentsOf: chunk)
+        }
+        XCTAssertGreaterThanOrEqual(continuous.count, readTo * channels)
+
+        func assertExact(at seconds: Int, _ label: String) throws {
+            let before = counting.bytesRead
+            let landed = try decoder.seek(toSeconds: Double(seconds))
+            XCTAssertEqual(landed, Double(seconds), accuracy: 0.5 / format.sampleRate, label)
+            var after: [Float] = []
+            while after.count < window * channels, let chunk = decoder.nextChunk() { after.append(contentsOf: chunk) }
+            XCTAssertGreaterThanOrEqual(after.count, window * channels, label)
+            XCTAssertLessThan(counting.bytesRead - before, 128 * 1024, "\(label): the seek walked the file")
+            let start = seconds * rate * channels
+            let worst = zip(after, continuous[start..<(start + window * channels)]).map { abs($0 - $1) }.max() ?? 1
+            XCTAssertLessThan(worst, 1e-4, "\(label): the audio is not the continuous decode's at \(seconds) s")
+        }
+        try assertExact(at: 30, "inside the read range")
+
+        let far = try decoder.seek(toSeconds: 250)
+        XCTAssertEqual(far, 250, accuracy: 10, "landed \(far)")
+        XCTAssertNotNil(decoder.nextChunk(), "nothing decoded after the far seek")
+
+        /* The estimate's mislabelled frames must not stand in for the read range's true ones. */
+        try assertExact(at: 45, "back inside the read range after an estimate")
+    }
+
     /// **A megabyte-sized ID3v2 tag must be stepped over, not downloaded.**
     ///
     /// `mp3_read_header` parses every APIC frame, so a tag carrying cover art is READ in full

@@ -27,5 +27,7 @@ main data. This replaced the frame-coarse landing.
 - A seek decodes a pre-roll, so it costs more than a frame-coarse seek.
 - One landing is still inexact: a VBR MP3 seek further from a frame of known time than one seek's byte
   budget lands by the Xing TOC or a bitrate estimate, because no MP3 frame carries its time (#3).
+  Without a Xing frame, the frames already read count as known (mp3dec's index, as media3's
+  `IndexSeeker`), so only a seek past the read range is estimated.
 
 Links: [contributing](../contributing.md), [architecture](../architecture.md).

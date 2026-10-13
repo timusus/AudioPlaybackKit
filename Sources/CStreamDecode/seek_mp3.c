@@ -2,8 +2,9 @@
  * seek_mp3.c — how an MP3 seeks (see seek.h).
  *
  * An MP3 frame carries no timestamp, so a seek is only as exact as the place it starts counting
- * from. In order: a frame whose time is known (the first frame, or a VBRI table entry, as media3's
- * VbriSeeker reads it) when it is in reach, else the frame a constant-bitrate stream has to have at
+ * from. In order: a frame whose time is known (the first frame, a VBRI table entry, as media3's
+ * VbriSeeker reads it, or with no tag frame one already read, as its IndexSeeker) when it is in
+ * reach, else the frame a constant-bitrate stream has to have at
  * that byte (media3's ConstantBitrateSeeker), else mp3dec's Xing TOC or bitrate estimate (media3's
  * XingSeeker), re-timed after it lands when the frame's offset says what it is. A Layer III seek's
  * pre-roll is sized from the bit reservoir and measured as it goes into the codec.
@@ -135,6 +136,9 @@ static void mp3_first_packet(StreamDecoder *d) {
         d->mp3.untagged_cbr = d->mp3.tag == MP3_TAG_NONE && mp3_prologue_is_cbr(d);
         d->mp3.frame_bytes = mp3_measure_frame_bytes(d, info_frames, info_end);
     }
+    d->mp3.timeline_exact = 1;
+    d->mp3.index_end = d->mp3.header_ok ? d->first_pkt_dts : AV_NOPTS_VALUE;
+    d->mp3.estimate_floor = INT64_MAX;
 }
 
 /* The header fields that make two frames the same stream: version, layer, bitrate, sample rate
@@ -380,6 +384,50 @@ static int mp3_cbr_frame(StreamDecoder *d, int64_t ts, int64_t *pos, int64_t *dt
     return STREAM_DECODE_OK;
 }
 
+/* ── the read range's index ──────────────────────────────────────────────── */
+
+/* A stream with no tag frame that is not placed as constant-bitrate: nothing but its frames says
+ * where a time is, so the frames already read are the only exact places to seek to. */
+static int mp3_indexes(const StreamDecoder *d) {
+    return d->mp3.header_ok && d->mp3.tag == MP3_TAG_NONE && !mp3_cbr_header(d);
+}
+
+/*
+ * The last frame at or before `ts` whose place and true time mp3dec's index holds, as media3's
+ * IndexSeeker (Mp3Extractor.FLAG_ENABLE_INDEX_SEEKING) records them; 0 when there is none.
+ *
+ * mp3dec indexes every packet it reads (AVFMT_GENERIC_INDEX), labelled with its running count, which
+ * is the truth only on a read unbroken from the first frame. After an estimated landing it labels
+ * the frames with the time asked for, and those entries stay. So only entries up to `index_end`, the
+ * unbroken read's reach, and before `estimate_floor`, the earliest label an estimate gave, count.
+ */
+static int mp3_index_anchor(const StreamDecoder *d, int64_t ts, int64_t *pos, int64_t *dts) {
+    if (!mp3_indexes(d) || d->mp3.index_end == AV_NOPTS_VALUE) return 0;
+    int64_t limit = ts < d->mp3.index_end ? ts : d->mp3.index_end;
+    if (limit >= d->mp3.estimate_floor) limit = d->mp3.estimate_floor - 1;
+    AVStream *st = d->fmt->streams[d->audio_idx];
+    int at = av_index_search_timestamp(st, limit, AVSEEK_FLAG_BACKWARD);
+    const AVIndexEntry *entry = at >= 0 ? avformat_index_get_entry(st, at) : NULL;
+    if (!entry || entry->pos < 0) return 0;
+    *pos = entry->pos;
+    *dts = entry->timestamp;
+    return 1;
+}
+
+/* Extend `index_end` by a packet that follows on from it with its true time, or lower
+ * `estimate_floor` to a packet's estimated label. */
+static void mp3_index_packet(StreamDecoder *d, const AVPacket *pkt) {
+    if (d->mp3.index_end == AV_NOPTS_VALUE || pkt->dts == AV_NOPTS_VALUE) return;
+    if (!d->mp3.timeline_exact) {
+        if (pkt->dts < d->mp3.estimate_floor) d->mp3.estimate_floor = pkt->dts;
+        return;
+    }
+    int64_t frame = av_rescale_q(d->mp3.spf, (AVRational){ 1, d->sample_rate }, d->time_base);
+    if (pkt->dts > d->mp3.index_end && pkt->dts <= d->mp3.index_end + frame && pkt->dts < d->mp3.estimate_floor) {
+        d->mp3.index_end = pkt->dts;
+    }
+}
+
 /* ── the seek strategy ───────────────────────────────────────────────────── */
 
 /*
@@ -431,7 +479,7 @@ static int64_t mp3_preroll_samples(const StreamDecoder *d) {
 static int mp3_anchor_in_reach(const StreamDecoder *d, int64_t gap) {
     int64_t samples = av_rescale_q(gap, d->time_base, (AVRational){ 1, d->sample_rate });
     if (samples <= kMaxAnchorGapSamples) return 1;
-    if (d->mp3.tag != MP3_TAG_VBR) return 0;
+    if (d->mp3.tag != MP3_TAG_VBR && !mp3_indexes(d)) return 0;
     int64_t bit_rate = d->fmt->bit_rate > 0 ? d->fmt->bit_rate
                                             : d->fmt->streams[d->audio_idx]->codecpar->bit_rate;
     if (bit_rate <= 0) return 0;
@@ -441,13 +489,15 @@ static int mp3_anchor_in_reach(const StreamDecoder *d, int64_t gap) {
 /*
  * An MP3 frame whose place and time are both known exactly is sought to directly rather than by the
  * TOC or bitrate estimate FAST_SEEK picks: the first frame (which `mp3_sync` skips when an encoder
- * cut it short, playing a seek to the start from the second), or a VBRI table entry. Only that
- * entry is trusted: mp3dec fills the index with its Xing TOC, a percent of the file per entry, whose
- * positions are not frames and whose times are not theirs.
+ * cut it short, playing a seek to the start from the second), a VBRI table entry, or, with no tag
+ * frame, a frame already read (`mp3_index_anchor`). With a Xing frame the index is not trusted:
+ * mp3dec fills it with the TOC, a percent of the file per entry, whose positions are not frames and
+ * whose times are not theirs.
  */
 static int mp3_place(StreamDecoder *d, int64_t target, SeekPlan *plan) {
     if (!d->mp3.header_ok) return STREAM_DECODE_OK;
-    if (!mp3_vbri_anchor(d, target, &plan->anchor_pos, &plan->anchor_dts)) {
+    if (!mp3_vbri_anchor(d, target, &plan->anchor_pos, &plan->anchor_dts)
+        && !mp3_index_anchor(d, target, &plan->anchor_pos, &plan->anchor_dts)) {
         plan->anchor_pos = d->first_pkt_pos;
         plan->anchor_dts = d->first_pkt_dts;
     }
@@ -499,11 +549,13 @@ static int mp3_landed(StreamDecoder *d, int anchored) {
             }
         }
     }
+    d->mp3.timeline_exact = anchored || d->landing_exact;
     d->mp3.watch = d->mp3.header_ok && d->dec->codec_id == AV_CODEC_ID_MP3;
     return STREAM_DECODE_OK;
 }
 
 static void mp3_reset(StreamDecoder *d) {
+    d->mp3.timeline_exact = 0;   /* a byte estimate never reaches `mp3_landed` */
     d->mp3.watch = 0;
     d->mp3.watch_frames = 0;
     d->mp3.watch_bytes = 0;
@@ -513,6 +565,7 @@ static void mp3_reset(StreamDecoder *d) {
 
 static void mp3_packet_fed(StreamDecoder *d, const AVPacket *pkt) {
     if (d->mp3.watch) mp3_measure_preroll(d, pkt);
+    mp3_index_packet(d, pkt);
 }
 
 static int mp3_preroll_short(const StreamDecoder *d) {
