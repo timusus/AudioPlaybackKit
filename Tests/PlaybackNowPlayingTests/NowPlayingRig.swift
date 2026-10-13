@@ -142,11 +142,13 @@ final class NowPlayingRig {
         await withCheckedContinuation { requestWaiters.append((item, count, $0)) }
     }
 
-    /// Resumes the latest held load of `item`, so loads can finish newest first.
-    func deliverArtwork(for item: String) {
-        guard let waiter = artworkWaiters[item]?.popLast() else {
+    /// Resumes the latest held load of `item`, or with `oldest` the earliest, so loads can finish in either order.
+    func deliverArtwork(for item: String, oldest: Bool = false) {
+        guard var waiters = artworkWaiters[item], !waiters.isEmpty else {
             return XCTFail("No artwork load of \(item) is waiting; call waitForArtworkRequests first")
         }
+        let waiter = oldest ? waiters.removeFirst() : waiters.removeLast()
+        artworkWaiters[item] = waiters
         waiter.resume()
     }
 

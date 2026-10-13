@@ -471,4 +471,72 @@ final class NowPlayingInfoTests: XCTestCase {
         XCTAssertNotNil(current)
         XCTAssertTrue(artwork === current)
     }
+
+    func testOnlyTheLatestOfTwoQuickRefreshesShowsItsArtwork() async {
+        await playing()
+        await rig.session.artworkLoad?.value
+        rig.heldArtwork = ["a"]
+
+        rig.session.refreshMetadata()
+        let first = rig.session.artworkLoad
+        rig.session.refreshMetadata()
+        let second = rig.session.artworkLoad
+        await rig.waitForArtworkRequests(for: "a", count: 2)
+        rig.deliverArtwork(for: "a")
+        await second?.value
+        let latest = rig.artworks["a"]
+        rig.deliverArtwork(for: "a")
+        await first?.value
+
+        let artwork: MPMediaItemArtwork? = rig.info[MPMediaItemPropertyArtwork]
+        XCTAssertNotNil(latest)
+        XCTAssertTrue(artwork === latest)
+        XCTAssertFalse(artwork === rig.artworks["a"])
+    }
+
+    func testARefreshRacingAnItemChangeShowsTheNewItem() async {
+        await playing()
+        await rig.session.artworkLoad?.value
+        rig.heldArtwork = ["a"]
+        rig.retitled["a"] = "Edited"
+
+        rig.session.refreshMetadata()
+        let refreshed = rig.session.artworkLoad
+        rig.player.skipToNext()
+        rig.base.settle()
+        rig.session.refreshMetadata()
+        await rig.session.settle()
+        await rig.session.artworkLoad?.value
+        await rig.waitForArtworkRequests(for: "a", count: 1)
+        rig.deliverArtwork(for: "a")
+        await refreshed?.value
+
+        let artwork: MPMediaItemArtwork? = rig.info[MPMediaItemPropertyArtwork]
+        XCTAssertEqual(title, "B")
+        XCTAssertNotNil(rig.artworks["b"])
+        XCTAssertTrue(artwork === rig.artworks["b"])
+    }
+
+    func testARefreshWhileTheFirstArtworkLoadsShowsTheRefreshedOne() async {
+        rig.heldArtwork = ["a"]
+        rig.player.setItems(["a", "b"])
+        await rig.settle()
+        let first = rig.session.artworkLoad
+        rig.retitled["a"] = "Edited"
+
+        rig.session.refreshMetadata()
+        let second = rig.session.artworkLoad
+        XCTAssertEqual(title, "Edited")
+        await rig.waitForArtworkRequests(for: "a", count: 2)
+        rig.deliverArtwork(for: "a", oldest: true)
+        await first?.value
+        let shownByFirst: MPMediaItemArtwork? = rig.info[MPMediaItemPropertyArtwork]
+        rig.deliverArtwork(for: "a")
+        await second?.value
+
+        let artwork: MPMediaItemArtwork? = rig.info[MPMediaItemPropertyArtwork]
+        XCTAssertNil(shownByFirst)
+        XCTAssertNotNil(artwork)
+        XCTAssertTrue(artwork === rig.artworks["a"])
+    }
 }
