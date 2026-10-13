@@ -50,8 +50,8 @@ struct GrowingFileDownloadSessionFileTests {
         #expect(h.log.last { if case .retire = $0 { true } else { false } } == .retire(discardFile: false))
     }
 
-    @Test("a full body answering a bounded request ends once its bytes close the file, and is promoted")
-    func aFullBodyEndsOnceTheFileIsWhole() throws {
+    @Test("a full body answering a bounded request is promoted once the covered bytes it re-sends are compared")
+    func aFullBodyIsPromotedOnceItsCoveredRunsAreCompared() throws {
         let h = Harness()
         try h.machine.seek(to: 6000)
         h.read()
@@ -65,11 +65,12 @@ struct GrowingFileDownloadSessionFileTests {
         // A host that ignores the bound: the whole file from byte 0.
         h.respond(200, length: 10_000)
         h.body(6000)
+        #expect(!h.machine.file.isCached, "the covered rest of the body is still to be compared")
+        #expect(!h.log.contains(.cancelTask))
+        h.body(4000)
         #expect(h.machine.file.isCached)
-        #expect(h.log.contains(.cancelTask), "the rest of the body is already on disk")
-        h.body(1000)
         #expect(h.log.filter { $0 == .promote }.count == 1)
-        #expect(h.machine.current?.written == 6000, "nothing written once the file is the cache's")
+        #expect(h.machine.current?.written == 10_000, "the compared run counts toward the frontier, as the far seam does")
     }
 
     @Test("with no known total, a range more than the window behind the reader is dropped and punched; never promoted")

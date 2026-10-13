@@ -189,6 +189,51 @@ struct GrowingFileDownloadOverlapTests {
         #expect(changed.machine.file.ranges.ranges.isEmpty)
     }
 
+    /// Covered 0..<200 000 and 500 000..<1 000 000, a hole between; a read at 200 000 gets a 200.
+    private func wholeBodyOverAHole() throws -> Harness {
+        let h = Harness()
+        h.read()
+        h.respond(206, range: "bytes 0-999999/1000000")
+        h.body(200_000)
+        h.end()
+        try h.machine.seek(to: 500_000)
+        h.read()
+        h.respond(206, range: "bytes 500000-999999/1000000")
+        h.body(500_000)
+        h.end()
+        try h.machine.seek(to: 200_000)
+        h.read()
+        #expect(h.respond(200, length: 1_000_000))
+        return h
+    }
+
+    @Test("a range-ignored body compares every covered run it overwrites, not only the one at byte 0")
+    func aRangeIgnoredBodyComparesRunsAfterAHole() throws {
+        let h = try wholeBodyOverAHole()
+        let attempt = try #require(h.machine.current?.attempt)
+        #expect(h.machine.chunkParts(attempt: attempt, count: 1_000_000) == [
+            .init(range: 0..<200_000, compare: true),
+            .init(range: 200_000..<500_000, compare: false),
+            .init(range: 500_000..<1_000_000, compare: true),
+        ])
+        h.body(200_000)
+        h.body(300_000)
+        #expect(!h.machine.file.isCached, "promoted before the run after the hole was compared")
+        h.body(500_000)
+        #expect(!h.log.contains(.retire(discardFile: true)))
+        #expect(h.machine.file.isCached)
+    }
+
+    @Test("a covered run after the hole that differs discards the file like a mismatch at byte 0")
+    func aChangedRunAfterAHoleRestarts() throws {
+        let h = try wholeBodyOverAHole()
+        h.body(200_000)
+        h.body(300_000)
+        h.body(500_000, overlapMatches: false)
+        #expect(h.log.contains(.retire(discardFile: true)))
+        #expect(h.machine.file.ranges.ranges.isEmpty)
+    }
+
     @Test("a resume inside a hole keeps both seams: from the overlap before the frontier to the one past the hole")
     func aResumeInAHoleKeepsBothSeams() throws {
         let h = Harness()

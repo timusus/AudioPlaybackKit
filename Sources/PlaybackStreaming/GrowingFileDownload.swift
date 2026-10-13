@@ -314,6 +314,8 @@ struct GrowingFileDownload {
         guard file.isWhole(totalLength: totalLength) else { return }
         // Not before the far seam is compared: a mismatch there discards the file.
         if let tx = current, !tx.ended, let checkEnd = tx.checkEnd, tx.frontier < checkEnd { return }
+        // Nor while a whole body (a range ignored) still has covered runs ahead to compare.
+        if let tx = current, !tx.ended, tx.end == nil, let total = tx.totalLength, tx.bodyAt < total { return }
         effects.append(.promote)
         guard let tx = current, !tx.ended, tx.frontier < min(tx.end ?? .max, tx.totalLength ?? .max) else { return }
         current?.ended = true

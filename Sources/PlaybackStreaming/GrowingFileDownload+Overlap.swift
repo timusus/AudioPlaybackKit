@@ -37,13 +37,16 @@ extension GrowingFileDownload {
         let writeAt = tx.base + tx.written
         let tail = tx.checkEnd.flatMap { checkEnd in tx.end.map { $0..<checkEnd } }
         // The body runs [bodyAt, writeAt) compared, then written, then the far overlap compared,
-        // then (a host that sent more than asked) written.
-        let cuts = [writeAt, tail?.lowerBound, tail?.upperBound].compactMap { $0 }
+        // then (a host that sent more than asked) written. Past writeAt, any byte the file already
+        // holds is compared too: a 200 that ignored the range re-sends covered runs after a hole.
+        let runs = file.ranges.ranges.filter { $0.overlaps(chunk) }
+        let cuts = ([writeAt, tail?.lowerBound, tail?.upperBound].compactMap { $0 }
+            + runs.flatMap { [$0.lowerBound, $0.upperBound] })
             .filter { chunk.contains($0) && $0 > chunk.lowerBound }
         var parts: [ChunkPart] = []
         var start = chunk.lowerBound
-        for cut in cuts.sorted() + [chunk.upperBound] where cut > start {
-            let compare = start < writeAt || tail?.contains(start) == true
+        for cut in Set(cuts).sorted() + [chunk.upperBound] where cut > start {
+            let compare = start < writeAt || tail?.contains(start) == true || runs.contains { $0.contains(start) }
             parts.append(ChunkPart(range: start..<cut, compare: compare))
             start = cut
         }
