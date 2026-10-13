@@ -92,6 +92,16 @@ let package = Package(
                 "PlaybackRender", "PlaybackRenderTestSupport",
             ]
         ),
+        // The code in docs/recipes, compiled and run offline so the examples cannot rot. Public API
+        // only, as an app's own test target has it; not a product.
+        .testTarget(
+            name: "RecipesTests",
+            dependencies: [
+                "PlaybackDecode", "PlaybackNowPlaying", "PlaybackNowPlayingTestSupport", "PlaybackPlayer",
+                "PlaybackPlayerTestSupport", "PlaybackRender", "PlaybackRenderTestSupport", "PlaybackStreaming",
+                "PlaybackStreamingTestSupport",
+            ]
+        ),
         // Two 20-45 s tone fixtures (under 250 KB each), served over the loopback server.
         .testTarget(
             name: "PlaybackStreamingTests",
