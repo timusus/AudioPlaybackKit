@@ -335,12 +335,14 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
                 condition.unlock()
                 if let landed { onEvent?(.seekLanded(seekGeneration: landed)) }
                 var got: Int
+                var readErrno: Int32 = 0
                 repeat {
                     got = pread(file.descriptor, buffer, count, off_t(fileOffset))
-                } while got < 0 && errno == EINTR
+                    if got < 0 { readErrno = errno }
+                } while got < 0 && readErrno == EINTR
                 condition.lock()
                 guard got > 0 else {
-                    throw StreamByteReaderError.failed(StreamFailure(.io, detail: "pread failed at \(fileOffset) errno=\(errno)"))
+                    throw StreamByteReaderError.failed(StreamFailure(.io, detail: "pread failed at \(fileOffset) errno=\(readErrno)"))
                 }
                 machine.advance(by: got)
                 return got

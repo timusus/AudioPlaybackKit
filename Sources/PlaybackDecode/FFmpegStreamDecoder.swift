@@ -372,7 +372,7 @@ public final class FFmpegStreamDecoder {
             case Int32(STREAM_DECODE_ERR_ARGS.rawValue):
                 throw StreamDecoderError.invalidState("output format set after the first read or seek")
             default:
-                throw fail(status: status, averror: 0, opening: false)
+                throw fail(status: status, averror: 0, opening: false, readerCaused: false)
             }
         #else
             throw StreamDecoderError.unavailable
@@ -457,9 +457,11 @@ public final class FFmpegStreamDecoder {
         /// The one mapping from a failed C call to an error. A reader failure during the call is the
         /// cause, whatever status it surfaced as (a dropped connection mid-probe reads as "not a
         /// container"); without one, the status says whether the bytes were damaged or unplayable.
-        private func fail(status: Int32, averror: Int32, opening: Bool) -> StreamDecoderError {
+        private func fail(status: Int32, averror: Int32, opening: Bool, readerCaused: Bool = true) -> StreamDecoderError {
             let averror = averror == 0 ? nil : averror
-            if var failure = box.failure {
+            // Consumed, so a later unrelated failure is not blamed on it.
+            if readerCaused, var failure = box.failure {
+                box.failure = nil
                 failure.averror = averror
                 return .failed(failure)
             }
@@ -545,7 +547,10 @@ public final class FFmpegStreamDecoder {
 private final class ReaderBox {
     private let reader: StreamByteReader
     /// The reader's last failure, which C sees only as `STREAM_READ_ERROR`. libavformat may read
-    /// ahead and surface it a call later, so only an open or a seek, which restart reading, clear it.
+    /// ahead and surface it a call later, so it stays until a failure consumes it or an open or seek
+    /// restarts reading; successful reads cannot clear it, as the buffered frames they return precede
+    /// the failure that is still to surface. Touched only on the thread inside a C call (the
+    /// decoder is single-threaded; `cancel` and `interrupt` never read it), so it needs no lock.
     var failure: StreamFailure?
 
     init(reader: StreamByteReader) { self.reader = reader }
