@@ -170,27 +170,29 @@ extension StreamDecodeTests {
     }
 
     /// An index entry an estimated landing labelled is never an anchor, even once a read from the
-    /// first frame has run on past it: the seek counts from a true frame before it instead.
+    /// first frame has run on past it: the seek counts from a true frame before it instead. The
+    /// entries that read gave past the estimate's labels are anchors like any other.
     func testXinglessVBRMP3NeverAnchorsOnAnEstimatedLabel() throws {
         try skipUnlessAvailable()
         let url = try GeneratedFixture.xinglessVBRMP3()
         let counting = CountingByteReader(try FileByteReader(url: url))
         let decoder = FFmpegStreamDecoder(reader: counting)
         let format = try decoder.open()
-        let continuous = try Self.xinglessContinuousPCM(url: url, seconds: 125)
+        let samplesPerSecond = Int(format.sampleRate) * format.channelCount
+        let continuous = try Self.xinglessContinuousPCM(url: url, seconds: 141)
 
-        /* Labels frames from 120 s on with times the bytes only guess at. */
+        /* Labels the frames from 120 s to 122 s with times the bytes only guess at. */
         let estimated = try decoder.seek(toSeconds: 120)
         XCTAssertEqual(estimated, 120, accuracy: 10)
-        for _ in 0..<100 { XCTAssertNotNil(decoder.nextChunk()) }
+        var read = 0
+        while read < 2 * samplesPerSecond, let chunk = decoder.nextChunk() { read += chunk.count }
 
         XCTAssertEqual(try decoder.seek(toSeconds: 0), 0)
-        var read = 0
-        while read < 124 * Int(format.sampleRate) * format.channelCount, let chunk = decoder.nextChunk() {
-            read += chunk.count
-        }
+        read = 0
+        while read < 140 * samplesPerSecond, let chunk = decoder.nextChunk() { read += chunk.count }
         let assertExact = Self.xinglessExactSeekAssertion(decoder, counting, format, continuous)
         try assertExact(121, "among the estimate's labels, read since from the first frame")
+        try assertExact(135, "past the estimate's labels, read since from the first frame")
     }
 
     /// The first `seconds` of the Xing-less VBR fixture, decoded without a seek.

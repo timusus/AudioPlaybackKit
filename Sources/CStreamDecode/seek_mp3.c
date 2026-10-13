@@ -138,7 +138,8 @@ static void mp3_first_packet(StreamDecoder *d) {
     }
     d->mp3.timeline_exact = 1;
     d->mp3.index_end = d->mp3.header_ok ? d->first_pkt_dts : AV_NOPTS_VALUE;
-    d->mp3.estimate_floor = INT64_MAX;
+    d->mp3.untrusted_count = 0;
+    d->mp3.untrusted_open = 0;
 }
 
 /* The header fields that make two frames the same stream: version, layer, bitrate, sample rate
@@ -398,26 +399,50 @@ static int mp3_indexes(const StreamDecoder *d) {
  *
  * mp3dec indexes every packet it reads (AVFMT_GENERIC_INDEX), labelled with its running count, which
  * is the truth only on a read unbroken from the first frame. After an estimated landing it labels
- * the frames with the time asked for, and those entries stay. So only entries up to `index_end`, the
- * unbroken read's reach, and before `estimate_floor`, the earliest label an estimate gave, count.
+ * the frames with the time asked for, and those entries stay, among the true ones a later unbroken
+ * read adds. So only entries up to `index_end`, the unbroken read's reach, and outside every label
+ * range an estimate gave (`mp3_untrust`) count; one in such a range sends the search before it.
  */
 static int mp3_index_anchor(const StreamDecoder *d, int64_t ts, int64_t *pos, int64_t *dts) {
     if (!mp3_indexes(d) || d->mp3.index_end == AV_NOPTS_VALUE) return 0;
-    int64_t limit = ts < d->mp3.index_end ? ts : d->mp3.index_end;
-    if (limit >= d->mp3.estimate_floor) limit = d->mp3.estimate_floor - 1;
     AVStream *st = d->fmt->streams[d->audio_idx];
-    int at = av_index_search_timestamp(st, limit, AVSEEK_FLAG_BACKWARD);
-    const AVIndexEntry *entry = at >= 0 ? avformat_index_get_entry(st, at) : NULL;
-    if (!entry || entry->pos < 0) return 0;
-    *pos = entry->pos;
-    *dts = entry->timestamp;
-    return 1;
+    /* A range runs a frame past its last label: the packet an interruption read and dropped. */
+    int64_t frame = av_rescale_q(d->mp3.spf, (AVRational){ 1, d->sample_rate }, d->time_base);
+    int64_t limit = ts < d->mp3.index_end ? ts : d->mp3.index_end;
+    for (;;) {
+        int at = av_index_search_timestamp(st, limit, AVSEEK_FLAG_BACKWARD);
+        const AVIndexEntry *entry = at >= 0 ? avformat_index_get_entry(st, at) : NULL;
+        if (!entry || entry->pos < 0) return 0;
+        int untrusted = -1;
+        for (int i = 0; i < d->mp3.untrusted_count && untrusted < 0; i++) {
+            const int64_t *range = d->mp3.untrusted[i];
+            if (entry->timestamp >= range[0] && entry->timestamp <= range[1] + frame) untrusted = i;
+        }
+        if (untrusted < 0) {
+            *pos = entry->pos;
+            *dts = entry->timestamp;
+            return 1;
+        }
+        limit = d->mp3.untrusted[untrusted][0] - 1;
+    }
 }
 
-/* An index entry mp3dec labelled `dts` by estimate: lower `estimate_floor` to it. */
+/* An index entry mp3dec labelled `dts` by estimate: widen the range of the landing's labels. Ranges,
+ * so the entries a later unbroken read gives past one count. */
 static void mp3_untrust(StreamDecoder *d, int64_t dts) {
     if (d->mp3.index_end == AV_NOPTS_VALUE || dts == AV_NOPTS_VALUE) return;
-    if (dts < d->mp3.estimate_floor) d->mp3.estimate_floor = dts;
+    enum { kRanges = sizeof d->mp3.untrusted / sizeof d->mp3.untrusted[0] };
+    int64_t *range = d->mp3.untrusted[d->mp3.untrusted_count > 0 ? d->mp3.untrusted_count - 1 : 0];
+    if (!d->mp3.untrusted_open) {
+        d->mp3.untrusted_open = 1;
+        /* Out of ranges, the last one grows to cover the new labels too: wider, never unsafe. */
+        if (d->mp3.untrusted_count < kRanges) {
+            range = d->mp3.untrusted[d->mp3.untrusted_count++];
+            range[0] = range[1] = dts;
+        }
+    }
+    if (dts < range[0]) range[0] = dts;
+    if (dts > range[1]) range[1] = dts;
 }
 
 /* Extend `index_end` by a packet that follows on from it with its true time, or untrust a
@@ -429,9 +454,7 @@ static void mp3_index_packet(StreamDecoder *d, const AVPacket *pkt) {
         return;
     }
     int64_t frame = av_rescale_q(d->mp3.spf, (AVRational){ 1, d->sample_rate }, d->time_base);
-    if (pkt->dts > d->mp3.index_end && pkt->dts <= d->mp3.index_end + frame && pkt->dts < d->mp3.estimate_floor) {
-        d->mp3.index_end = pkt->dts;
-    }
+    if (pkt->dts > d->mp3.index_end && pkt->dts <= d->mp3.index_end + frame) d->mp3.index_end = pkt->dts;
 }
 
 /* ── the seek strategy ───────────────────────────────────────────────────── */
@@ -564,6 +587,7 @@ static int mp3_landed(StreamDecoder *d, int anchored) {
 
 static void mp3_reset(StreamDecoder *d) {
     d->mp3.timeline_exact = 0;   /* a byte estimate never reaches `mp3_landed` */
+    d->mp3.untrusted_open = 0;
     d->mp3.watch = 0;
     d->mp3.watch_frames = 0;
     d->mp3.watch_bytes = 0;

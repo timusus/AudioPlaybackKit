@@ -101,10 +101,13 @@ typedef struct {
     int      preroll_short;
     /* What mp3dec's index holds with true times (see `mp3_index_anchor`): whether the packets now
      * fed carry their true times, the last true time read on unbroken from the first frame, and the
-     * earliest time an estimated landing labelled a packet with (INT64_MAX: none). */
+     * first and last label each estimated landing gave packets, the last range growing while
+     * `untrusted_open`. */
     int      timeline_exact;
     int64_t  index_end;
-    int64_t  estimate_floor;
+    int64_t  untrusted[8][2];
+    int      untrusted_count;
+    int      untrusted_open;
 } MP3SeekState;
 
 /* Native FLAC (seek_flac.c): where the first frame starts (AVIO offset), once `flac_audio_start`
