@@ -482,8 +482,19 @@ enum GeneratedFixture {
                      source: "aevalsrc=0.3*sin(440*2*PI*t)+0.2*mod(floor(t)\\,2)*(2*random(0)-1):d=300:s=44100")
     }
 
+    /// Two hours of 8 kHz mono AAC in an m4b, about 14 MB with a sample table of about 450 KB
+    /// (56 250 frames), several times the probe budget. `faststart` puts the `moov` before the `mdat`.
+    static func longM4B(faststart: Bool) throws -> URL {
+        try generate("aac-2h-\(faststart ? "faststart" : "moov-last").m4b",
+                     encoding: ["-b:a", "16k", "-ar", "8000", "-ac", "1"]
+                         + (faststart ? ["-movflags", "+faststart"] : []),
+                     source: "sine=frequency=440:duration=7200",
+                     codec: ["-c:a", "aac", "-f", "ipod"])
+    }
+
     private static func generate(_ name: String, encoding: [String],
-                                 source: String = "sine=frequency=440:duration=1800") throws -> URL {
+                                 source: String = "sine=frequency=440:duration=1800",
+                                 codec: [String] = ["-c:a", "libmp3lame", "-f", "mp3"]) throws -> URL {
         let url = directory.appendingPathComponent(name)
         if FileManager.default.fileExists(atPath: url.path) { return url }
         guard FileManager.default.isExecutableFile(atPath: ffmpeg) else {
@@ -499,8 +510,7 @@ enum GeneratedFixture {
         process.arguments = [
             "-y", "-loglevel", "error",
             "-f", "lavfi", "-i", source,
-            "-c:a", "libmp3lame", "-f", "mp3",
-        ] + encoding + [partial.path]
+        ] + codec + encoding + [partial.path]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()

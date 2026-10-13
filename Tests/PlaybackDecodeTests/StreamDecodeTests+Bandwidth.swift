@@ -94,6 +94,40 @@ extension StreamDecodeTests {
         XCTAssertGreaterThan(peak, 0.1, "the post-seek audio is silence, not the tone")
     }
 
+    /// **A two-hour m4b with a sample table far over the probe budget costs the table, not the file.**
+    ///
+    /// The `stbl` of a long audiobook is hundreds of KB and the demuxer must read it whole, but
+    /// nothing past it: open, a second of audio and a far seek stay within the table plus a window.
+    func testLongM4BWithALargeSampleTableStaysWithinTheTableAndAWindow() throws {
+        try skipUnlessAvailable()
+        for faststart in [true, false] {
+            let label = faststart ? "moov first" : "moov last"
+            let url = try GeneratedFixture.longM4B(faststart: faststart)
+            let size = Int64(try FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int ?? 0)
+            XCTAssertGreaterThan(size, 10 * 1024 * 1024, "\(label): the fixture is meant to be big enough to matter")
+
+            let counting = CountingByteReader(try FileByteReader(url: url))
+            let decoder = FFmpegStreamDecoder(reader: counting)
+            let format = try decoder.open()
+            XCTAssertEqual(try XCTUnwrap(format.duration), 7200, accuracy: 5, label)
+
+            var frames = 0
+            while frames < Int(format.sampleRate), let chunk = decoder.nextChunk() {
+                frames += chunk.count / format.channelCount
+            }
+            XCTAssertGreaterThanOrEqual(frames, Int(format.sampleRate), label)
+            let bound: Int64 = 512 * 1024   // measured 258-291 KB: the table, a probe window and a refill
+            let openCost = counting.bytesRead
+            XCTAssertLessThan(openCost, bound, "\(label): open plus one second of audio read \(openCost) of \(size) bytes")
+
+            let landed = try decoder.seek(toSeconds: 5400)
+            let seekCost = counting.bytesRead - openCost
+            XCTAssertLessThan(seekCost, 128 * 1024, "\(label): the seek read \(seekCost) bytes, it is walking the file")
+            XCTAssertEqual(landed, 5400, accuracy: 1, label)
+            XCTAssertNotNil(decoder.nextChunk(), "\(label): nothing decoded after the seek")
+        }
+    }
+
     /// **A VBR MP3 seek is exact as far as a seek's byte budget reaches, and bounded beyond it.**
     ///
     /// A Xing TOC places a time to 1/256 of the file and mp3dec labels the frame it finds with the
