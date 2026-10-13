@@ -124,10 +124,21 @@ final class GrowingFileContractTests: GrowingFileContractCase {
                 let source = makeSource(server.url, clock: clock)
                 try source.seek(to: Int64(body.count) + 10)
                 let context = "strict416=\(strict) html=\(html)"
-                assertTransport(finish(readAsync(source, 1), of: source, on: clock, context), context)
+                let failure = sourceFailure(finish(readAsync(source, 1), of: source, on: clock, context), context)
+                XCTAssertEqual(failure?.category, .malformed, context)
                 XCTAssertEqual(server.requestedRanges.count, 1, context)
             }
         }
+    }
+
+    /// An unsupported URL scheme (-1002) fails the read at once as `.network`, with the `URLError` that
+    /// tells it from a lost connection; media3 gives such errors no category of their own.
+    func testAPermanentTransportErrorFailsAtOnceWithItsURLError() throws {
+        let clock = ManualGrowingFileClock()
+        let source = makeSource(URL(string: "gopher://127.0.0.1:1/a.mp3")!, clock: clock)
+        let failure = sourceFailure(finish(readAsync(source, 1), of: source, on: clock, "gopher"), "gopher")
+        XCTAssertEqual(failure?.category, .network)
+        XCTAssertEqual(failure?.urlError?.code, .unsupportedURL)
     }
 
     /// media3 `DefaultHttpDataSource.skipFully`: an origin that ignores the range answers `200`

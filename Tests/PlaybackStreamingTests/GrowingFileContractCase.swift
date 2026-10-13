@@ -217,6 +217,17 @@ class GrowingFileContractCase: XCTestCase {
         }
     }
 
+    /// The failure the read ended with, which must be a source `.failed`.
+    func sourceFailure(
+        _ result: Result<Data, Error>, _ context: String, file: StaticString = #filePath, line: UInt = #line
+    ) -> StreamFailure? {
+        guard case let .failed(failure)? = readerError(result) else {
+            XCTFail("\(context): expected .failed, got \(result)", file: file, line: line)
+            return nil
+        }
+        return failure
+    }
+
     /// Runs `check` once per resource of ``matrix``, with the resource's name in every failure.
     func forEachResource(_ check: (Resource) throws -> Void) rethrows {
         for resource in matrix {

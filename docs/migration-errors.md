@@ -11,14 +11,18 @@ changed symbol and each call site in the two apps.
 | `StreamDecoderError.failed(status: Int32)` | `StreamDecoderError.failed(StreamFailure)`; the libav code is `failure.averror` (the real AVERROR, no longer `-1`) |
 | `StreamByteReaderError.transport(String)` | `StreamByteReaderError.failed(StreamFailure)`; the old string is `failure.detail` |
 | `GrowingFileByteSource` read failures, all `.transport` | `.failed` with `.network`, `.http(status:)`, `.unsupported` (not audio), `.malformed` (out of range) or `.io` (disk) |
-| `FileByteReader` open and read failures (`CocoaError`, `POSIXError`) | `.failed` with `.io` |
+| `FileByteReader` open and read failures (`.transport(String)`) | `.failed` with `.io` |
 | C `stream_decoder_open_with(..., int *status)` | gains a trailing `int *averror`, set when libav failed |
+| `GrowingFileConnectionPolicy.untrustedCertificateReason`: the `.transport` failure's reason | The `detail` of a `.network` `.failed`; the value is unchanged |
 
 ## New symbols
 
 - `PlaybackErrorCategory` (`PlaybackDecode`): `io`, `network`, `http(status:)`, `malformed`, `unsupported`,
   `cancelled`, `internal`.
-- `StreamFailure` (`PlaybackDecode`): `category`, `detail`, `averror`, `urlError`.
+- `StreamFailure` (`PlaybackDecode`): `category`, `detail`, `averror`, `urlError`; `init(_:detail:averror:urlError:)`
+  and `description` for logs. `.network` includes the permanent errors (untrusted certificate, bad URL,
+  ATS); `urlError` tells them from a lost connection.
+- `StreamByteReaderError` is now `Sendable`.
 - `StreamDecoderError.category` and `StreamByteReaderError.category`. The other cases map as:
   `cancelled` to `.cancelled`; `unavailable` and `unseekable` to `.unsupported`; `interrupted` and
   `invalidState` to `.internal`.

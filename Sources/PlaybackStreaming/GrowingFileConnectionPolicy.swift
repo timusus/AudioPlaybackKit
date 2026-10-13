@@ -8,9 +8,9 @@ import Security
 /// Both apply to the origin of the source's `url` only (same scheme, host and port). A redirect to
 /// another origin (a CDN) is sent without the headers and evaluated by the system's default trust.
 public struct GrowingFileConnectionPolicy: Sendable, Equatable {
-    /// The `.network` read failure's detail (`StreamByteReaderError.failed(_:)`) when the system refuses the
-    /// origin's certificate and its leaf is not one of ``trustedLeafSHA256``. Never retried: a retry
-    /// meets the same certificate.
+    /// The detail of the `.network` failure (`StreamByteReaderError.failed(_:)`) when the system
+    /// refuses the origin's certificate and its leaf is not one of ``trustedLeafSHA256``. Never
+    /// retried: a retry meets the same certificate.
     public static let untrustedCertificateReason = "untrusted_certificate"
 
     /// Sent on every request to the origin, after the source's `authHeaders` (these win a clash).

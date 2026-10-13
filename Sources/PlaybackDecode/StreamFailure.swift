@@ -10,7 +10,9 @@ public enum PlaybackErrorCategory: Hashable, Sendable {
     /// `IO_NO_PERMISSION`).
     case io
     /// The connection failed, dropped or went silent, and the byte source's retries are spent
-    /// (media3 `IO_NETWORK_CONNECTION_FAILED`, `_TIMEOUT`). Worth a retry once the network is back.
+    /// (media3 `IO_NETWORK_CONNECTION_FAILED`, `_TIMEOUT`). Worth a retry once the network is back,
+    /// unless ``StreamFailure/urlError`` is one no retry fixes (an untrusted certificate, a bad URL,
+    /// ATS refusing cleartext): media3 gives those no code of their own either, bar cleartext.
     case network
     /// The server answered with `status` until the retries were spent (media3 `IO_BAD_HTTP_STATUS`).
     case http(status: Int)

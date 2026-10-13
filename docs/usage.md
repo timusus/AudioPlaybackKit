@@ -183,8 +183,8 @@ groups ([ADR-0029](decisions/0029-structured-errors.md)). Act on the category; t
 
 | Category | Means | Typical response |
 |---|---|---|
-| `.network` | No connection, a timeout, a dropped or refused TLS connection, a short body | Retry when the network is back |
-| `.http(status:)` | The server answered with a status no retry fixed | 401/403: refresh auth; 404/410: skip; 5xx: retry later |
+| `.network` | No connection, a timeout, a dropped or refused TLS connection, a short body; also the errors no retry fixes (untrusted certificate, bad URL, ATS), told apart by `urlError` | Retry when the network is back, unless `urlError` is permanent |
+| `.http(status:)` | The server answered with a status no retry fixed | 401/403: refresh auth; 404/410: skip; 408/429/5xx: retry later with backoff |
 | `.io` | A local file could not be opened, read or written | Re-download or delete the file |
 | `.malformed` | The bytes are damaged or inconsistent (a range past the server's end) | Skip; re-download if cached |
 | `.unsupported` | No demuxer or decoder, no audio stream, a page where audio should be, no FFmpeg | Skip, and do not retry |
@@ -193,7 +193,7 @@ groups ([ADR-0029](decisions/0029-structured-errors.md)). Act on the category; t
 
 ```swift
 switch error.category {                       // StreamDecoderError, StreamByteReaderError or PlaybackError
-case .network, .http(status: 500...): retryLater()
+case .network, .http(status: 500...), .http(status: 408), .http(status: 429): retryLater()   // with backoff
 case .http(status: 401), .http(status: 403): refreshAuthAndRetry()
 case .unsupported, .malformed, .http: skip()
 case .io: redownload()
