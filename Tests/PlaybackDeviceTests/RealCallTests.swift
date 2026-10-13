@@ -41,7 +41,7 @@ final class RealCallTests: DeviceTestCase {
         let ended = received.last { type(of: $0) == .ended }
         XCTAssertTrue(ended.map(shouldResume) ?? false, "iOS ends a call's interruption with shouldResume")
         XCTAssertTrue(received.allSatisfy { $0.object as AnyObject? === AVAudioSession.sharedInstance() })
-        await waitForHost()
+        await rig.waitForHost()
         await rig.assertAudible()
     }
 
@@ -51,7 +51,7 @@ final class RealCallTests: DeviceTestCase {
         await rig.startPlaying(at: 2)
         await interrupt(with: "play")
         await rig.waitUntil("suppressed by the other app", timeout: 15) { rig.player.suppression == .interruption }
-        await waitForHost()
+        await rig.waitForHost()
         await rig.assertSilent(over: 1)
         XCTAssertFalse(received.contains { type(of: $0) == .ended && shouldResume($0) })
 
@@ -63,13 +63,6 @@ final class RealCallTests: DeviceTestCase {
     private func interrupt(with host: String, file: StaticString = #filePath, line: UInt = #line) async {
         let opened = await UIApplication.shared.open(URL(string: "playbackinterruptor://\(host)")!)
         XCTAssertTrue(opened, "the Interruptor app is installed", file: file, line: line)
-    }
-
-    /// The Interruptor reopens the host once its call or tone is over.
-    private func waitForHost(file: StaticString = #filePath, line: UInt = #line) async {
-        await rig.waitUntil("the host back in front", timeout: 20, file: file, line: line) {
-            UIApplication.shared.applicationState == .active
-        }
     }
 
     private func type(of note: Notification) -> AVAudioSession.InterruptionType? {

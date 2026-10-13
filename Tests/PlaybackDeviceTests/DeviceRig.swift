@@ -213,6 +213,14 @@ final class DeviceRig {
             + "app state \(UIApplication.shared.applicationState.rawValue)"
     }
 
+    /// A host behind another app (a phone in use, the Interruptor still in front) cannot activate a
+    /// non-mixable session, so a test fails here by name rather than on whatever it asserts first.
+    func waitForHost(file: StaticString = #filePath, line: UInt = #line) async {
+        await waitUntil("the host in front", timeout: 20, file: file, line: line) {
+            UIApplication.shared.applicationState == .active
+        }
+    }
+
     func sleep(_ seconds: TimeInterval) async {
         try? await Task.sleep(for: .seconds(seconds))
     }
@@ -417,6 +425,7 @@ class DeviceTestCase: XCTestCase {
 
     override func setUp() async throws {
         rig = DeviceRig()
+        await rig.waitForHost()
     }
 
     override func tearDown() async throws {
