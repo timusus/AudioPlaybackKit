@@ -337,10 +337,10 @@ final class PlayerCoreTests: XCTestCase {
     func testIsPlayingOnlyWhenReadyIntendedAndNotSuppressed() {
         for state in [PlaybackState.idle, .buffering, .ready, .ended] {
             for intent in [false, true] {
-                for suppression in [PlaybackSuppression.none, .interruption] {
+                for suppression in [PlaybackSuppression.unsuppressed, .interruption] {
                     XCTAssertEqual(
                         Player<String>.isPlaying(state: state, playWhenReady: intent, suppression: suppression),
-                        state == .ready && intent && suppression == .none,
+                        state == .ready && intent && suppression == .unsuppressed,
                         "\(state) \(intent) \(suppression)"
                     )
                 }

@@ -22,7 +22,7 @@ public final class FakeItemSource: ItemSource, @unchecked Sendable {
     public var releases: Int { lock.withLock { _releases } }
     /// The item's length unless a test makes it unknown.
     public var frameCount: Int64?
-    /// Overrides `ItemSource`'s default, seekable while the length is known.
+    /// Overrides the protocol's default, seekable while the length is known.
     public var seekable: Bool?
     public var isSeekable: Bool { seekable ?? (frameCount != nil) }
 

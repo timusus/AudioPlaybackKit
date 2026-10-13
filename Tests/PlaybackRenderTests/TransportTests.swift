@@ -7,6 +7,7 @@ import XCTest
 private final class FailsMidwaySource: ItemSource, @unchecked Sendable {
     struct Failure: Error {}
 
+    let frameCount: Int64? = nil
     let format: PCMFormat
     private var remaining: Int
 

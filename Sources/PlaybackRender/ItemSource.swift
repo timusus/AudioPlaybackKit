@@ -28,11 +28,12 @@ public protocol ItemSource: AnyObject, Sendable {
     /// it runs once decode of the item before has ended, about two seconds ahead of the join, so
     /// a slow resolve overlaps that tail. Once interrupted it may return early or throw.
     func open() throws -> PCMFormat
-    /// The item's length in frames, read once `open()` returns; nil when unknown.
+    /// The item's length in frames, read once `open()` returns; nil when unknown. Has no default, so
+    /// a conformer cannot report an unknown length by forgetting it.
     var frameCount: Int64? { get }
     /// Whether `seek(toFrame:)` can move within the item, read once `open()` returns. A source that
-    /// re-opens at a time offset is seekable with no duration; an item neither seekable nor of known
-    /// duration is live (ADR-0022). Defaults to a known duration.
+    /// re-opens at a time offset is seekable with no `frameCount`; an item neither seekable nor of known
+    /// `frameCount` is live (ADR-0022). Defaults to a known `frameCount`.
     var isSeekable: Bool { get }
     /// Sample-accurate (ADR-0009); returns the media frame it landed on, which reads continue from.
     func seek(toFrame frame: Int64) throws -> Int64
@@ -49,14 +50,14 @@ public protocol ItemSource: AnyObject, Sendable {
 }
 
 public extension ItemSource {
-    var frameCount: Int64? { nil }
     var isSeekable: Bool { frameCount != nil }
 }
 
 /// `FFmpegStreamDecoder` as an item source. The decoder already trims encoder delay and padding
 /// (the gapless goldens), so its frames are the item's frames and the join adds no trim.
 ///
-/// `@unchecked Sendable`: the decoder and epoch are guarded by `lock`; the rest is touched only by the executor.
+/// `@unchecked Sendable`: the decoder, epoch and interrupt are guarded by `lock`; `sampleRate`, `frameCount` and
+/// `isSeekable` are written by `open()` on the executor and read only after it returns.
 public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
     private let reader: StreamByteReader
     private let lock = NSLock()

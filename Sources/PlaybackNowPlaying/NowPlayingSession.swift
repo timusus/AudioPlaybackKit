@@ -207,7 +207,7 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
 
     // media3 `Util.shouldShowPlayButton`: a pause, an idle or ended player or a suppression shows play.
     private var showsPlay: Bool {
-        !player.playWhenReady || player.state == .idle || player.state == .ended || player.suppression != .none
+        !player.playWhenReady || player.state == .idle || player.state == .ended || player.suppression != .unsuppressed
     }
 
     private func snapshot(of item: Item) -> Published {

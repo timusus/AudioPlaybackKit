@@ -19,7 +19,7 @@ final class SessionNotificationTests: DeviceTestCase {
 
         SystemSession.interruptionEnded(shouldResume: true)
         await rig.waitUntil("resumed") { rig.player.isPlaying }
-        XCTAssertEqual(rig.player.suppression, .none)
+        XCTAssertEqual(rig.player.suppression, .unsuppressed)
         await rig.assertAudible()
         await rig.settle()
         XCTAssertEqual(rig.shownState, .playing)
@@ -32,7 +32,7 @@ final class SessionNotificationTests: DeviceTestCase {
 
         SystemSession.interruptionEnded(shouldResume: false)
         await rig.waitUntil("paused by the player") { !rig.player.playWhenReady }
-        XCTAssertEqual(rig.player.suppression, .none)
+        XCTAssertEqual(rig.player.suppression, .unsuppressed)
         await rig.waitUntil("interruptionEnded event") {
             rig.didSend { if case .playWhenReadyChanged(false, .interruptionEnded) = $0 { true } else { false } }
         }
@@ -47,7 +47,7 @@ final class SessionNotificationTests: DeviceTestCase {
         SystemSession.interruptionBegan()
         await rig.waitUntil("suppressed") { rig.player.suppression == .interruption }
         rig.player.pause()
-        XCTAssertEqual(rig.player.suppression, .none)
+        XCTAssertEqual(rig.player.suppression, .unsuppressed)
 
         SystemSession.interruptionEnded(shouldResume: true)
         await rig.assertSilent(over: 1)
@@ -61,7 +61,7 @@ final class SessionNotificationTests: DeviceTestCase {
 
         SystemSession.interruptionBegan()
         await rig.drainNotifications()
-        XCTAssertEqual(rig.player.suppression, .none, "nothing shows paused by another app")
+        XCTAssertEqual(rig.player.suppression, .unsuppressed, "nothing shows paused by another app")
         SystemSession.interruptionEnded(shouldResume: true)
         await rig.assertSilent(over: 1)
         XCTAssertFalse(rig.player.playWhenReady)
@@ -75,7 +75,7 @@ final class SessionNotificationTests: DeviceTestCase {
 
         rig.player.play()
         await rig.waitUntil("playing again") { rig.player.isPlaying }
-        XCTAssertEqual(rig.player.suppression, .none)
+        XCTAssertEqual(rig.player.suppression, .unsuppressed)
         await rig.assertAudible()
         // The interruption's end, once the call stops ringing, changes nothing.
         SystemSession.interruptionEnded(shouldResume: false)
@@ -180,7 +180,7 @@ final class SessionNotificationTests: DeviceTestCase {
             rig.events.count { if case .recoveredPaused = $0 { true } else { false } } > recoveries
         }
         XCTAssertFalse(rig.player.playWhenReady, file: file, line: line)
-        XCTAssertEqual(rig.player.suppression, .none, file: file, line: line)
+        XCTAssertEqual(rig.player.suppression, .unsuppressed, file: file, line: line)
         XCTAssertEqual(rig.player.currentIndex, index, file: file, line: line)
         XCTAssertEqual(rig.player.position, before, accuracy: 1, "paused at the same position", file: file, line: line)
         await rig.settle()

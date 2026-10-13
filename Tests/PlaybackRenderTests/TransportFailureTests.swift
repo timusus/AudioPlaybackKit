@@ -8,6 +8,7 @@ private final class FailingSource: ItemSource, @unchecked Sendable {
     struct Failure: Error {}
 
     let format = PCMFormat(sampleRate: 8, channelCount: 1)
+    let frameCount: Int64? = nil
     private let base: Float
     private var remaining: Int
     private var frame: Int64 = 0

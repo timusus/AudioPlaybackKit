@@ -240,6 +240,7 @@ final class SequencerTests: XCTestCase {
 
 private final class FailingItemSource: ItemSource, @unchecked Sendable {
     struct Failure: Error {}
+    let frameCount: Int64? = nil
     func open() throws -> PCMFormat { throw Failure() }
     func seek(toFrame frame: Int64) throws -> Int64 { throw Failure() }
     func nextChunk() throws -> [Float]? { throw Failure() }

@@ -1,5 +1,6 @@
 import AVFoundation
 
+/// What the speaker is doing, sent as `TransportEvent.status` only when it changes.
 public enum TransportStatus: Equatable, Sendable {
     case paused
     /// Waiting for decode: after a `setCurrent`, `seek` or recovery until its first audio is written,
@@ -10,6 +11,7 @@ public enum TransportStatus: Equatable, Sendable {
     case ended
 }
 
+/// What a `Transport` reports, in the order it happened.
 public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     /// What is heard now, in seconds of `item`'s media time. Sent when it changes, at most once a
     /// pump; frames a processor dropped are skipped when they would have played. Within an item it
@@ -56,7 +58,8 @@ let pumpInterval: TimeInterval = 0.1
 /// becomes the nearest frame once the item's source has opened, so it stays sample-accurate
 /// (ADR-0009) and a reported position seeks back to the frame it came from.
 ///
-/// `@unchecked Sendable`: mutable state is confined to its serial `queue` or guarded by a lock.
+/// `@unchecked Sendable`: mutable state is confined to its serial `queue`, except the discontinuity
+/// count and last buffered-ahead value, which `discontinuityLock` guards for the caller's threads.
 public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private let queue = DispatchQueue(label: "PlaybackRender.Transport", qos: .userInitiated)
     private let output: any AudioOutput

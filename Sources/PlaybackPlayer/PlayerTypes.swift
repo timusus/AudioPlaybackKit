@@ -21,7 +21,7 @@ public enum RepeatMode: Sendable {
 
 /// Why audio is not heard although `playWhenReady` is true and the state is `.ready`.
 public enum PlaybackSuppression: Sendable {
-    case none
+    case unsuppressed
     /// An `AVAudioSession` interruption began; cleared when it ends (media3 `TRANSIENT_AUDIO_FOCUS_LOSS`).
     case interruption
 }
@@ -46,6 +46,7 @@ public struct PlaybackError: Error, Sendable {
     }
 }
 
+/// Why `currentIndex` moved, as media3's `MEDIA_ITEM_TRANSITION_REASON_*`; the player sends it with the transition.
 public enum TransitionReason: Sendable {
     /// The previous item ended.
     case auto
@@ -55,6 +56,7 @@ public enum TransitionReason: Sendable {
     case `repeat`
 }
 
+/// Why the player, not the app, cleared `playWhenReady`; an app's own `pause()` sends none.
 public enum PlayWhenReadyChangeReason: Sendable {
     case routeLost, interruptionEnded, endOfItem
 }

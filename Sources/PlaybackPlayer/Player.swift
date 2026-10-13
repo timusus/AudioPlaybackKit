@@ -24,7 +24,7 @@ public final class Player<Item: Hashable & Sendable> {
     public private(set) var state = PlaybackState.idle {
         didSet { updateRebuffering() }
     }
-    public private(set) var suppression = PlaybackSuppression.none {
+    public private(set) var suppression = PlaybackSuppression.unsuppressed {
         didSet { updateRebuffering() }
     }
     public var isPlaying: Bool { Self.isPlaying(state: state, playWhenReady: playWhenReady, suppression: suppression) }
@@ -147,7 +147,7 @@ public final class Player<Item: Hashable & Sendable> {
     }
 
     nonisolated static func isPlaying(state: PlaybackState, playWhenReady: Bool, suppression: PlaybackSuppression) -> Bool {
-        state == .ready && playWhenReady && suppression == .none
+        state == .ready && playWhenReady && suppression == .unsuppressed
     }
 
     // MARK: Items
@@ -250,7 +250,7 @@ public final class Player<Item: Hashable & Sendable> {
             intent = newValue
             guard newValue else {
                 // An app pause outranks an interruption, so its end resumes nothing.
-                suppression = .none
+                suppression = .unsuppressed
                 return transport.pause()
             }
             guard let current = currentIndex else { return }
@@ -441,12 +441,12 @@ public final class Player<Item: Hashable & Sendable> {
             pendingActivation = nil
             if let failure {
                 // Refused during an interruption, the interruption still holds; its end tries again.
-                guard suppression == .none, intent else { return }
+                guard suppression == .unsuppressed, intent else { return }
                 error = PlaybackError(kind: .session, underlying: failure)
                 return refreshState()
             }
             sessionActive = true
-            suppression = .none
+            suppression = .unsuppressed
             if intent, loadedKey != nil, error == nil { transport.play() }
         }
     }
@@ -473,10 +473,10 @@ public final class Player<Item: Hashable & Sendable> {
             guard suppression == .interruption else { return }
             if shouldResume {
                 // Over, so a refused activation is a session error for the app, not a held interruption.
-                suppression = .none
+                suppression = .unsuppressed
                 return activate()
             }
-            suppression = .none
+            suppression = .unsuppressed
             intent = false
             send(.playWhenReadyChanged(false, reason: .interruptionEnded))
         case let .routeChanged(reason, previous, current):
@@ -490,7 +490,7 @@ public final class Player<Item: Hashable & Sendable> {
             session.configure()
             sessionActive = false
             pendingActivation = nil
-            suppression = .none
+            suppression = .unsuppressed
         }
     }
 
@@ -499,7 +499,7 @@ public final class Player<Item: Hashable & Sendable> {
     private func recoveredPaused() {
         guard loadedKey != nil else { return }
         intent = false
-        suppression = .none
+        suppression = .unsuppressed
         transport.pause()
         send(.recoveredPaused)
     }
@@ -683,7 +683,7 @@ public final class Player<Item: Hashable & Sendable> {
 
     private func pauseByPlayer(_ reason: PlayWhenReadyChangeReason) {
         intent = false
-        suppression = .none
+        suppression = .unsuppressed
         transport.pause()
         send(.playWhenReadyChanged(false, reason: reason))
     }
@@ -715,7 +715,7 @@ public final class Player<Item: Hashable & Sendable> {
         refreshState()
         // During an interruption a seek or skip is applied paused. Otherwise the intent takes the
         // session it lacks, as after a play with nothing to play.
-        if intent, suppression == .none { sessionActive ? transport.play() : activate() }
+        if intent, suppression == .unsuppressed { sessionActive ? transport.play() : activate() }
         armNext()
     }
 
@@ -738,7 +738,7 @@ public final class Player<Item: Hashable & Sendable> {
     /// nothing. Idle also gives the session up: media3 abandons focus in `STATE_IDLE` but holds it in
     /// `STATE_ENDED`, where `play()` restarts at once.
     private func nothingToPlay(_ state: PlaybackState) {
-        suppression = .none
+        suppression = .unsuppressed
         if state == .idle { deactivate() }
     }
 
@@ -821,7 +821,7 @@ public final class Player<Item: Hashable & Sendable> {
     /// Called whenever an input changes; sends only on a change, so each start has one end.
     private func updateRebuffering() {
         let index = currentIndex
-        let now = index != nil && state == .buffering && intent && suppression == .none && !awaitingFirstAudio
+        let now = index != nil && state == .buffering && intent && suppression == .unsuppressed && !awaitingFirstAudio
         guard now != rebuffering else { return }
         rebuffering = now
         guard now, let index else { return send(.bufferingEnded) }

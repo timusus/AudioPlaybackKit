@@ -37,7 +37,7 @@ final class RealCallTests: DeviceTestCase {
         await rig.assertSilent()
 
         await rig.waitUntil("resumed after the call", timeout: 20) { rig.player.isPlaying }
-        XCTAssertEqual(rig.player.suppression, .none)
+        XCTAssertEqual(rig.player.suppression, .unsuppressed)
         let ended = received.last { type(of: $0) == .ended }
         XCTAssertTrue(ended.map(shouldResume) ?? false, "iOS ends a call's interruption with shouldResume")
         XCTAssertTrue(received.allSatisfy { $0.object as AnyObject? === AVAudioSession.sharedInstance() })
