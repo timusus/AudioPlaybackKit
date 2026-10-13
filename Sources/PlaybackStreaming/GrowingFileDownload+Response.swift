@@ -73,6 +73,13 @@ extension GrowingFileDownload {
             ("aiff", { head in ascii(head, 0..<4) == "FORM" && ["AIFF", "AIFC"].contains(ascii(head, 8..<12)) }),
             // EBML header: Matroska and WebM.
             ("matroska", { head in Array(head[0..<4]) == [0x1A, 0x45, 0xDF, 0xA3] }),
+            ("ape", { head in ascii(head, 0..<4) == "MAC " }),
+            ("wv", { head in ascii(head, 0..<4) == "wvpk" }),
+            ("dsf", { head in ascii(head, 0..<4) == "DSD " }),
+            // iff_probe wants DSD at offset 12, past the sniffed head; FRM8 alone is DSDIFF's wrapper.
+            ("iff", { head in ascii(head, 0..<4) == "FRM8" }),
+            // The ASF header object GUID.
+            ("asf", { head in Array(head[0..<8]) == [0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11] }),
         ]
     }()
 }

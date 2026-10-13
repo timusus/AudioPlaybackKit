@@ -32,6 +32,11 @@ extension GrowingFileDownloadTests {
         ("AIFF", Array("FORM".utf8) + [0, 0, 0, 0] + Array("AIFF".utf8)),
         ("AIFC", Array("FORM".utf8) + [0, 0, 0, 0] + Array("AIFC".utf8)),
         ("Matroska", [0x1A, 0x45, 0xDF, 0xA3] + [UInt8](repeating: 0, count: 8)),
+        ("Monkey's Audio", Array("MAC ".utf8) + [UInt8](repeating: 0, count: 8)),
+        ("WavPack", Array("wvpk".utf8) + [UInt8](repeating: 0, count: 8)),
+        ("DSF", Array("DSD ".utf8) + [UInt8](repeating: 0, count: 8)),
+        ("DSDIFF", Array("FRM8".utf8) + [UInt8](repeating: 0, count: 8)),
+        ("ASF", [0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11] + [UInt8](repeating: 0, count: 4)),
     ]
 
     @Test("a body of any enabled container is taken when served as application/octet-stream")
