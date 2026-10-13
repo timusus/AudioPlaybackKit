@@ -1,0 +1,20 @@
+name: Feature request
+description: Suggest a format, API or behaviour
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you need, and why?
+      description: The use case first; the solution second.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: How androidx/media handles it, if you know.

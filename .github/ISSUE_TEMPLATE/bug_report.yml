@@ -1,0 +1,42 @@
+name: Bug report
+description: Something decodes, seeks, streams or plays wrongly
+labels: [bug]
+body:
+  - type: input
+    id: format
+    attributes:
+      label: Format and container
+      description: For example MP3 (VBR), Ogg Opus, M4A with the index at the end.
+    validations:
+      required: true
+  - type: textarea
+    id: sample
+    attributes:
+      label: Sample file or URL
+      description: A link or attachment that reproduces it. If it can't be shared, say how it was made.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS, device and package version
+      description: For example iOS 18.2 on iPhone 15, simulator or device, tag X.Y.Z.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      render: text

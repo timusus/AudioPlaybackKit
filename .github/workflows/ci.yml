@@ -1,0 +1,143 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      # FFmpeg.xcframework is committed as plain git objects (no LFS), so a normal checkout has it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        id: toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          echo "xcode=$(xcodebuild -version | awk 'NR == 1 { print $2 }')" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .build
+          key: build-test-${{ runner.os }}-xcode-${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('Package.swift', 'Sources/**', 'Tests/**', 'Frameworks/**') }}
+          restore-keys: build-test-${{ runner.os }}-xcode-${{ steps.toolchain.outputs.xcode }}-
+      - name: Test
+        run: |
+          rm -f .build/test-fast.log
+          scripts/test-fast
+      - name: Upload test log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-fast-log
+          path: .build/test-fast.log
+
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      decode: ${{ steps.filter.outputs.decode }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            decode:
+              - 'Sources/PlaybackDecode/**'
+              - 'Sources/CStreamDecode/**'
+              - 'Sources/CFFmpeg/**'
+              - 'Frameworks/**'
+              - 'Tests/PlaybackDecodeConformanceTests/**'
+              - 'Package.swift'
+              - '.github/workflows/ci.yml'
+
+  conformance:
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.decode == 'true'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        id: toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          echo "xcode=$(xcodebuild -version | awk 'NR == 1 { print $2 }')" >> "$GITHUB_OUTPUT"
+      # Without a host ffmpeg the two generated-MP3 tests (30-minute CBR, 5-minute Xing VBR) skip.
+      - name: Install ffmpeg
+        run: brew install ffmpeg
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .build
+          key: build-conformance-${{ runner.os }}-xcode-${{ steps.toolchain.outputs.xcode }}-${{ hashFiles('Package.swift', 'Sources/**', 'Tests/**', 'Frameworks/**') }}
+          restore-keys: build-conformance-${{ runner.os }}-xcode-${{ steps.toolchain.outputs.xcode }}-
+      - name: Conformance
+        run: |
+          mkdir -p .build
+          swift test --filter PlaybackDecodeConformance 2>&1 | tee .build/conformance.log
+          exit "${PIPESTATUS[0]}"
+      - name: Upload log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: conformance-log
+          path: .build/conformance.log
+
+  ios:
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          xcrun simctl list devices available iPhone
+      - name: Pick an available iPhone simulator
+        id: simulator
+        run: |
+          udid=$(xcrun simctl list devices available -j | jq -r '[.devices[][] | select(.name | startswith("iPhone"))] | .[0].udid // empty')
+          [ -n "$udid" ] || { echo "No available iPhone simulator" >&2; exit 1; }
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Test PlaybackStreamingTests on the simulator
+        env:
+          UDID: ${{ steps.simulator.outputs.udid }}
+        run: |
+          set -o pipefail
+          mkdir -p .build
+          xcodebuild test \
+            -scheme AudioPlaybackKit-Package \
+            -only-testing:PlaybackStreamingTests \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath .build/xcode \
+            | tee .build/xcodebuild.log
+      - name: Upload log
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: xcodebuild-log
+          path: .build/xcodebuild.log
