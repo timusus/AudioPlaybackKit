@@ -10,13 +10,13 @@ Play the audio AVPlayer won't, and own the PCM on the way out. A Swift package o
 a decoder, a streaming byte source, an output layer, and a `Player` with the audio session and lock screen
 on top. Built for Shuttle Podcasts and Shuttle2.
 
-It is built to be checked. 125 conformance fixtures are pinned to hashes of their decoded audio and run
+It is built to be checked. 128 conformance fixtures are pinned to hashes of their decoded audio and run
 through a fault-injecting reader and a seek matrix modelled on androidx/media, among about 780 tests. The FFmpeg
-framework is about 1.6 MB per iOS slice, and the fakes let an app test its own player code.
+framework is about 1.7 MB per iOS slice, and the fakes let an app test its own player code.
 
 What an app gets:
 
-- **Formats AVPlayer lacks.** Ogg Vorbis, Ogg Opus, FLAC in Ogg and Matroska/WebM audio, alongside MP3, AAC, M4A/ALAC, FLAC and WAV/AIFF.
+- **Formats AVPlayer lacks.** Ogg Vorbis, Ogg Opus, FLAC in Ogg and Matroska/WebM audio, alongside MP3, AAC, M4A/ALAC, FLAC and WAV/AIFF. Also WavPack, WMA (v1/v2), DSD (DSF and DFF, decoded to PCM, no DoP passthrough) and Monkey's Audio (APE); the last has no conformance fixture yet.
 - **Playback before the download ends.** `GrowingFileByteSource` reads an HTTP(S) URL while it downloads, with range-request resume, stall detection and retry. An MP4 with its index at the end plays from range requests.
 - **Seeks that land on the sample** (VBR MP3 excepted), gapless joins between items (even at different sample rates), and decode that can be cancelled while blocked on the network.
 - **A decoder checked against goldens.** Over a hundred fixtures run through a faulting reader and a seek matrix against committed PCM hashes, modelled on androidx/media's tests ([ADR-0008](docs/decisions/0008-conformance-testing-modelled-on-media3.md)).
@@ -54,7 +54,7 @@ Pick something else if you need:
 
 - HLS, DRM/FairPlay, ICY metadata, crossfade, casting or video. `AVPlayer` covers HLS and FairPlay.
 - watchOS, tvOS or Intel Macs. It builds for iOS 17+ and macOS 14+ on Apple silicon.
-- Every format. APE, WavPack, DSD and WMA are not built in; SFBAudioEngine or VLCKit cover more.
+- Every format. WMA Pro/Lossless, DSD passthrough (DoP) and other exotic codecs are not built in; SFBAudioEngine or VLCKit cover more.
 - Live AAC or Ogg streams that reconnect after a dropped connection; they fail instead ([ADR-0017](docs/decisions/0017-live-streams.md)).
 - A download manager. The streaming cache lasts one session.
 

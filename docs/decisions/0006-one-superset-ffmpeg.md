@@ -13,7 +13,7 @@ the library (about 110 KB per slice).
 ## Decision
 
 We build one `Frameworks/FFmpeg.xcframework`, the music superset (MP3, AAC, ALAC, FLAC, Opus,
-Vorbis, PCM WAV/AIFF, MP4/M4A, Ogg, Matroska), and both apps link it. Shuttle Podcasts carries the
+Vorbis, PCM WAV/AIFF, MP4/M4A, Ogg, Matroska, plus APE, WavPack, DSD and WMA), and both apps link it. Shuttle Podcasts carries the
 extra formats. Build profiles and `FFmpeg-music.xcframework` are gone.
 
 ## Alternatives rejected
