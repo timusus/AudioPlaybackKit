@@ -24,8 +24,8 @@ final class ScriptedItemTests: XCTestCase {
 
         rig.run(for: 11)
         XCTAssertEqual(rig.player.error?.kind, .source)
-        let failed = seen.compactMap { if case let .itemFailed(index, _) = $0 { index } else { nil } }
-        XCTAssertEqual(failed, [1])
+        let failed = seen.compactMap { if case let .itemFailed(ref, _) = $0 { ref } else { nil } }
+        XCTAssertEqual(failed, [.init(index: 1, item: Episode(id: 2))])
         let all = await rig.finish()
         XCTAssertEqual(all.count, seen.count)
     }

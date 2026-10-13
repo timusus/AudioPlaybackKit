@@ -61,10 +61,10 @@ On a player, listen for the event and decide. The failed player is `.idle` on th
 
 ```swift
 rig.onEvent = {
-    guard case let .itemFailed(index, error) = $0 else { return }
-    failures.append((index, error))
+    guard case let .itemFailed(failed, error) = $0 else { return }
+    failures.append((failed.index, error))
     // Decided here, from the category, not from the error's text.
-    if Recovery(error.category) == .skip { player.remove(at: index) }
+    if Recovery(error.category) == .skip { player.remove(at: failed.index) }
 }
 ```
 

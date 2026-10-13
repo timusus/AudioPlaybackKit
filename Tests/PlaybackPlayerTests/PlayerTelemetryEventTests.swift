@@ -27,8 +27,8 @@ final class PlayerTelemetryEventTests: XCTestCase {
 
     private var firstAudio: [PlayerRig.Landing] {
         events.compactMap {
-            guard case let .firstAudioRendered(index, position) = $0 else { return nil }
-            return PlayerRig.Landing(index: index, position: position)
+            guard case let .firstAudioRendered(ref, position) = $0 else { return nil }
+            return PlayerRig.Landing(index: ref.index, position: position)
         }
     }
 
@@ -106,8 +106,8 @@ final class PlayerTelemetryEventTests: XCTestCase {
         rig.run(for: 2)
 
         XCTAssertEqual(names, ["bufferingStarted", "bufferingEnded"])
-        guard case let .bufferingStarted(index, position) = events.first else { return XCTFail("\(events)") }
-        XCTAssertEqual(index, 0)
+        guard case let .bufferingStarted(ref, position) = events.first else { return XCTFail("\(events)") }
+        XCTAssertEqual(ref, .init(index: 0, item: "a"))
         XCTAssertEqual(position, 3, accuracy: 0.25)
         XCTAssertTrue(player.isPlaying)
     }
@@ -302,7 +302,7 @@ final class PlayerTelemetryEventTests: XCTestCase {
         rig.output.injectStall()
         rig.pump()
         XCTAssertEqual(names, ["bufferingStarted"])
-        guard case let .bufferingStarted(index, _) = events.first else { return XCTFail("\(events)") }
-        XCTAssertEqual(index, 1)
+        guard case let .bufferingStarted(ref, _) = events.first else { return XCTFail("\(events)") }
+        XCTAssertEqual(ref, .init(index: 1, item: "b"))
     }
 }

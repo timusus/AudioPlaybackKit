@@ -210,6 +210,7 @@ public final class Player<Item: Hashable & Sendable> {
     public func remove(at index: Int) {
         precondition(entries.indices.contains(index), "index out of range")
         guard let current = currentIndex, entries.count > 1 else { return removeAll() }
+        let previous = ref(current)
         entries.remove(at: index)
         if index < current {
             currentIndex = current - 1
@@ -222,14 +223,14 @@ public final class Player<Item: Hashable & Sendable> {
             let ends = loadedKey != nil && error == nil && (repeatMode == .one || (index == entries.count && repeatMode == .off))
             if ends { unload(as: .ended) }
             // Before the load, whose failure to make a source is reported after the transition.
-            send(.itemTransition(from: current, to: successor, reason: .seek))
+            send(.itemTransition(from: previous, to: ref(successor), reason: .seek))
             if !ends, loadedKey != nil || error != nil { jump(to: successor, at: 0) }
         }
         armNext()
     }
 
     public func removeAll() {
-        let previous = currentIndex
+        let previous = currentIndex.map(ref)
         entries = []
         currentIndex = nil
         error = nil
@@ -263,7 +264,7 @@ public final class Player<Item: Hashable & Sendable> {
                     movePosition(to: 0)
                     forgetSource()
                     // Before the load, whose failure to make a source is reported after the transition.
-                    send(.itemTransition(from: current, to: next, reason: next == current ? .repeat : .auto))
+                    send(.itemTransition(from: ref(current), to: ref(next), reason: next == current ? .repeat : .auto))
                 }
                 load(next ?? current, at: 0)
             } else if loadedKey == nil || error != nil {
@@ -317,7 +318,7 @@ public final class Player<Item: Hashable & Sendable> {
     private func skip(to index: Int) {
         guard index == currentIndex else { return seek(to: 0, itemAt: index) }
         seek(to: 0)
-        send(.itemTransition(from: index, to: index, reason: .seek))
+        send(.itemTransition(from: ref(index), to: ref(index), reason: .seek))
     }
 
     // MARK: Position
@@ -327,10 +328,10 @@ public final class Player<Item: Hashable & Sendable> {
     public func seek(to position: TimeInterval) {
         guard let current = currentIndex, position.isFinite else { return }
         guard seekable != false else {
-            return send(.seekAdjusted(index: current, requested: position, position: self.position))
+            return send(.seekAdjusted(ref(current), requested: position, position: self.position))
         }
         let target = min(max(position, 0), duration ?? .infinity)
-        defer { if target != position { send(.seekAdjusted(index: current, requested: position, position: target)) } }
+        defer { if target != position { send(.seekAdjusted(ref(current), requested: position, position: target)) } }
         if let loadedKey, error == nil, !pausedAtEnd {
             seekTransport(item: loadedKey, to: target)
             movePosition(to: target)
@@ -356,7 +357,7 @@ public final class Player<Item: Hashable & Sendable> {
         movePosition(to: seconds)
         forgetSource()
         // Before the load, whose failure to make a source is reported after the transition.
-        send(.itemTransition(from: current, to: index, reason: .seek))
+        send(.itemTransition(from: ref(current), to: ref(index), reason: .seek))
         if !idle { jump(to: index, at: seconds) }
     }
 
@@ -514,7 +515,7 @@ public final class Player<Item: Hashable & Sendable> {
             self.duration = duration
             seekable = isSeekable
             if let target = seekTarget ?? startTarget {
-                if seekTarget != nil { send(.seekLanded(index: current, position: seconds)) }
+                if seekTarget != nil { send(.seekLanded(ref(current), position: seconds)) }
                 seekTarget = nil
                 startTarget = nil
                 landed(at: seconds, seekingTo: target, index: current)
@@ -522,7 +523,7 @@ public final class Player<Item: Hashable & Sendable> {
             // A position that moves while playing is heard, as media3's `onAudioPositionAdvancing`.
             if awaitingFirstAudio, transportStatus == .playing {
                 awaitingFirstAudio = false
-                send(.firstAudioRendered(index: current, position: seconds))
+                send(.firstAudioRendered(ref(current), position: seconds))
             }
         case let .status(status):
             transportStatus = status
@@ -594,7 +595,7 @@ public final class Player<Item: Hashable & Sendable> {
     private func landed(at seconds: TimeInterval, seekingTo target: TimeInterval, index: Int) {
         guard abs(seconds - target) > 0.001 else { return }
         discontinuityCount += 1
-        send(.seekAdjusted(index: index, requested: target, position: seconds))
+        send(.seekAdjusted(ref(index), requested: target, position: seconds))
     }
 
     /// What a load, skip or edit leaves until the next item's source opens.
@@ -640,11 +641,11 @@ public final class Player<Item: Hashable & Sendable> {
                 return
             }
             currentIndex = next
-            send(.itemTransition(from: from, to: next, reason: .auto))
+            send(.itemTransition(from: ref(from), to: ref(next), reason: .auto))
             return jump(to: next, at: 0)
         }
         currentIndex = index
-        send(.itemTransition(from: from, to: index, reason: index == from ? .repeat : .auto))
+        send(.itemTransition(from: ref(from), to: ref(index), reason: index == from ? .repeat : .auto))
         armNext()
     }
 
@@ -658,7 +659,7 @@ public final class Player<Item: Hashable & Sendable> {
             movePosition(to: 0)
             forgetSource()
             unload(as: .idle)
-            send(.itemTransition(from: current, to: index, reason: index == current ? .repeat : .auto))
+            send(.itemTransition(from: ref(current), to: ref(index), reason: index == current ? .repeat : .auto))
             reportFailure(at: index, failedNext.error)
             return true
         }
@@ -795,7 +796,7 @@ public final class Player<Item: Hashable & Sendable> {
         self.error = error
         nothingToPlay(.idle)
         refreshState()
-        send(.itemFailed(index: index, error: error))
+        send(.itemFailed(ref(index), error: error))
     }
 
     private func refreshState() {
@@ -825,7 +826,11 @@ public final class Player<Item: Hashable & Sendable> {
         guard now != rebuffering else { return }
         rebuffering = now
         guard now, let index else { return send(.bufferingEnded) }
-        send(.bufferingStarted(index: index, position: position))
+        send(.bufferingStarted(ref(index), position: position))
+    }
+
+    private func ref(_ index: Int) -> PlayerEvent<Item>.ItemRef {
+        PlayerEvent.ItemRef(index: index, item: entries[index].item)
     }
 
     private func send(_ event: PlayerEvent<Item>) {

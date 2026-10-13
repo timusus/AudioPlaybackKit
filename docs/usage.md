@@ -429,7 +429,7 @@ struct NowPlayingBar: View {
   decoded, the format your processors are configured with for it: draw an EQ curve at its rate. It is nil
   until the item is heard, and changes when a join into the next item is heard, not when it is decoded
   ahead (ADR-0025).
-- **A seek not made as asked** is reported as `seekAdjusted(index:requested:position:)`: a target
+- **A seek not made as asked** is reported as `seekAdjusted(_:requested:position:)`: a target
   clamped to `0...duration`, a seek an unseekable item refused (it stays put), or a source that landed
   elsewhere, as on a keyframe (sent after `seekLanded`). An unseekable item never fails for a seek.
 - **`discontinuityCount`** changes when `position` jumps instead of playing on: a seek, skip, load,
@@ -450,20 +450,23 @@ func watch() {
 ```
 
 `events` is an `AsyncStream` of what state cannot carry. Each is sent once, in order, after the state
-that caused it is written; the stream ends when the player is deallocated.
+that caused it is written; the stream ends when the player is deallocated. An event about an item
+carries a `PlayerEvent.ItemRef`: its `index` in `items` and the `item` itself, both as they were when it
+was sent. The stream yields later, after any edit made meanwhile, so read `ref.item`, never
+`player.items[ref.index]`, which may name another item or be out of range.
 
 ```swift
 Task {
     for await event in player.events {
         switch event {
-        case .itemTransition(let from, let to, let reason): break   // .auto, .seek or .repeat
-        case .itemFailed(let index, let error): break               // error.kind: .source, .output, .session
-        case .seekLanded(let index, let position): break            // the seek's audio reached the speaker
-        case .seekAdjusted(let index, let requested, let position): break  // clamped, refused or landed elsewhere
+        case .itemTransition(let from, let to, let reason): break   // ItemRefs; .auto, .seek or .repeat
+        case .itemFailed(let ref, let error): break                 // error.kind: .source, .output, .session
+        case .seekLanded(let ref, let position): break              // the seek's audio reached the speaker
+        case .seekAdjusted(let ref, let requested, let position): break  // clamped, refused or landed elsewhere
         case .recoveredPaused: break                                // see Errors and recovery
         case .playWhenReadyChanged(let value, let reason): break    // the player changed intent: .routeLost, .interruptionEnded, .endOfItem
-        case .firstAudioRendered(let index, let position): break    // first audio heard after a load, seek or transition
-        case .bufferingStarted(let index, let position): break      // a rebuffer while playing
+        case .firstAudioRendered(let ref, let position): break      // first audio heard after a load, seek or transition
+        case .bufferingStarted(let ref, let position): break        // a rebuffer while playing
         case .bufferingEnded: break                                 // ends the last bufferingStarted
         }
     }

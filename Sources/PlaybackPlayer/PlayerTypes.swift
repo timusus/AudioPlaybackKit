@@ -64,29 +64,42 @@ public enum PlayWhenReadyChangeReason: Sendable {
 /// Discrete things the state cannot carry: each is sent once, in order, after the state that caused
 /// it has been written.
 public enum PlayerEvent<Item: Hashable & Sendable>: Sendable {
-    /// `currentIndex` moved; `to` is nil when the list emptied.
-    case itemTransition(from: Int?, to: Int?, reason: TransitionReason)
-    /// The item at `index` failed, and the player is `.idle` on it with `error` set; there is no
-    /// automatic skip. A next item that failed while the current played is reported once playback
-    /// reaches it, after its `itemTransition`; removed or replaced before then, it is never reported.
-    case itemFailed(index: Int, error: PlaybackError)
+    /// The item an event names and its index in `items` when the event was sent. A consumer reads
+    /// `item` rather than `items[index]`, which a later edit may have shifted or shortened.
+    public struct ItemRef: Hashable, Sendable {
+        public let index: Int
+        public let item: Item
+
+        public init(index: Int, item: Item) {
+            self.index = index
+            self.item = item
+        }
+    }
+
+    /// `currentIndex` moved; `to` is nil when the list emptied. An edit that removed the current
+    /// item sends `from` with its index before the edit.
+    case itemTransition(from: ItemRef?, to: ItemRef?, reason: TransitionReason)
+    /// The item failed, and the player is `.idle` on it with `error` set; there is no automatic
+    /// skip. A next item that failed while the current played is reported once playback reaches
+    /// it, after its `itemTransition`; removed or replaced before then, it is never reported.
+    case itemFailed(ItemRef, error: PlaybackError)
     /// The seek's audio reached the speaker; `position` is where it landed.
-    case seekLanded(index: Int, position: TimeInterval)
+    case seekLanded(ItemRef, position: TimeInterval)
     /// media3 `DISCONTINUITY_REASON_SEEK_ADJUSTMENT`: a seek went to `position` instead of `requested`.
     /// Sent at the call for a clamp to the item or a refusal by an unseekable item (which stays
     /// where it is), and after `seekLanded` when the source lands elsewhere. A load at a start
     /// position is checked the same way, with no `seekLanded`.
-    case seekAdjusted(index: Int, requested: TimeInterval, position: TimeInterval)
+    case seekAdjusted(ItemRef, requested: TimeInterval, position: TimeInterval)
     /// A renderer failure or media-services reset was recovered; playback is paused at the same position.
     case recoveredPaused
     /// `playWhenReady` changed by the player, not the app.
     case playWhenReadyChanged(Bool, reason: PlayWhenReadyChangeReason)
     /// media3 `onRenderedFirstFrame` for audio: the first `position` that moved while playing after a
     /// load, seek or item transition, so time to first audio counts from the call. Not after a resume.
-    case firstAudioRendered(index: Int, position: TimeInterval)
+    case firstAudioRendered(ItemRef, position: TimeInterval)
     /// An underrun (media3 `onAudioUnderrun`): `.buffering` after the first audio, while
     /// `playWhenReady` and not suppressed. The wait after a load or seek is `firstAudioRendered`'s.
-    case bufferingStarted(index: Int, position: TimeInterval)
+    case bufferingStarted(ItemRef, position: TimeInterval)
     /// Ends the last `bufferingStarted`: audio resumed, or a pause, seek, load, stop or failure
     /// stopped the wait.
     case bufferingEnded

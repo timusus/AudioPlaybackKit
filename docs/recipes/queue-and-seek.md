@@ -6,14 +6,19 @@ Code: [`GaplessQueueRecipe.swift`](../../Tests/RecipesTests/GaplessQueueRecipe.s
 
 ## A gapless queue
 
-The player arms the next item itself, so the app hands over the list and listens for transitions.
+The player arms the next item itself, so the app hands over the list and listens for transitions. Each
+event carries the item it names as well as its index, so read `to?.item`, not `player.items[to.index]`:
+the list may have changed by the time `events` yields it.
 
 ```swift
+rig.onEvent = {
+    if case let .itemTransition(_, to, reason) = $0 { transitions.append((to?.item, reason)) }
+}
 rig.player.setItems([Track(id: 1), Track(id: 2), Track(id: 3)])
 rig.player.play()
 rig.run(for: 31)
 
-XCTAssertEqual(transitions.map(\.to), [1, 2])
+XCTAssertEqual(transitions.map(\.to), [Track(id: 2), Track(id: 3)])
 XCTAssertEqual(transitions.map(\.reason), [.auto, .auto])
 // Heard audio is one run: a join that left a hole would play silence between the items.
 ```

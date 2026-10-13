@@ -90,14 +90,14 @@ final class TestAppCodeRecipe: XCTestCase {
     func testAnItemThatFailsHalfwayReportsWhere() {
         factory.failingAtFrame = [Track(id: 1): 40]
         let rig = makeRig()
-        var failed: [Int] = []
-        rig.onEvent = { if case let .itemFailed(index, _) = $0 { failed.append(index) } }
+        var failed: [Track] = []
+        rig.onEvent = { if case let .itemFailed(ref, _) = $0 { failed.append(ref.item) } }
         rig.player.setItems([Track(id: 1)])
         rig.player.play()
 
         rig.run(for: 8)
 
-        XCTAssertEqual(failed, [0])
+        XCTAssertEqual(failed, [Track(id: 1)])
         XCTAssertEqual(rig.player.state, .idle)
     }
 }

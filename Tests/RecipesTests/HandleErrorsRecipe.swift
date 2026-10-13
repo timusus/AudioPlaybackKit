@@ -107,10 +107,10 @@ final class HandleErrorsRecipe: XCTestCase {
         let player = rig.player!
         var failures: [(index: Int, error: PlaybackError)] = []
         rig.onEvent = {
-            guard case let .itemFailed(index, error) = $0 else { return }
-            failures.append((index, error))
+            guard case let .itemFailed(failed, error) = $0 else { return }
+            failures.append((failed.index, error))
             // Decided here, from the category, not from the error's text.
-            if Recovery(error.category) == .skip { player.remove(at: index) }
+            if Recovery(error.category) == .skip { player.remove(at: failed.index) }
         }
 
         player.setItems([broken, good])

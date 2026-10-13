@@ -6,6 +6,14 @@ not onto `Transport` first: each would write the session, state machine and adva
 page has what each app does today, where it goes, and the order of work. Paths are relative to each app's
 iOS directory (`mobile/ios` in `timusus/shuttle-podcasts`, `ios` in `timusus/shuttle2`).
 
+## Migrating from 0.12 to 0.13
+
+| Old | New |
+|---|---|
+| `PlayerEvent` cases with `index: Int` (`itemFailed`, `seekLanded`, `seekAdjusted`, `firstAudioRendered`, `bufferingStarted`) and `itemTransition(from: Int?, to: Int?, ...)` | the index becomes a `PlayerEvent.ItemRef` (`index`, `item`), captured when the event is sent; `itemTransition` takes one per side. Read `ref.item` instead of `player.items[index]`, which a `setItems` or `replaceItems` since the event may have shortened (a trap) or changed (the wrong item). Removing the current item sends it as `from`, with its index before the removal (#180) |
+
+Shuttle2 can drop its `@_spi(Testing) onEvent` hook, which it used to capture the item at send time.
+
 ## Migrating from 0.11 to 0.12
 
 Paths are relative to each app's iOS directory, as above. Call sites were listed against the apps' `main`.

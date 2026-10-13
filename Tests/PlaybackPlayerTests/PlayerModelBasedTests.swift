@@ -168,17 +168,26 @@ final class PlayerModelBasedTests: XCTestCase {
         // The model knows no decode or flushes, so it cannot place buffering events; it checks only
         // that each start is ended before the next.
         var buffering = false
-        var unpaired: String?
+        var broken: String?
+        // The item an event names is the one at its index as it is sent; `from` may be a removed one.
+        func check(_ ref: PlayerEvent<String>.ItemRef?) {
+            guard let ref, player.items[ref.index] != ref.item else { return }
+            broken = "\(ref) names another item than items[\(ref.index)]"
+        }
         player.onEvent = { event in
             switch event {
-            case let .itemTransition(from, to, reason): sent.append(.transition(from: from, to: to, reason: reason))
-            case let .itemFailed(index, _): sent.append(.failed(index: index))
+            case let .itemTransition(from, to, reason):
+                check(to)
+                sent.append(.transition(from: from?.index, to: to?.index, reason: reason))
+            case let .itemFailed(ref, _):
+                check(ref)
+                sent.append(.failed(index: ref.index))
             case .playWhenReadyChanged(false, .endOfItem): sent.append(.pausedAtEndOfItem)
             case .bufferingStarted:
-                if buffering { unpaired = "bufferingStarted twice" }
+                if buffering { broken = "bufferingStarted twice" }
                 buffering = true
             case .bufferingEnded:
-                if !buffering { unpaired = "bufferingEnded with none started" }
+                if !buffering { broken = "bufferingEnded with none started" }
                 buffering = false
             default: break
             }
@@ -193,9 +202,9 @@ final class PlayerModelBasedTests: XCTestCase {
             let actual = snapshot(of: player)
             let expectedEvents = model.takeEvents()
             defer { sent = [] }
-            if expected != actual || expectedEvents != sent || unpaired != nil {
+            if expected != actual || expectedEvents != sent || broken != nil {
                 return """
-                after step \(step), \(operation): \(unpaired ?? "")
+                after step \(step), \(operation): \(broken ?? "")
                   model  \(expected)
                   player \(actual)
                   model events  \(expectedEvents)

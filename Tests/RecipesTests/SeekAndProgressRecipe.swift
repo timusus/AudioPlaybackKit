@@ -28,8 +28,8 @@ final class PlayerSeekRecipe: XCTestCase {
 
     func testPositionAdvancesWhilePlayingAndSeeksLand() {
         let rig = makeRig()
-        var landed: [(index: Int, position: TimeInterval)] = []
-        rig.onEvent = { if case let .seekLanded(index, position) = $0 { landed.append((index, position)) } }
+        var landed: [(item: Track, position: TimeInterval)] = []
+        rig.onEvent = { if case let .seekLanded(ref, position) = $0 { landed.append((ref.item, position)) } }
         rig.player.setItems([Track(id: 1), Track(id: 2)])
         rig.player.play()
         rig.run(for: 2)

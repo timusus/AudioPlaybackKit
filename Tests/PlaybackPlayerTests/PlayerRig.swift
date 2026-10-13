@@ -65,28 +65,28 @@ final class PlayerRig {
     static func transitions(_ events: [PlayerEvent<String>]) -> [Transition] {
         events.compactMap {
             guard case let .itemTransition(from, to, reason) = $0 else { return nil }
-            return Transition(from: from, to: to, reason: reason)
+            return Transition(from: from?.index, to: to?.index, reason: reason)
         }
     }
 
     static func failedIndices(_ events: [PlayerEvent<String>]) -> [Int] {
         events.compactMap {
-            guard case let .itemFailed(index, _) = $0 else { return nil }
-            return index
+            guard case let .itemFailed(ref, _) = $0 else { return nil }
+            return ref.index
         }
     }
 
     static func seeksLanded(_ events: [PlayerEvent<String>]) -> [Landing] {
         events.compactMap {
-            guard case let .seekLanded(index, position) = $0 else { return nil }
-            return Landing(index: index, position: position)
+            guard case let .seekLanded(ref, position) = $0 else { return nil }
+            return Landing(index: ref.index, position: position)
         }
     }
 
     static func seeksAdjusted(_ events: [PlayerEvent<String>]) -> [Adjustment] {
         events.compactMap {
-            guard case let .seekAdjusted(index, requested, position) = $0 else { return nil }
-            return Adjustment(index: index, requested: requested, position: position)
+            guard case let .seekAdjusted(ref, requested, position) = $0 else { return nil }
+            return Adjustment(index: ref.index, requested: requested, position: position)
         }
     }
 

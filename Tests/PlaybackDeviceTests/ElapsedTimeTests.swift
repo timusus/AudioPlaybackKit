@@ -57,7 +57,7 @@ final class ElapsedTimeTests: DeviceTestCase {
         let start = (clock: rig.output.currentTime(), wall: Date())
         await assertElapsedInStep(over: 4)
         XCTAssertEqual(rig.player.currentIndex, 1)
-        XCTAssertTrue(rig.didSend { if case .itemTransition(0, 1, .auto) = $0 { true } else { false } })
+        XCTAssertTrue(rig.didSend { if case let .itemTransition(from?, to?, .auto) = $0 { from.index == 0 && to.index == 1 } else { false } })
         XCTAssertEqual(rig.shownTitle, Fixture.items[1])
         XCTAssertEqual(rig.shownDuration ?? 0, 8, accuracy: 0.05)
         // No gap: the output clock kept wall time across the join.

@@ -10,16 +10,17 @@ final class GaplessQueueRecipe: XCTestCase {
     func testAQueuePlaysThroughItsItemsWithoutAGap() {
         let factory = FakeItemFactory<Track>()    // ten seconds per item at 8 Hz
         let rig = PlayerTestRig<Track> { try factory.make($0) }
-        var transitions: [(from: Int?, to: Int?, reason: TransitionReason)] = []
+        var transitions: [(to: Track?, reason: TransitionReason)] = []
         rig.onEvent = {
-            if case let .itemTransition(from, to, reason) = $0 { transitions.append((from, to, reason)) }
+            // The event names the item itself, so a queue edited since cannot mislabel it.
+            if case let .itemTransition(_, to, reason) = $0 { transitions.append((to?.item, reason)) }
         }
 
         rig.player.setItems([Track(id: 1), Track(id: 2), Track(id: 3)])
         rig.player.play()
         rig.run(for: 31)
 
-        XCTAssertEqual(transitions.map(\.to), [1, 2])
+        XCTAssertEqual(transitions.map(\.to), [Track(id: 2), Track(id: 3)])
         XCTAssertEqual(transitions.map(\.reason), [.auto, .auto])
         XCTAssertEqual(rig.player.state, .ended)
         // Heard audio is one run: a join that left a hole would play silence between the items.
