@@ -66,7 +66,9 @@ public enum AudioProcessingError: Error, Equatable {
 /// `BufferingAudioProcessor` instead (ADR-0026).
 ///
 /// Every flush is followed by frames of one item only, from `metadata.mediaStartFrame` on: the
-/// chain is drained and flushed at every item change, gapless joins included, and after a seek.
+/// chain is drained and flushed at every item change, gapless joins included, and after a seek. A
+/// source may change format within an item (`ItemSource.currentFormat`): the chain is drained,
+/// configured with the new format and flushed with the same item there, as at a join.
 /// Every seek, within the item or not, flushes each stage with the landed frame before the first
 /// frame after it, and nothing from before the seek is processed or heard after that flush, as
 /// media3's `AudioSink.flush()` on a position reset.

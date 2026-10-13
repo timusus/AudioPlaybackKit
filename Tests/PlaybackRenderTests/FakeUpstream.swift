@@ -44,8 +44,8 @@ final class FakeUpstream: FeederUpstream {
     }
 
     func resupply(from target: SeekTarget) {
-        guard case let .frame(start) = target.offset else { preconditionFailure("the feeder's own restarts are frames") }
-        let position = MediaPositionMap.Position(item: target.item, mediaFrame: start)
+        guard case let .frame(start, sampleRate?) = target.offset else { preconditionFailure("the feeder's own restarts are heard frames") }
+        let position = MediaPositionMap.Position(item: target.item, mediaFrame: start, sampleRate: sampleRate)
         resupplies.append(position)
         index = items.firstIndex { $0.id == position.item }!
         frame = position.mediaFrame

@@ -62,7 +62,7 @@ final class FeederTests: XCTestCase {
     }
 
     private func pos(_ item: Int, _ frame: Int64) -> MediaPositionMap.Position {
-        .init(item: item, mediaFrame: frame)
+        .init(item: item, mediaFrame: frame, sampleRate: upstream.items.first { $0.id == item }!.format.sampleRate)
     }
 
     func testStampsAreContiguousAcrossChunksAndAFormatChange() {

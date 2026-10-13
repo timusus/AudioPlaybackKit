@@ -210,8 +210,8 @@ final class Feeder {
     /// A restart in seconds is not reported: its first audio carries the frame they became.
     private func reportablePosition(at playhead: TimeInterval) -> MediaPositionMap.Position? {
         if let position = map.position(at: playhead) { return position }
-        guard let restartTarget, case let .frame(frame) = restartTarget.offset else { return nil }
-        return MediaPositionMap.Position(item: restartTarget.item, mediaFrame: frame)
+        guard let restartTarget, case let .frame(frame, sampleRate?) = restartTarget.offset else { return nil }
+        return MediaPositionMap.Position(item: restartTarget.item, mediaFrame: frame, sampleRate: sampleRate)
     }
 
     /// The one recovery path: an auto-flush, a stall, a transport flush, a seek and a stop all land here.
@@ -305,7 +305,7 @@ final class Feeder {
         // max(current, new) unless a seek allowed a discontinuity: the clock steps back on a rate
         // change, a resume or a re-anchor, and apps count listening time from position deltas.
         if let position = reportablePosition(at: playhead),
-           reportedPosition.map({ $0.item != position.item || $0.mediaFrame < position.mediaFrame }) ?? true {
+           reportedPosition.map({ $0.item != position.item || $0.seconds < position.seconds }) ?? true {
             reportedPosition = position
             onEvent(.position(position))
         }

@@ -24,11 +24,11 @@ final class MediaPositionMapTests: XCTestCase {
     func testPositionStartsAtTheFirstTagsMediaFrame() {
         var map = MediaPositionMap()
         map.append(tag(0, 220500, 44100), sampleRate: 44100)
-        XCTAssertEqual(map.position(at: 0), .init(item: 0, mediaFrame: 220500))
+        XCTAssertEqual(map.position(at: 0), .init(item: 0, mediaFrame: 220500, sampleRate: 44100))
 
         map.reset(at: 3)
         map.append(tag(0, 352800, 44100), sampleRate: 44100)
-        XCTAssertEqual(map.position(at: 3), .init(item: 0, mediaFrame: 352800))
+        XCTAssertEqual(map.position(at: 3), .init(item: 0, mediaFrame: 352800, sampleRate: 44100))
     }
 
     func testNothingWrittenHasNoPosition() {
@@ -60,10 +60,10 @@ final class MediaPositionMapTests: XCTestCase {
 
         XCTAssertEqual(map.advance(to: 0), [0])
         XCTAssertEqual(map.advance(to: at(44099)), [], "written is not played")
-        XCTAssertEqual(map.position(at: at(44099)), .init(item: 0, mediaFrame: 44099))
+        XCTAssertEqual(map.position(at: at(44099)), .init(item: 0, mediaFrame: 44099, sampleRate: 44100))
         XCTAssertEqual(map.advance(to: at(44100)), [1])
         XCTAssertEqual(map.advance(to: at(50000)), [])
-        XCTAssertEqual(map.position(at: at(50000)), .init(item: 1, mediaFrame: 5900))
+        XCTAssertEqual(map.position(at: at(50000)), .init(item: 1, mediaFrame: 5900, sampleRate: 44100))
     }
 
     func testAZeroFrameItemStillEnds() {
@@ -76,7 +76,7 @@ final class MediaPositionMapTests: XCTestCase {
         XCTAssertEqual(map.advance(to: at(50)), [0])
         XCTAssertEqual(map.advance(to: at(150)), [1, 2], "item 1 is entered and left in one step")
         XCTAssertEqual(map.advance(to: at(200)), [3], "a zero-frame last item is still reached")
-        XCTAssertEqual(map.position(at: at(200)), .init(item: 3, mediaFrame: 0))
+        XCTAssertEqual(map.position(at: at(200)), .init(item: 3, mediaFrame: 0, sampleRate: 44100))
     }
 
     func testAdvancingKeepsLaterPositionsExact() {
@@ -116,12 +116,12 @@ final class MediaPositionMapTests: XCTestCase {
         output.setRate(1, at: 0)
         output.advance(by: 0.5)
         XCTAssertEqual(map.advance(to: output.currentTime()), [0])
-        XCTAssertEqual(map.position(at: output.currentTime()), .init(item: 0, mediaFrame: 22050))
+        XCTAssertEqual(map.position(at: output.currentTime()), .init(item: 0, mediaFrame: 22050, sampleRate: 44100))
         output.advance(by: 0.5)
         XCTAssertEqual(map.advance(to: output.currentTime()), [1])
-        XCTAssertEqual(map.position(at: output.currentTime()), .init(item: 1, mediaFrame: 0))
+        XCTAssertEqual(map.position(at: output.currentTime()), .init(item: 1, mediaFrame: 0, sampleRate: 48000))
         output.advance(by: 0.5)
-        XCTAssertEqual(map.position(at: output.currentTime()), .init(item: 1, mediaFrame: 24000))
+        XCTAssertEqual(map.position(at: output.currentTime()), .init(item: 1, mediaFrame: 24000, sampleRate: 48000))
 
         XCTAssertEqual(join, 1)
         XCTAssertEqual(output.played.count, 2, "the join has no silence")
@@ -167,7 +167,7 @@ final class MediaPositionMapTests: XCTestCase {
         map.append(tag(0, 441000, 44100), sampleRate: 44100)
         try output.enqueue([Float](repeating: 2, count: 44100), format: mono, at: 10)
         XCTAssertEqual(heard, 10, "the clock reads the anchor; the latency must not reach back into the old epoch")
-        XCTAssertEqual(map.position(at: heard), .init(item: 0, mediaFrame: 441000))
+        XCTAssertEqual(map.position(at: heard), .init(item: 0, mediaFrame: 441000, sampleRate: 44100))
 
         output.setRate(1, at: nil)
         output.advance(by: 0.5)
@@ -192,7 +192,7 @@ final class MediaPositionMapTests: XCTestCase {
 
         guard case let .autoFlushed(flushTime)? = output.events.last else { return XCTFail("no auto-flush") }
         let resume = try XCTUnwrap(map.position(at: flushTime))
-        XCTAssertEqual(resume, .init(item: 0, mediaFrame: 22050))
+        XCTAssertEqual(resume, .init(item: 0, mediaFrame: 22050, sampleRate: 44100))
         map.reset(at: flushTime)
         map.append(tag(0, resume.mediaFrame, 66150), sampleRate: 44100)
         try output.enqueue(ramp(from: resume.mediaFrame, count: 66150), format: mono, at: flushTime)

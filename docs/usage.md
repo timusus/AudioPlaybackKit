@@ -283,6 +283,11 @@ has no `setNext`; it arms the next item of its list itself.)
 A source belongs to one `setCurrent` or `setNext`; make a new `FFmpegItemSource` each time.
 A source of your own must implement `release()`, which has no default: a wrapper forwards it to the
 source it wraps, and a source holding nothing beyond memory leaves it empty.
+A source whose format changes mid-item (a server stream re-opened at a time offset that comes back at
+another rate or channel count) reports it through `currentFormat`; from then on its frames count at the
+new rate. The audio before the change plays out, the processors and output are reconfigured, and the
+position carries on in seconds, as media3's `DefaultAudioSink` reconfigures within one period. A
+wrapper forwards `currentFormat` too: it has a default, nil, for a format fixed at `open()`.
 
 **Gapless.** Call `setNext(item:source:)` for the track after the current one as soon as the app
 knows it, and again when the queue changes (the last next item is replaced if decode has not reached it;
@@ -300,8 +305,9 @@ so positions stay in media time), holds them back or changes the channel count i
 allocate; `process(_:)` and `queueInput(_:)` run per chunk and should not. A
 processor cannot change the sample rate; `configure(_:)` receives the item's format, so a filter that
 depends on the rate (an EQ) derives its coefficients there and again after each `flush(_:)`. The
-chain is drained and flushed at every item change, gapless joins included, at the start and after a
-seek, and `flush(_:)` gets a `StreamMetadata`: the `item` whose frames follow (the app's own, as given
+chain is drained and flushed at every item change, gapless joins included, at the start, after a
+seek and at a format change within an item (a source re-opened at another rate or channel count:
+`configure(_:)` then runs again mid-item with the new format, and `flush(_:)` names the same item), and `flush(_:)` gets a `StreamMetadata`: the `item` whose frames follow (the app's own, as given
 to `Transport` or `Player`; cast it back) and its `mediaStartFrame`. ReplayGain reads its gain for
 `metadata.item` there (ADR-0021). Filter memory and a limiter's envelope reset at each join. Adding or
 removing a processor, changing its `isActive` or changing its output format needs another
@@ -428,7 +434,7 @@ struct NowPlayingBar: View {
 - **`audioFormat`** (media3 `getAudioFormat()`) is the current item's sample rate and channel count as
   decoded, the format your processors are configured with for it: draw an EQ curve at its rate. It is nil
   until the item is heard, and changes when a join into the next item is heard, not when it is decoded
-  ahead (ADR-0025).
+  ahead (ADR-0025). A format change within an item does not update it.
 - **A seek not made as asked** is reported as `seekAdjusted(_:requested:position:)`: a target
   clamped to `0...duration`, a seek an unseekable item refused (it stays put), or a source that landed
   elsewhere, as on a keyframe (sent after `seekLanded`). An unseekable item never fails for a seek.

@@ -36,7 +36,7 @@ which is media3's audio input format, and a chain could change the channel count
 ## Consequences
 
 `TransportEvent.crossed` gains a payload, a source break for an app matching `.crossed(let item)`
-(it becomes `.crossed(let item, _)`). A format change inside one item is not reported; the decoder does
-not produce one.
+(it becomes `.crossed(let item, _)`). A format change inside one item (`ItemSource.currentFormat`, a
+re-opened server stream, #179) reconfigures the processors but is not reported here.
 
 Links: ADR-0010, ADR-0018, ADR-0023, issue #150, `PlayerAudioFormatTests`.

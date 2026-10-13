@@ -211,7 +211,8 @@ Details:
 6. **Progressive transcodes** (`onSeekUnsupported` today): the app's `ItemSource` streams the transcode
    with no length, declares `isSeekable` true, and seeks by re-opening the server stream at a time offset
    (ADR-0022). The player then offers the scrubber and does not treat the item as live; a landing more than
-   1 ms off the target arrives as `seekAdjusted`.
+   1 ms off the target arrives as `seekAdjusted`. A re-opened stream at another rate or channel count is
+   reported through `currentFormat` (the landed frame at the new rate), and playback carries on.
 7. **Failed tracks.** `onCurrentFailed` skips only an item that never became ready, never wraps past the
    end of the queue, and stops after 15 in a row. Keep those rules in the `itemFailed` handler, counting
    there: `skipToNext()` wraps under `repeatMode = .all`, so check `currentIndex` first.

@@ -270,14 +270,13 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         }
     }
 
-    /// Every frame position comes from audio already pulled, so its item's rate is known. One computed
-    /// while a `setCurrent` or `seek` is still queued is dropped: its caller has moved past it.
+    /// One computed while a `setCurrent` or `seek` is still queued is dropped: its caller has moved past it.
     private func report(_ position: MediaPositionMap.Position) {
         guard discontinuityLock.withLock({ calledDiscontinuities }) == takenDiscontinuities,
-              let item = ids[position.item], let rate = upstream.formats[position.item]?.sampleRate else { return }
-        let duration = sequencer.duration(of: position.item).map { Double($0) / rate }
+              let item = ids[position.item] else { return }
+        let duration = sequencer.duration(of: position.item)
         let isSeekable = sequencer.isSeekable(position.item)
-        onEvent(.position(item: item, seconds: Double(position.mediaFrame) / rate, duration: duration, isSeekable: isSeekable))
+        onEvent(.position(item: item, seconds: position.seconds, duration: duration, isSeekable: isSeekable))
     }
 
     /// Once decode has passed into the next its audio may be queued, so it is dropped and the output

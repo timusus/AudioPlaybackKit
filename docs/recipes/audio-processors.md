@@ -9,6 +9,8 @@ effects belong in the app. The rules are in [Usage](../usage.md#play-through-the
 ## The lifecycle
 
 1. `configure(_ input: PCMFormat)` stages the item's format and returns the output format. It applies nothing.
+   It can run again mid-item, followed by a drain and a `flush(_:)` for the same item, when the item's
+   source changes rate or channel count (a re-opened server stream); derive rate-dependent state there.
 2. `flush(_ metadata:)` applies the staged format and starts afresh. It runs before the first frame of every
    item, at every gapless join and after every seek, with `metadata.mediaStartFrame` the frame the
    next audio starts at. **Clear all running state here**; this is how a processor "resets on seek".

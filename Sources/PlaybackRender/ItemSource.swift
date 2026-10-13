@@ -18,16 +18,23 @@ import PlaybackDecode
 /// nothing: it may land in any item still set. A source passed again while still set is not released.
 ///
 /// To follow an item's decode (a listener on its byte source), wrap `FFmpegItemSource` in a source of
-/// the app's own that forwards every call, `release()` included: the first `open()` is the start of
+/// the app's own that forwards every call, `release()` and `currentFormat` included: the first `open()` is the start of
 /// playback, and `seek(toFrame:)` each seek, before the decoder moves. A wrapper is the supported
 /// route, so the source protocol stays the one hook.
 public protocol ItemSource: AnyObject, Sendable {
     /// Never blocks: the calls that follow belong to the sequencer's `epoch`.
     func begin(epoch: UInt64)
-    /// The format every chunk of this item has. May block on network resolution: for a next item
+    /// The format of the item's first chunks. May block on network resolution: for a next item
     /// it runs once decode of the item before has ended, about two seconds ahead of the join, so
     /// a slow resolve overlaps that tail. Once interrupted it may return early or throw.
     func open() throws -> PCMFormat
+    /// Non-nil once the item's format has changed since `open()`, as a stream re-opened at a time
+    /// offset may come back at another rate or channel count; read after every `seek(toFrame:)` and
+    /// `nextChunk()`. From the change on, frames (the one `seek` lands on, `frameCount`, and the ones
+    /// `seek` is given) count at the new rate; a change inside `nextChunk()` keeps time continuous.
+    /// The transport drains and reconfigures the processors there, as media3's `DefaultAudioSink` does
+    /// on an output format change within one period. Defaults to nil, a format fixed at `open()`.
+    var currentFormat: PCMFormat? { get }
     /// The item's length in frames, read once `open()` returns; nil when unknown. Has no default, so
     /// a conformer cannot report an unknown length by forgetting it.
     var frameCount: Int64? { get }
@@ -51,6 +58,7 @@ public protocol ItemSource: AnyObject, Sendable {
 
 public extension ItemSource {
     var isSeekable: Bool { frameCount != nil }
+    var currentFormat: PCMFormat? { nil }
 }
 
 /// `FFmpegStreamDecoder` as an item source. The decoder already trims encoder delay and padding

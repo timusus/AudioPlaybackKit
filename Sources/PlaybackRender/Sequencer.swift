@@ -17,13 +17,16 @@ struct SerialQueueExecutor: SequencerExecutor {
 /// the item's source has opened and given its rate.
 struct SeekTarget: Equatable, Sendable {
     enum Offset: Equatable, Sendable {
-        case frame(Int64)
+        /// A frame at `sampleRate`, or at the item's current rate when nil. A heard frame keeps its
+        /// rate: the source may have changed format since (`ItemSource.currentFormat`).
+        case frame(Int64, sampleRate: Double? = nil)
         case seconds(TimeInterval)
 
         /// The nearest frame, so a position reported in seconds seeks back to the frame it came from.
         func frame(at sampleRate: Double) -> Int64 {
             switch self {
-            case let .frame(frame): frame
+            case let .frame(frame, rate?) where rate != sampleRate: Int64((Double(frame) * sampleRate / rate).rounded())
+            case let .frame(frame, _): frame
             case let .seconds(seconds): Int64((seconds * sampleRate).rounded())
             }
         }
@@ -35,7 +38,7 @@ struct SeekTarget: Equatable, Sendable {
 
 extension SeekTarget {
     init(_ position: MediaPositionMap.Position) {
-        self.init(item: position.item, offset: .frame(position.mediaFrame))
+        self.init(item: position.item, offset: .frame(position.mediaFrame, sampleRate: position.sampleRate))
     }
 }
 
@@ -79,12 +82,12 @@ final class Sequencer: @unchecked Sendable {
     private final class Entry: @unchecked Sendable {
         let item: Int
         let source: any ItemSource
-        // Executor-only: set once the source is opened.
+        // Executor-only: set once the source is opened, and at each format change.
         var format: PCMFormat?
         // Locked: decode has reached it, so `setNext` and `clearNext` leave it alone once it has tagged.
         var started = false
-        // Locked: the source's, copied at open so the transport never calls a source.
-        var duration: Int64?
+        // Locked: the source's, copied at open and each format change so the transport never calls a source.
+        var duration: TimeInterval?
         var isSeekable = false
 
         init(item: Int, source: any ItemSource) {
@@ -238,8 +241,8 @@ final class Sequencer: @unchecked Sendable {
         return dropped
     }
 
-    /// Known by the time the item's first chunk is pulled; nil when its source does not know it.
-    func duration(of item: Int) -> Int64? {
+    /// Seconds, known by the time the item's first chunk is pulled; nil when its source does not know it.
+    func duration(of item: Int) -> TimeInterval? {
         lock.withLock { window.first { $0.item == item }?.duration }
     }
 
@@ -352,21 +355,22 @@ final class Sequencer: @unchecked Sendable {
 
         let entry = cursor.entry
         entry.source.begin(epoch: jobEpoch)
-        let outcome = Result<(landed: Int64?, samples: [Float]?), any Error> {
+        let outcome = Result<(landed: Int64?, rescale: Double?, samples: [Float]?), any Error> {
             if entry.format == nil {
                 entry.format = try entry.source.open()
-                let duration = entry.source.frameCount
-                lock.withLock { entry.duration = duration }
+                readDuration(of: entry)
                 let isSeekable = entry.source.isSeekable
                 lock.withLock { entry.isSeekable = isSeekable }
             }
-            let sampleRate = entry.format!.sampleRate
             // A seek can reach a source not yet known to be unseekable; it plays on and counts from 0
             // rather than failing the item (ADR-0022).
-            let landed = try cursor.seekTo.map {
+            let landed = try cursor.seekTo.map { [sampleRate = entry.format!.sampleRate] in
                 entry.source.isSeekable ? try entry.source.seek(toFrame: $0.frame(at: sampleRate)) : 0
             }
-            return (landed, try entry.source.nextChunk())
+            // The landed frame is already at a rate the seek changed to.
+            _ = takeFormatChange(of: entry)
+            let samples = try entry.source.nextChunk()
+            return (landed, takeFormatChange(of: entry), samples)
         }
 
         let supplied = lock.withLock { () -> Bool in
@@ -376,8 +380,9 @@ final class Sequencer: @unchecked Sendable {
             switch outcome {
             case let .failure(error):
                 failure = (entry.item, error)
-            case let .success((landed, samples)):
+            case let .success((landed, rescale, samples)):
                 if let landed { current.nextFrame = landed }
+                if let rescale { current.nextFrame = Int64((Double(current.nextFrame) * rescale).rounded()) }
                 current.seekTo = nil
                 if let format = entry.format, let samples {
                     let frames = Int64(samples.count / format.channelCount)
@@ -399,6 +404,21 @@ final class Sequencer: @unchecked Sendable {
             return waiting
         }
         if supplied { onSupply() }
+    }
+
+    /// Executor. Adopts the source's new format, if any, and returns new rate over old so the frames
+    /// counted so far keep their time; the chunk tagged with it reconfigures the pipeline.
+    private func takeFormatChange(of entry: Entry) -> Double? {
+        guard let old = entry.format, let new = entry.source.currentFormat, new != old else { return nil }
+        entry.format = new
+        readDuration(of: entry)
+        return new.sampleRate / old.sampleRate
+    }
+
+    /// Executor.
+    private func readDuration(of entry: Entry) {
+        let duration = entry.source.frameCount.map { Double($0) / entry.format!.sampleRate }
+        lock.withLock { entry.duration = duration }
     }
 
     /// Locked. The one join: next starts from its first frame straight after the ended item's last,

@@ -91,6 +91,12 @@ final class RecordingProcessor: TestProcessor, @unchecked Sendable {
     }
 
     private(set) var events: [Event] = []
+    private(set) var configured: [PCMFormat] = []
+
+    override func configure(_ input: PCMFormat) throws -> PCMFormat {
+        configured.append(input)
+        return try super.configure(input)
+    }
 
     override func flush(_ metadata: StreamMetadata) {
         super.flush(metadata)

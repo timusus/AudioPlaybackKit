@@ -25,8 +25,11 @@ struct SegmentTag: Equatable, Sendable {
 struct MediaPositionMap: Sendable {
     struct Position: Equatable, Sendable {
         var item: Int
-        /// At the item's own sample rate.
         var mediaFrame: Int64
+        /// The rate `mediaFrame` counts at: the item's own, which a format change within it can move.
+        var sampleRate: Double
+
+        var seconds: TimeInterval { Double(mediaFrame) / sampleRate }
     }
 
     private struct Segment: Sendable {
@@ -84,7 +87,8 @@ struct MediaPositionMap: Sendable {
         let played = Int64(((min(playhead, writtenEnd) - segment.start) * segment.sampleRate).rounded())
         return Position(
             item: segment.tag.item,
-            mediaFrame: segment.tag.mediaStartFrame + min(max(played, 0), segment.tag.frameCount)
+            mediaFrame: segment.tag.mediaStartFrame + min(max(played, 0), segment.tag.frameCount),
+            sampleRate: segment.sampleRate
         )
     }
 
