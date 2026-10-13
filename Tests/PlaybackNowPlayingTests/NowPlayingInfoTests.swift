@@ -380,4 +380,79 @@ final class NowPlayingInfoTests: XCTestCase {
         XCTAssertNotNil(current)
         XCTAssertTrue(artwork === current)
     }
+
+    func testRefreshingMetadataRepublishesTheNewTitleAndArtwork() async {
+        await playing()
+        await rig.session.artworkLoad?.value
+        let before: MPMediaItemArtwork? = rig.info[MPMediaItemPropertyArtwork]
+
+        rig.retitled["a"] = "Edited"
+        rig.session.refreshMetadata()
+        await rig.session.artworkLoad?.value
+
+        let artwork: MPMediaItemArtwork? = rig.info[MPMediaItemPropertyArtwork]
+        XCTAssertEqual(title, "Edited")
+        XCTAssertNotNil(before)
+        XCTAssertFalse(artwork === before)
+        XCTAssertTrue(artwork === rig.artworks["a"])
+    }
+
+    func testRefreshingMetadataLeavesElapsedTimeRateAndCommandsAlone() async {
+        await playing()
+        await rig.session.artworkLoad?.value
+        let (elapsedBefore, rateBefore, enabled) = (elapsed, rate, rig.commands.enabled)
+        let state = rig.info.playbackState
+
+        rig.retitled["a"] = "Edited"
+        rig.session.refreshMetadata()
+
+        XCTAssertEqual(title, "Edited")
+        XCTAssertEqual(elapsed, elapsedBefore)
+        XCTAssertEqual(rate, rateBefore)
+        XCTAssertEqual(duration, 10)
+        XCTAssertEqual(rig.info.playbackState, state)
+        XCTAssertEqual(rig.commands.enabled, enabled)
+    }
+
+    func testRefreshingMetadataWithNoItemWritesNothing() async {
+        await rig.settle()
+        let writes = rig.info.writes
+
+        rig.session.refreshMetadata()
+
+        XCTAssertEqual(rig.info.writes, writes)
+        XCTAssertNil(rig.info.nowPlayingInfo)
+    }
+
+    func testRefreshingMetadataAfterReleaseWritesNothing() async {
+        await playing()
+        rig.session.release()
+        let writes = rig.info.writes
+        rig.retitled["a"] = "Edited"
+
+        rig.session.refreshMetadata()
+
+        XCTAssertEqual(rig.info.writes, writes)
+        XCTAssertNil(rig.info.nowPlayingInfo)
+    }
+
+    func testArtworkLoadedBeforeARefreshIsDropped() async {
+        rig.heldArtwork = ["a"]
+        rig.player.setItems(["a", "b"])
+        await rig.settle()
+        let first = rig.session.artworkLoad
+        rig.session.refreshMetadata()
+        let second = rig.session.artworkLoad
+        await Task.yield()
+
+        rig.deliverArtwork(for: "a")
+        await second?.value
+        let current: MPMediaItemArtwork? = rig.info[MPMediaItemPropertyArtwork]
+        rig.deliverArtwork(for: "a")
+        await first?.value
+
+        let artwork: MPMediaItemArtwork? = rig.info[MPMediaItemPropertyArtwork]
+        XCTAssertNotNil(current)
+        XCTAssertTrue(artwork === current)
+    }
 }

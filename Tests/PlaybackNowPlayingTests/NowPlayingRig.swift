@@ -62,6 +62,8 @@ final class NowPlayingRig {
     private(set) var session: NowPlayingSession<String>!
     /// Artwork loads for these items wait for `deliverArtwork`.
     var heldArtwork: Set<String> = []
+    /// Titles the metadata closure returns in place of the default, as an app's edited tags.
+    var retitled: [String: String] = [:]
     private var artworkWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
     private(set) var artworks: [String: MPMediaItemArtwork] = [:]
     /// The session's clock, moved with the output's by `run`; a test moves it alone for output that starts late.
@@ -91,7 +93,9 @@ final class NowPlayingRig {
         NowPlayingSession(
             player: controlled,
             supportedRates: supportedRates,
-            metadata: { NowPlayingMetadata(title: $0.uppercased(), artist: "Artist \($0)", album: "Album", duration: 99) },
+            metadata: { [weak self] in
+                NowPlayingMetadata(title: self?.retitled[$0] ?? $0.uppercased(), artist: "Artist \($0)", album: "Album", duration: 99)
+            },
             artwork: { [weak self] in await self?.loadArtwork($0) },
             infoCenter: info,
             commandCenter: commands,

@@ -142,6 +142,24 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         Self.clear(commandCenter, infoCenter, claim: claim)
     }
 
+    /// Asks `metadata` and `artwork` again for the current item and shows the result, for an app that
+    /// edited the item's tags. Elapsed time, rate and commands are left alone; the old artwork stays
+    /// until the new one arrives. Does nothing with no current item or after `release()`.
+    public func refreshMetadata() {
+        guard !released, let item = current?.item, player.currentItem == item else { return }
+        let shownArtwork = current?.artwork
+        load(item)
+        current?.artwork = shownArtwork
+        guard var info = infoCenter.nowPlayingInfo, let current, var shown = published else { return }
+        shown.duration = player.isLive ? nil : player.duration ?? current.metadata.duration
+        published = shown
+        info[MPMediaItemPropertyTitle] = current.metadata.title
+        info[MPMediaItemPropertyArtist] = current.metadata.artist
+        info[MPMediaItemPropertyAlbumTitle] = current.metadata.album
+        info[MPMediaItemPropertyPlaybackDuration] = shown.duration
+        infoCenter.nowPlayingInfo = info
+    }
+
     private static func clear(_ commandCenter: any RemoteCommandCenter, _ infoCenter: any NowPlayingInfoCenter, claim: Int) {
         let key = ObjectIdentifier(infoCenter)
         guard centreClaims[key] == claim else { return }
