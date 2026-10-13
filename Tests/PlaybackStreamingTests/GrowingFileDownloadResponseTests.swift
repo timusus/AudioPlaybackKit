@@ -69,6 +69,24 @@ extension GrowingFileDownloadTests {
         #expect(resumed.opens == 1, "no restart")
     }
 
+    /// media3's `HttpUtil.getContentLength` (used by DefaultHttpDataSource) warns on a `Content-Length`
+    /// that disagrees with the `Content-Range` span and takes the larger. This engine deviates on
+    /// the total: the range's own total is the resource's length and the body's header is only
+    /// what is left to send, so neither a short nor a long header changes it or fails the read.
+    @Test("a Content-Length that disagrees with the Content-Range leaves the range's total and the read intact")
+    func aContentLengthDisagreeingWithTheContentRangeKeepsTheRangesTotal() {
+        for lie: Int64 in [400, 5000] {
+            let h = Harness()
+            h.read()
+            #expect(h.respond(206, range: "bytes 0-999/1000", length: lie), "length \(lie)")
+            #expect(h.machine.totalLength == 1000, "length \(lie)")
+            h.body(1000)
+            h.end()
+            #expect(h.machine.totalLength == 1000, "length \(lie)")
+            #expect(h.read(100) == .serve(fileOffset: 0, count: 100, landed: nil), "length \(lie)")
+        }
+    }
+
     @Test("a 204 with no body and no type is no media: the read fails")
     func aNoContentResponseFailsTheRead() {
         let h = Harness()
