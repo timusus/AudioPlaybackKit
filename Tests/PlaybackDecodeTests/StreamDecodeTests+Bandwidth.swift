@@ -144,17 +144,72 @@ extension StreamDecodeTests {
         let counting = CountingByteReader(try FileByteReader(url: url))
         let decoder = FFmpegStreamDecoder(reader: counting)
         let format = try decoder.open()
-        let channels = format.channelCount, rate = Int(format.sampleRate), window = 4096
+        let continuous = try Self.xinglessContinuousPCM(url: url, seconds: 64)
 
         /* 30 s is far past the bytes a seek may decode from the first frame. */
-        let readTo = 60 * rate
-        var continuous: [Float] = []
-        while continuous.count < readTo * channels, let chunk = decoder.nextChunk() {
-            continuous.append(contentsOf: chunk)
+        var read = 0
+        while read < 60 * Int(format.sampleRate) * format.channelCount, let chunk = decoder.nextChunk() {
+            read += chunk.count
         }
-        XCTAssertGreaterThanOrEqual(continuous.count, readTo * channels)
+        let assertExact = Self.xinglessExactSeekAssertion(decoder, counting, format, continuous)
+        try assertExact(30, "inside the read range")
+        /* A few seconds past what was read is in reach of its last frame: counted, not estimated. */
+        try assertExact(62, "past the read range within the seek budget")
 
-        func assertExact(at seconds: Int, _ label: String) throws {
+        /* Further than the budget reaches is an estimate, which reads a window, not the gap. */
+        for (target, label) in [(80.0, "past the budget"), (250.0, "far")] {
+            let before = counting.bytesRead
+            let landed = try decoder.seek(toSeconds: target)
+            XCTAssertEqual(landed, target, accuracy: 10, "\(label): landed \(landed)")
+            XCTAssertNotNil(decoder.nextChunk(), "\(label): nothing decoded after the seek")
+            XCTAssertLessThan(counting.bytesRead - before, 64 * 1024, "\(label): the seek walked the file")
+        }
+
+        /* The estimate's mislabelled frames must not stand in for the read range's true ones. */
+        try assertExact(45, "back inside the read range after an estimate")
+    }
+
+    /// An index entry an estimated landing labelled is never an anchor, even once a read from the
+    /// first frame has run on past it: the seek counts from a true frame before it instead.
+    func testXinglessVBRMP3NeverAnchorsOnAnEstimatedLabel() throws {
+        try skipUnlessAvailable()
+        let url = try GeneratedFixture.xinglessVBRMP3()
+        let counting = CountingByteReader(try FileByteReader(url: url))
+        let decoder = FFmpegStreamDecoder(reader: counting)
+        let format = try decoder.open()
+        let continuous = try Self.xinglessContinuousPCM(url: url, seconds: 125)
+
+        /* Labels frames from 120 s on with times the bytes only guess at. */
+        let estimated = try decoder.seek(toSeconds: 120)
+        XCTAssertEqual(estimated, 120, accuracy: 10)
+        for _ in 0..<100 { XCTAssertNotNil(decoder.nextChunk()) }
+
+        XCTAssertEqual(try decoder.seek(toSeconds: 0), 0)
+        var read = 0
+        while read < 124 * Int(format.sampleRate) * format.channelCount, let chunk = decoder.nextChunk() {
+            read += chunk.count
+        }
+        let assertExact = Self.xinglessExactSeekAssertion(decoder, counting, format, continuous)
+        try assertExact(121, "among the estimate's labels, read since from the first frame")
+    }
+
+    /// The first `seconds` of the Xing-less VBR fixture, decoded without a seek.
+    private static func xinglessContinuousPCM(url: URL, seconds: Int) throws -> [Float] {
+        let reference = FFmpegStreamDecoder(reader: try FileByteReader(url: url))
+        let format = try reference.open()
+        let count = seconds * Int(format.sampleRate) * format.channelCount
+        var pcm: [Float] = []
+        while pcm.count < count, let chunk = reference.nextChunk() { pcm.append(contentsOf: chunk) }
+        XCTAssertGreaterThanOrEqual(pcm.count, count)
+        return pcm
+    }
+
+    /// Seeks `decoder` to a whole second and asserts it lands there, cheaply, on `continuous`'s audio.
+    private static func xinglessExactSeekAssertion(
+        _ decoder: FFmpegStreamDecoder, _ counting: CountingByteReader, _ format: StreamAudioFormat, _ continuous: [Float]
+    ) -> (Int, String) throws -> Void {
+        { seconds, label in
+            let channels = format.channelCount, window = 4096
             let before = counting.bytesRead
             let landed = try decoder.seek(toSeconds: Double(seconds))
             XCTAssertEqual(landed, Double(seconds), accuracy: 0.5 / format.sampleRate, label)
@@ -162,18 +217,10 @@ extension StreamDecodeTests {
             while after.count < window * channels, let chunk = decoder.nextChunk() { after.append(contentsOf: chunk) }
             XCTAssertGreaterThanOrEqual(after.count, window * channels, label)
             XCTAssertLessThan(counting.bytesRead - before, 128 * 1024, "\(label): the seek walked the file")
-            let start = seconds * rate * channels
+            let start = seconds * Int(format.sampleRate) * channels
             let worst = zip(after, continuous[start..<(start + window * channels)]).map { abs($0 - $1) }.max() ?? 1
             XCTAssertLessThan(worst, 1e-4, "\(label): the audio is not the continuous decode's at \(seconds) s")
         }
-        try assertExact(at: 30, "inside the read range")
-
-        let far = try decoder.seek(toSeconds: 250)
-        XCTAssertEqual(far, 250, accuracy: 10, "landed \(far)")
-        XCTAssertNotNil(decoder.nextChunk(), "nothing decoded after the far seek")
-
-        /* The estimate's mislabelled frames must not stand in for the read range's true ones. */
-        try assertExact(at: 45, "back inside the read range after an estimate")
     }
 
     /// **A megabyte-sized ID3v2 tag must be stepped over, not downloaded.**
