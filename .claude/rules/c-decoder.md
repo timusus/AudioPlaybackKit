@@ -10,7 +10,7 @@ paths:
   library beyond the system zlib.
 - Seeks are sample-accurate: the demuxer is put a pre-roll before the target, and the decoder
   decodes and drops up to it. FLAC has no pre-roll (its seek finds a frame by its headers).
-- One seek path per format (`seek_mp3.c`, `seek_aac.c`, `seek_flac.c`, `seek_ogg.c`) behind
+- One seek path per format (`seek_mp3.c`, `seek_aac.c`, `seek_flac.c`, `seek_ogg.c`, `seek_wavpack.c`) behind
   `seek.c`; add a format there rather than special-casing in `stream_decode.c`.
 - A VBR MP3 seek further from a frame of known time than one seek's byte budget lands by Xing TOC or
   bitrate estimate and is the one inexact landing; with no Xing frame, frames already read count as

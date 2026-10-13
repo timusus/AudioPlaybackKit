@@ -5,7 +5,7 @@
  * its fallbacks, and the sample-accurate landing. What differs by format is asked of the decoder's
  * `SeekFormat`: where to put the demuxer, how far before the target, whether the codec survives a
  * flush, and what to do once the demuxer is placed. Each format module (seek_mp3.c, seek_flac.c,
- * seek_aac.c, seek_ogg.c, seek_generic.c) keeps its state in its own struct below.
+ * seek_aac.c, seek_ogg.c, seek_wavpack.c, seek_generic.c) keeps its state in its own struct below.
  *
  * The split follows media3's: an extractor hands the player a `SeekMap` that turns a time into a
  * place in the stream (XingSeeker, VbriSeeker, ConstantBitrateSeeker for MP3, FlacBinarySearchSeeker
@@ -131,6 +131,7 @@ extern const SeekFormat sd_seek_mp3;
 extern const SeekFormat sd_seek_flac;
 extern const SeekFormat sd_seek_aac;
 extern const SeekFormat sd_seek_ogg;
+extern const SeekFormat sd_seek_wavpack;
 extern const SeekFormat sd_seek_generic;
 
 /* The strategy for the stream `sd_open_format` just found (seek.c). */

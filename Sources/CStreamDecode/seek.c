@@ -13,6 +13,7 @@ const SeekFormat *sd_seek_format_for(const StreamDecoder *d) {
     if (name && strstr(name, "mp3")) return &sd_seek_mp3;
     if (name && strcmp(name, "flac") == 0) return &sd_seek_flac;
     if (name && strcmp(name, "ogg") == 0) return &sd_seek_ogg;
+    if (name && strcmp(name, "wv") == 0) return &sd_seek_wavpack;
     enum AVCodecID codec = d->fmt->streams[d->audio_idx]->codecpar->codec_id;
     if (codec == AV_CODEC_ID_AAC || codec == AV_CODEC_ID_AAC_LATM) return &sd_seek_aac;
     return &sd_seek_generic;

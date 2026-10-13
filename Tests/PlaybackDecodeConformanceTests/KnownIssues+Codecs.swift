@@ -9,9 +9,8 @@ extension KnownIssues {
     private static let ioErrorUnknownLength: [FaultSwitches] = [
         [.ioErrorOncePerPosition, .unknownLength], [.partialReads, .ioErrorOncePerPosition, .unknownLength],
     ]
-    private static let cleanAndPartial: [FaultSwitches] = [[], .partialReads]
 
-    private static let wavpack = "https://github.com/timusus/AudioPlaybackKit/issues/171 (WavPack: seeks into the stream fail, and with unknown length or an I/O error land early)"
+    private static let wavpack = "https://github.com/timusus/AudioPlaybackKit/issues/175 (WavPack, FFmpeg's wv demuxer: with no length it cannot find the APE tag after the last block and fails on it)"
     private static let wma = "https://github.com/timusus/AudioPlaybackKit/issues/171 (WMA: resume after an I/O error repeats frames; unknown-length seeks land early)"
 
     private static func wv(_ kind: ConformanceMatrix.Kind, _ switches: [FaultSwitches], _ message: String) -> Rule {
@@ -23,15 +22,9 @@ extension KnownIssues {
     }
 
     static let codecRules: [Rule] = [
-        wv(.seek, cleanAndPartial, "seek to 2.6666666666666665 threw streaming decode failed: malformed: the demuxer could not read a packet averror=-1094995529"),
-        wv(.seek, cleanAndPartial, "seek to 3.9 threw streaming decode failed: malformed: the demuxer could not read a packet averror=-1094995529"),
         wv(.outcome, unknownLength, "outcome decoded(end: \"failure\"), clean decoded(end: \"eof\")"),
         wv(.seek, unknownLength, "seek to 4.0 threw streaming decode failed: malformed: the demuxer could not read a packet averror=-1094995529"),
-        wv(.seek, unknownLength, "seek count 4 vs 3"),
-        wv(.seekLanding, unknownLength, "seek to 4.0s landed 2.6666666666666665s"),
-        wv(.seek, ioError, "seek count 5 vs 3"),
-        wv(.seekLanding, ioError, "seek to 4.0s landed 2.6666666666666665s, clean 4.0s"),
-        wv(.seekPCM, ioError, "seek to 4.0s: PCM after the landing differs from the clean seek"),
+        wv(.seek, unknownLength, "seek count 4 vs 5"),
         wmaRule(.resumePCM, ioError, "PCM differs from the clean decode at sample 205814 (180220 vs 176128 frames, resumes at frames [98299, 169961])"),
         wmaRule(.frameCount, ioError, "180220 frames, clean 176128"),
         wmaRule(.resumePCM, ioErrorUnknownLength, "PCM differs from the clean decode at sample 205814 (180219 vs 176128 frames, resumes at frames [98299])"),

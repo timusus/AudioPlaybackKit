@@ -32,6 +32,22 @@
     },
     {
       "alignFrames" : 0,
+      "landedS" : 2.667,
+      "toS" : 2.667,
+      "tolS" : 0.03,
+      "windowFrames" : 4096,
+      "windowSha256Int16" : "140678494d386d63e4990f631e55d6924e8125d2ef9467848515a3723c090f3b"
+    },
+    {
+      "alignFrames" : 0,
+      "landedS" : 3.9,
+      "toS" : 3.9,
+      "tolS" : 0.03,
+      "windowFrames" : 256,
+      "windowSha256Int16" : "d53958f8bfd8ff000e6cbe511aeee155699ad1957f7dfe4fa24724fd7094ab0e"
+    },
+    {
+      "alignFrames" : 0,
       "landedS" : 4,
       "toS" : 4,
       "tolS" : 0.03,
