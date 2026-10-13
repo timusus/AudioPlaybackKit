@@ -367,8 +367,8 @@ final class Sequencer: @unchecked Sendable {
             let landed = try cursor.seekTo.map { [sampleRate = entry.format!.sampleRate] in
                 entry.source.isSeekable ? try entry.source.seek(toFrame: $0.frame(at: sampleRate)) : 0
             }
-            // The landed frame is already at a rate the seek changed to.
-            _ = takeFormatChange(of: entry)
+            // The landed frame is already at a rate the seek changed to; any other change rescales below.
+            if landed != nil { _ = takeFormatChange(of: entry) }
             let samples = try entry.source.nextChunk()
             return (landed, takeFormatChange(of: entry), samples)
         }
