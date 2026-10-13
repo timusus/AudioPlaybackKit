@@ -75,6 +75,36 @@ final class PlayerBufferedAheadTests: XCTestCase {
         XCTAssertEqual(player.bufferedAhead, 0, accuracy: 1e-9)
     }
 
+    /// Playback starts once the feeder's `resumeDepth` (0.5 s, two chunks) is written, not before and
+    /// not after the full two seconds; a stream of unknown length or a live one waits for no more.
+    func testPlaybackStartsOnceHalfASecondIsBufferedForLocalAndStreamedItems() {
+        for (label, configure) in [
+            ("local", {}),
+            ("unknown length", { self.rig.factory.unknownLength = ["a"] }),
+            ("live", { self.rig.factory.live = ["a"] }),
+        ] as [(String, () -> Void)] {
+            rig = PlayerRig()
+            configure()
+            player.setItems(["a"])
+            player.play()
+            rig.settle()
+
+            rig.executor.runNext()
+            rig.timer.fire()
+            player.drainTransportEvents()
+            XCTAssertEqual(player.bufferedAhead, 0.25, accuracy: 1e-9, label)
+            XCTAssertEqual(rig.output.rate, 0, "\(label): started on 0.25 s")
+            XCTAssertEqual(player.state, .buffering, label)
+
+            rig.executor.runNext()
+            rig.timer.fire()
+            player.drainTransportEvents()
+            XCTAssertEqual(player.bufferedAhead, 0.5, accuracy: 1e-9, label)
+            XCTAssertEqual(rig.output.rate, 1, "\(label): not started on 0.5 s")
+            XCTAssertEqual(player.state, .ready, label)
+        }
+    }
+
     func testOnlyWhatIsLeftIsBufferedNearTheListsEnd() {
         player.setItems(["a"])
         player.play()
