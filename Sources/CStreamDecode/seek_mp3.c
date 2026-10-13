@@ -414,12 +414,18 @@ static int mp3_index_anchor(const StreamDecoder *d, int64_t ts, int64_t *pos, in
     return 1;
 }
 
-/* Extend `index_end` by a packet that follows on from it with its true time, or lower
- * `estimate_floor` to a packet's estimated label. */
+/* An index entry mp3dec labelled `dts` by estimate: lower `estimate_floor` to it. */
+static void mp3_untrust(StreamDecoder *d, int64_t dts) {
+    if (d->mp3.index_end == AV_NOPTS_VALUE || dts == AV_NOPTS_VALUE) return;
+    if (dts < d->mp3.estimate_floor) d->mp3.estimate_floor = dts;
+}
+
+/* Extend `index_end` by a packet that follows on from it with its true time, or untrust a
+ * packet's estimated label. */
 static void mp3_index_packet(StreamDecoder *d, const AVPacket *pkt) {
     if (d->mp3.index_end == AV_NOPTS_VALUE || pkt->dts == AV_NOPTS_VALUE) return;
     if (!d->mp3.timeline_exact) {
-        if (pkt->dts < d->mp3.estimate_floor) d->mp3.estimate_floor = pkt->dts;
+        mp3_untrust(d, pkt->dts);
         return;
     }
     int64_t frame = av_rescale_q(d->mp3.spf, (AVRational){ 1, d->sample_rate }, d->time_base);
@@ -528,6 +534,8 @@ static int mp3_landed(StreamDecoder *d, int anchored) {
         if (rc >= 0) d->has_held = 1;
         int64_t dts = rc >= 0 ? mp3_exact_dts(d, d->held) : AV_NOPTS_VALUE;
         d->landing_exact = dts != AV_NOPTS_VALUE;
+        /* mp3dec indexed the frame under the estimate's label, and a re-timed one is never fed. */
+        if (rc >= 0 && dts != d->held->dts) mp3_untrust(d, d->held->dts);
         if (dts == AV_NOPTS_VALUE && rc >= 0) dts = mp3_byte_rate_dts(d, d->held);
         if (dts != AV_NOPTS_VALUE && dts != d->held->dts) {
             /* The demuxer is told the frame's real time the one way it takes one: an index entry,
