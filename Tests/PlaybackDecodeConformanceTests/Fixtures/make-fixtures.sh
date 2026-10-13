@@ -198,6 +198,42 @@ $FF -i "$TMP/s44.wav" -t 2 -c:a pcm_s16be -map_metadata -1 aiff_s16.aiff
 $FF -i "$TMP/s48.wav" -c:a libopus -b:a 32k -map_metadata -1 opus_stereo.mka
 $FF -i "$TMP/s44.wav" -c:a vorbis -strict -2 -b:a 48k -map_metadata -1 vorbis_stereo.webm
 
+# WavPack and WMA v2 (ASF) from ffmpeg's own encoders. ffmpeg cannot encode Monkey's Audio and `mac`
+# is not packaged, so there is no APE fixture: the only public sample found has no stated licence.
+$FF -i "$TMP/s44.wav" -c:a wavpack -map_metadata -1 wavpack_stereo.wv
+$FF -i "$TMP/s44.wav" -c:a wmav2 -b:a 96k -map_metadata -1 wma_v2_stereo.wma
+
+# DSD64 stereo DSF, written by hand (ffmpeg has no DSD encoder or DSF muxer): a 2nd-order
+# delta-sigma modulation of a 440/660 Hz sine pair, 36 blocks of 4096 bytes per channel (about
+# 0.42 s), LSB first. Synthetic, so no third-party content.
+python3 -I - <<'PY'
+import math, struct
+RATE, BLOCK, BLOCKS = 2822400, 4096, 36
+BITS = BLOCK * BLOCKS * 8
+
+def modulate(freq):
+    out = bytearray(BLOCK * BLOCKS)
+    i1 = i2 = 0.0
+    for n in range(BITS):
+        x = 0.5 * math.sin(2 * math.pi * freq * n / RATE)
+        y = 1.0 if i2 >= 0 else -1.0
+        i1 += x - y
+        i2 += i1 - y
+        if y > 0:
+            out[n >> 3] |= 1 << (n & 7)
+    return out
+
+chans = [modulate(440), modulate(660)]
+data = bytearray()
+for b in range(BLOCKS):
+    for c in chans:
+        data += c[b * BLOCK:(b + 1) * BLOCK]
+fmt = struct.pack('<4sQIIIIIIQII', b'fmt ', 52, 1, 0, 2, 2, RATE, 1, BITS, BLOCK, 0)
+body = struct.pack('<4sQ', b'data', 12 + len(data)) + data
+head = struct.pack('<4sQQQ', b'DSD ', 28, 28 + len(fmt) + len(body), 0)
+open('dsf_dsd64_stereo.dsf', 'wb').write(head + fmt + body)
+PY
+
 ls -l *.mp3 *.m4a *.aac *.opus *.ogg *.flac *.wav *.aiff *.mka *.webm | awk '{print $5, $9}'
 
 # --- Fixtures of Tests/PlaybackDecodeTests/Fixtures (#43, #47) ----------------------------------

@@ -119,7 +119,7 @@ enum KnownIssues {
              fixture: "sample_partially_fragmented.mp4", kind: .seekPCM, switches: unknownLengthCombos,
              messages: partiallyFragmentedSeeks
                 .map { "seek to \($0)s: PCM after the landing at 0.11072562358276644s is not in the clean decode" }),
-    ] + mediaThreeFlacRules
+    ] + mediaThreeFlacRules + codecRules
 
     // media3 FlacExtractorTest port. `found` is the bytes read under ioError, partial+ioError and
     // partial+ioError+unknownLength, in that order.
