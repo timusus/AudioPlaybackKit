@@ -20,7 +20,7 @@ private final class RecordingSession: CategorySetting {
     }
 }
 
-/// #173: AirPlay 2 buffered playback needs `.longFormAudio` set together with `.playback`.
+/// AirPlay 2 buffered playback needs `.longFormAudio` set together with `.playback`.
 final class AudioSessionConfigurationTests: XCTestCase {
     func testTheMusicPresetSetsPlaybackWithLongFormRouteSharingAndNoOptions() throws {
         let session = RecordingSession()

@@ -318,7 +318,7 @@ multi-room playback work with no further code. The app must:
 
 - list `audio` in `UIBackgroundModes` in Info.plist, or playback stops when the app leaves the foreground;
 - show an `AVRoutePickerView` (or `MPVolumeView`'s route button) so the user can pick a speaker;
-- keep `options` free of `.mixWithOthers` and `.duckOthers` if it builds its own configuration, which do not belong with long-form route sharing.
+- keep `.mixWithOthers` out of `options` if it builds its own configuration: long-form route sharing is for audio that owns the session, and `setCategory` can fail with it.
 
 ### The list and its edits
 
