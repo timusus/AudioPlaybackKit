@@ -13,6 +13,7 @@ public struct DroppedFrames: Equatable, Sendable {
     }
 }
 
+/// What an ``AudioProcessor`` hands back for one chunk of interleaved samples.
 public struct ProcessorOutput: Sendable {
     public var samples: [Float]
     /// In output order.

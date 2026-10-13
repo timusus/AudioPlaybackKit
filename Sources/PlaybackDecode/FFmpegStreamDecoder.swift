@@ -3,7 +3,9 @@ import Foundation
     import CStreamDecode
 #endif
 
-/// What the container says about the audio behind a ``StreamByteReader``.
+/// What the container says about the audio behind a ``StreamByteReader``. Not the decoded output's
+/// format (`PCMFormat` in PlaybackRender, which has only rate and channels): this one is the source's,
+/// with duration and codec, and PlaybackRender cannot be imported from here.
 public struct StreamAudioFormat: Equatable, Sendable {
     /// The SOURCE's rate. The output's too, unless
     /// ``FFmpegStreamDecoder/setOutputFormat(sampleRate:channelCount:)`` fixed another.

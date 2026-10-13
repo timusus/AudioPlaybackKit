@@ -28,6 +28,7 @@ public final class Player<Item: Hashable & Sendable> {
         didSet { updateRebuffering() }
     }
     public var isPlaying: Bool { Self.isPlaying(state: state, playWhenReady: playWhenReady, suppression: suppression) }
+    /// The failure that ended the current item; nil while playback is healthy.
     public private(set) var error: PlaybackError?
 
     /// What is heard, in seconds of the current item's media time, written on every pump while it

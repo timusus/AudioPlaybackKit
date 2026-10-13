@@ -26,6 +26,7 @@ public enum PlaybackSuppression: Sendable {
     case interruption
 }
 
+/// Why playback stopped on its own; `kind` names the layer that failed.
 public struct PlaybackError: Error, Sendable {
     public enum Kind: Sendable {
         case source, output, session
