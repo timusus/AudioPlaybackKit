@@ -23,7 +23,7 @@ private final class SlowOpenSource: ItemSource, @unchecked Sendable {
         self.inner = inner
     }
 
-    var duration: Int64? { inner.duration }
+    var frameCount: Int64? { inner.frameCount }
 
     func begin(epoch: UInt64) {
         lock.withLock { self.epoch = epoch }

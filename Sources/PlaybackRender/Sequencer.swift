@@ -355,7 +355,7 @@ final class Sequencer: @unchecked Sendable {
         let outcome = Result<(landed: Int64?, samples: [Float]?), any Error> {
             if entry.format == nil {
                 entry.format = try entry.source.open()
-                let duration = entry.source.duration
+                let duration = entry.source.frameCount
                 lock.withLock { entry.duration = duration }
                 let isSeekable = entry.source.isSeekable
                 lock.withLock { entry.isSeekable = isSeekable }

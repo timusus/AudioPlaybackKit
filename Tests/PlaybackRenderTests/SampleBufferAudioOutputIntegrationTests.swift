@@ -95,7 +95,7 @@ final class SampleBufferAudioOutputIntegrationTests: XCTestCase {
 /// One second of a 440 Hz stereo sine at 48 kHz, in 100 ms chunks; seeks are exact.
 private final class ToneSource: ItemSource, @unchecked Sendable {
     private var frame: Int64 = 0
-    let duration: Int64? = 48000
+    let frameCount: Int64? = 48000
 
     func begin(epoch: UInt64) {}
     func open() throws -> PCMFormat { PCMFormat(sampleRate: 48000, channelCount: 2) }

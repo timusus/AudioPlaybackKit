@@ -59,8 +59,8 @@ public final class FakeItemFactory<Item: Hashable & Sendable> {
         calls.append(item)
         if failing.contains(item) { throw FakeItemError(item: item) }
         let source = FakeItemSource(format: formats[item] ?? format, frames: lengths[item] ?? frames, chunkFrames: 2, base: base(item))
-        if live.contains(item) { source.duration = nil }
-        if unknownLength.contains(item) { (source.duration, source.seekable) = (nil, true) }
+        if live.contains(item) { source.frameCount = nil }
+        if unknownLength.contains(item) { (source.frameCount, source.seekable) = (nil, true) }
         if unseekable.contains(item) { source.seekable = false }
         made.append((item, source))
         let script = ScriptedItemSource<Item>.Script(
@@ -144,7 +144,7 @@ private final class ScriptedItemSource<Item: Hashable & Sendable>: ItemSource, @
         self.script = script
     }
 
-    var duration: Int64? { source.duration }
+    var frameCount: Int64? { source.frameCount }
     var isSeekable: Bool { source.isSeekable }
 
     func begin(epoch: UInt64) {

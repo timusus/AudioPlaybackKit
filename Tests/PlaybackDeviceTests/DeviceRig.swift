@@ -97,7 +97,7 @@ final class GatedSource: ItemSource, @unchecked Sendable {
         _ = gate.wait(timeout: .now() + 10)
         return try base.open()
     }
-    var duration: Int64? { base.duration }
+    var frameCount: Int64? { base.frameCount }
     var isSeekable: Bool { base.isSeekable }
     func seek(toFrame frame: Int64) throws -> Int64 { try base.seek(toFrame: frame) }
     func nextChunk() throws -> [Float]? { try base.nextChunk() }

@@ -7,7 +7,7 @@ public final class FakeItemSource: ItemSource, @unchecked Sendable {
     public struct Unseekable: Error {}
 
     public let format: PCMFormat
-    private let frameCount: Int64
+    private let totalFrames: Int64
     private let chunkFrames: Int64
     private let base: Float
     private var position: Int64 = 0
@@ -21,15 +21,15 @@ public final class FakeItemSource: ItemSource, @unchecked Sendable {
     public var interrupts: Int { lock.withLock { _interrupts } }
     public var releases: Int { lock.withLock { _releases } }
     /// The item's length unless a test makes it unknown.
-    public var duration: Int64?
-    /// Overrides `ItemSource`'s default, seekable while the duration is known.
+    public var frameCount: Int64?
+    /// Overrides `ItemSource`'s default, seekable while the length is known.
     public var seekable: Bool?
-    public var isSeekable: Bool { seekable ?? (duration != nil) }
+    public var isSeekable: Bool { seekable ?? (frameCount != nil) }
 
     public init(format: PCMFormat, frames: Int64, chunkFrames: Int64 = 100, base: Float = 0) {
         self.format = format
+        totalFrames = frames
         frameCount = frames
-        duration = frames
         self.chunkFrames = chunkFrames
         self.base = base
     }
@@ -50,7 +50,7 @@ public final class FakeItemSource: ItemSource, @unchecked Sendable {
         assertNotReleased()
         // As FFmpeg's source throws `unseekable` for a forward-only reader.
         guard isSeekable || frame == position else { throw Unseekable() }
-        position = min(frame, frameCount)
+        position = min(frame, totalFrames)
         return position
     }
 
@@ -60,8 +60,8 @@ public final class FakeItemSource: ItemSource, @unchecked Sendable {
             self.duringRead = nil
             duringRead()
         }
-        guard position < frameCount else { return nil }
-        let end = min(position + chunkFrames, frameCount)
+        guard position < totalFrames else { return nil }
+        let end = min(position + chunkFrames, totalFrames)
         defer { position = end }
         return samples(from: position, to: end)
     }

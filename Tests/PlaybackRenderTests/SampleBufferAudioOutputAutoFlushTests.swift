@@ -120,7 +120,7 @@ final class SampleBufferAudioOutputAutoFlushTests: XCTestCase {
 private final class RampSource: ItemSource, @unchecked Sendable {
     static let frames: Int64 = 144_000
     private var frame: Int64 = 0
-    let duration: Int64? = frames
+    let frameCount: Int64? = frames
 
     func begin(epoch: UInt64) {}
     func open() throws -> PCMFormat { PCMFormat(sampleRate: 48000, channelCount: 2) }

@@ -29,7 +29,7 @@ public protocol ItemSource: AnyObject, Sendable {
     /// a slow resolve overlaps that tail. Once interrupted it may return early or throw.
     func open() throws -> PCMFormat
     /// The item's length in frames, read once `open()` returns; nil when unknown.
-    var duration: Int64? { get }
+    var frameCount: Int64? { get }
     /// Whether `seek(toFrame:)` can move within the item, read once `open()` returns. A source that
     /// re-opens at a time offset is seekable with no duration; an item neither seekable nor of known
     /// duration is live (ADR-0022). Defaults to a known duration.
@@ -49,8 +49,8 @@ public protocol ItemSource: AnyObject, Sendable {
 }
 
 public extension ItemSource {
-    var duration: Int64? { nil }
-    var isSeekable: Bool { duration != nil }
+    var frameCount: Int64? { nil }
+    var isSeekable: Bool { frameCount != nil }
 }
 
 /// `FFmpegStreamDecoder` as an item source. The decoder already trims encoder delay and padding
@@ -65,7 +65,7 @@ public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
     private var interruptedThrough: UInt64?
     private var sampleRate: Double = 0
     /// As the container states it once probed (an MP3's Xing or Info frame, MP4's sample table).
-    public private(set) var duration: Int64?
+    public private(set) var frameCount: Int64?
     /// ADR-0017's rule: only a stream with neither a byte length nor a container duration is live.
     public private(set) var isSeekable = false
 
@@ -95,8 +95,8 @@ public final class FFmpegItemSource: ItemSource, @unchecked Sendable {
         do {
             let format = try decoder.open()
             sampleRate = format.sampleRate
-            duration = format.duration.map { Int64(($0 * format.sampleRate).rounded()) }
-            isSeekable = duration != nil || reader.totalLength != nil
+            frameCount = format.duration.map { Int64(($0 * format.sampleRate).rounded()) }
+            isSeekable = frameCount != nil || reader.totalLength != nil
             return PCMFormat(sampleRate: format.sampleRate, channelCount: format.channelCount)
         } catch {
             lock.withLock { self.decoder = nil }

@@ -35,16 +35,16 @@ final class FFmpegItemSourceTests: XCTestCase {
     func testTheDurationIsTheContainersInFramesOnceOpened() throws {
         // The Info frame counts 461 MPEG frames of 1152 samples.
         let source = FFmpegItemSource(reader: try file("SeekFixtures/cbr_128k_unpadded_info.mp3"))
-        XCTAssertNil(source.duration)
+        XCTAssertNil(source.frameCount)
         _ = try source.open()
-        XCTAssertEqual(source.duration, 461 * 1152)
+        XCTAssertEqual(source.frameCount, 461 * 1152)
     }
 
     func testABodyOfUnknownLengthWithNoSeekTableHasNoDuration() throws {
         let reader = UnknownLengthReader(try file("Fixtures/bear-cbr-no-seek-table-trailing-garbage.mp3"))
         let source = FFmpegItemSource(reader: reader)
         _ = try source.open()
-        XCTAssertNil(source.duration)
+        XCTAssertNil(source.frameCount)
     }
 
     func testReleaseCancelsTheReader() throws {

@@ -382,7 +382,7 @@ final class TransportTests: XCTestCase {
 
     func testEachPositionCarriesItsSourcesDurationAndSeekability() {
         a.seekable = false
-        b.duration = nil
+        b.frameCount = nil
         b.seekable = true
         transport.setCurrent(item: "a", source: a)
         transport.setNext(item: "b", source: b)

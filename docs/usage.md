@@ -132,6 +132,15 @@ while let chunk = decoder.nextChunk() { /* schedule it */ }
   `DefaultHttpDataSource` does with the host's `416 bytes */N`. Seeking past the end, once the
   host shows it, fails the read at once with a `.malformed` failure (`out_of_range ...`), with no retry.
 
+## Units
+
+One rule across every module: **a time is a `TimeInterval` in seconds; anything else carries its unit
+in the name.** Where an API also deals in frames or bytes, the label says `Seconds` (`seek(toSeconds:)`,
+`Transport.setCurrent(startSeconds:)`); the `Player` layer, which has only seconds, does not
+(`seek(to:)`, `position`, `duration`). Counts of PCM frames are `Int64` and say so (`frameCount`,
+`mediaStartFrame`, `mediaFramesRead`, `maxFrames`), counts of bytes say `bytes` or `Length`, and a
+parameter taking either bytes or seconds is labelled with its unit (`GrowingFileReadAhead`).
+
 ## Seek
 
 ```swift
@@ -411,7 +420,7 @@ struct NowPlayingBar: View {
   `playWhenReady`, not from `isPlaying`, or the button flickers while buffering.
 - **`position`** is what is heard, in seconds of the current item's media time, written on every pump
   while it changes. `duration` is nil until the item opens and whenever the source does not know it.
-  `isSeekable` is the source's, known once it opens; a server transcode seeks with no duration.
+  `isSeekable` is the source's, known once it opens; a server transcode seeks with no `frameCount`.
   `isLive` is an opened item that neither seeks nor has a duration (ADR-0022).
 - **`audioFormat`** (media3 `getAudioFormat()`) is the current item's sample rate and channel count as
   decoded, the format your processors are configured with for it: draw an EQ curve at its rate. It is nil

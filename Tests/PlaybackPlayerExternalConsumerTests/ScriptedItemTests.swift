@@ -47,7 +47,7 @@ final class ScriptedItemTests: XCTestCase {
         var frames = 0
         while let chunk = try source.nextChunk() { frames += chunk.count }
         XCTAssertEqual(frames, 41)
-        XCTAssertEqual(source.duration, 80)
+        XCTAssertEqual(source.frameCount, 80)
     }
 
     func testAnItemFailingMidwayKeepsItsDurationAndSeekability() throws {
@@ -55,7 +55,7 @@ final class ScriptedItemTests: XCTestCase {
         factory.unknownLength = [Episode(id: 1)]
         let source = try factory.make(Episode(id: 1))
         _ = try source.open()
-        XCTAssertNil(source.duration)
+        XCTAssertNil(source.frameCount)
         XCTAssertTrue(source.isSeekable)
         XCTAssertEqual(try source.seek(toFrame: 40), 40)
         XCTAssertThrowsError(try source.nextChunk())
