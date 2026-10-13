@@ -17,19 +17,27 @@ final class WavPackSeekTests: XCTestCase {
 
     /// **A seek past the budget's walk lands on the sample asked for, with the stream's PCM.**
     ///
-    /// Both targets are more than 64 KiB of blocks in, where the byte estimate left the demuxer
-    /// mid-block and the seek failed on the next read.
+    /// Every target is more than 64 KiB of blocks in, where the byte estimate left the demuxer
+    /// mid-block and the seek failed on the next read. 3.9 s is in the last block, whose start
+    /// (byte 182 132) is before the target's byte estimate. The seek reads at most two probes of a
+    /// block and its successor, then the landing's two blocks and an AVIO refill: under the 180 KB
+    /// before the last block that the demuxer's walk reads, so a block header anchored it.
     func testSeeksPastTheBudgetLandSampleExactly() throws {
         try XCTSkipUnless(FFmpegStreamDecoder.isAvailable, "no FFmpeg in this build")
         let clean = FFmpegStreamDecoder(reader: try FileByteReader(url: url))
         _ = try clean.open()
         let reference = decodeAll(clean)
         XCTAssertEqual(reference.count, 176_400 * 2)
+        let largestBlock: Int64 = 27_248
+        let bound = 6 * largestBlock + 32 * 1024
 
-        for target in [8.0 / 3.0, 3.9] {
-            let decoder = FFmpegStreamDecoder(reader: try FileByteReader(url: url))
+        for target in [1.5, 8.0 / 3.0, 3.9] {
+            let reader = try FaultyByteReader(url: url)
+            let decoder = FFmpegStreamDecoder(reader: reader)
             _ = try decoder.open()
+            let before = reader.bytesRead
             let landed = try decoder.seek(toSeconds: target)
+            XCTAssertLessThanOrEqual(reader.bytesRead - before, bound, "seek to \(target)")
             XCTAssertEqual(landed, target, accuracy: 1.0 / 44100, "seek to \(target)")
             let got = decodeAll(decoder)
             let start = Int((target * 44100).rounded()) * 2
