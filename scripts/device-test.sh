@@ -27,7 +27,8 @@ if [ "${1:-}" = "--simulator" ]; then
   [ -n "${2:-}" ] || fail "--simulator needs a UDID from: xcrun simctl list devices available"
   udid="$2"; shift 2
   exec lease -- xcodebuild test -project "$project" -scheme PlaybackDeviceTests \
-    -derivedDataPath "$derived" -destination "platform=iOS Simulator,id=$udid" "$@"
+    -derivedDataPath "$derived" -destination "platform=iOS Simulator,id=$udid" \
+    -parallel-testing-enabled NO -collect-test-diagnostics never "$@"
 fi
 
 json() { python3 -I -c "import json, sys; d = json.load(open(sys.argv[1])); $2" "$1"; }
@@ -86,4 +87,5 @@ env -u LEASE_HELD lease -- xcodebuild build-for-testing "${build[@]}" -quiet
 xcrun devicectl device install app --device "$udid" --quiet "$derived/Build/Products/Debug-iphoneos/Interruptor.app"
 check_unlocked
 # xcodebuild hands TEST_RUNNER_ variables to the tests without the prefix.
-TEST_RUNNER_DEVICE_INTERRUPTOR=1 xcodebuild test-without-building "${build[@]}" "$@"
+TEST_RUNNER_DEVICE_INTERRUPTOR=1 xcodebuild test-without-building "${build[@]}" \
+  -parallel-testing-enabled NO -collect-test-diagnostics never "$@"

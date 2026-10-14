@@ -71,24 +71,16 @@ fi
 echo "release.sh: swift test"
 swift test
 
-# The byte source runs on iOS URLSession in the apps, so its tests also run on a simulator,
-# on a device of its own (IOS_SIM_UDID overrides): another repo's parallel-testing xcodebuild clones
-# the shared iPhone, which shuts it down mid-suite (timusus/devtools#23).
-sim_name="AudioPlaybackKit Verify"
-devices="$(xcrun simctl list devices available -j)"
-udid="${IOS_SIM_UDID:-$(jq -r --arg n "$sim_name" '[.devices[][] | select(.name == $n)][0].udid // empty' <<<"$devices")}"
-if [[ -z "$udid" ]]; then
-    read -r runtime devtype < <(jq -r '[.devices | to_entries[] | select(.key | test("iOS")) | .key as $r
-        | .value[] | select(.name | startswith("iPhone")) | "\($r) \(.deviceTypeIdentifier)"] | last // empty' <<<"$devices")
-    if [[ -z "${runtime:-}" ]]; then
-        echo "release.sh: no iPhone simulator to model '$sim_name' on; set IOS_SIM_UDID" >&2
-        exit 1
-    fi
-    udid="$(xcrun simctl create "$sim_name" "$devtype" "$runtime")"
+# The byte source runs on iOS URLSession in the apps, so its tests also run on a simulator.
+# This worktree's own simulator (sim); IOS_SIM_UDID overrides it.
+if [[ -n "${IOS_SIM_UDID:-}" ]]; then
+    destination="platform=iOS Simulator,id=$IOS_SIM_UDID"
+else
+    destination="$(sim destination)" || { echo "release.sh: sim destination failed; set IOS_SIM_UDID" >&2; exit 1; }
 fi
-echo "release.sh: PlaybackStreamingTests on iOS simulator $udid"
+echo "release.sh: PlaybackStreamingTests on $destination"
 xcodebuild test -scheme AudioPlaybackKit-Package -only-testing:PlaybackStreamingTests \
-    -destination "platform=iOS Simulator,id=$udid" -quiet
+    -destination "$destination" -parallel-testing-enabled NO -collect-test-diagnostics never -quiet
 
 # Built before tagging, so a tag never lacks its source (LGPL-2.1 section 6); a failed or
 # interrupted run leaves no partial tarball.

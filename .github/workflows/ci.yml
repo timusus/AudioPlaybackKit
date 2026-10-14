@@ -133,6 +133,7 @@ jobs:
             -scheme AudioPlaybackKit-Package \
             -only-testing:PlaybackStreamingTests \
             -destination "platform=iOS Simulator,id=$UDID" \
+            -parallel-testing-enabled NO -collect-test-diagnostics never \
             -derivedDataPath .build/xcode \
             | tee .build/xcodebuild.log
       - name: Upload log
