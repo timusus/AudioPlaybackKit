@@ -66,14 +66,14 @@ final class GrowingFileByteSourceTests: XCTestCase {
 
     func makeSource(
         _ url: URL, store: GrowingFileStore? = nil, authHeaders: [String: String] = [:],
-        cacheKey: URL? = nil, connectionPolicy: GrowingFileConnectionPolicy? = nil,
+        userAgent: String? = nil, cacheKey: URL? = nil, connectionPolicy: GrowingFileConnectionPolicy? = nil,
         clock: GrowingFileClock = SystemGrowingFileClock.shared, session: URLSession = GrowingFileByteSourceTests.testSession,
         pathMonitor: GrowingFilePathMonitor = GrowingFilePathMonitor(), readAhead: GrowingFileReadAhead? = nil,
         unknownLengthWindow: Int64 = GrowingFileDownload.unknownLengthWindowBytes
     ) -> GrowingFileByteSource {
         let recorder = events
         let source = GrowingFileByteSource(
-            url: url, authHeaders: authHeaders, cacheKey: cacheKey, connectionPolicy: connectionPolicy,
+            url: url, authHeaders: authHeaders, userAgent: userAgent, cacheKey: cacheKey, connectionPolicy: connectionPolicy,
             readAhead: readAhead, store: store ?? makeStore(), session: session,
             clock: clock, pathMonitor: pathMonitor, unknownLengthWindow: unknownLengthWindow, onEvent: { recorder.append($0) }
         )

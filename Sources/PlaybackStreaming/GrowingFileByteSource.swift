@@ -139,6 +139,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     /// What the completed-file cache knows this resource by: `url` unless the host gave a key.
     private let cacheKey: URL
     private let authHeaders: [String: String]
+    private let userAgent: String?
     private let policy: GrowingFileConnectionPolicy?
     private let clientCredential: (@Sendable (URLProtectionSpace) -> URLCredential?)?
     private let store: GrowingFileStore
@@ -178,6 +179,10 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
 
     /// - Parameters:
     ///   - authHeaders: resolved by the caller before construction; values are never logged.
+    ///   - userAgent: sent as `User-Agent` on every request, including redirect hops to another
+    ///     origin, retries and resumes (unlike `authHeaders`, it is not origin-scoped, so a host
+    ///     counting downloads at a CDN after a tracking redirect sees the app). Wins over a
+    ///     `User-Agent` in `authHeaders` or the policy's headers. Nil (the default) leaves the system's.
     ///   - cacheKey: names the resource in the store's completed-file cache, for a `url` that
     ///     carries a token or session id which changes between plays. Pass the URL without them,
     ///     and ask the store for `completedFile(for:)` with the same key. The requests still go
@@ -196,6 +201,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     public convenience init(
         url: URL,
         authHeaders: [String: String],
+        userAgent: String? = nil,
         cacheKey: URL? = nil,
         connectionPolicy: GrowingFileConnectionPolicy? = nil,
         clientCredential: (@Sendable (URLProtectionSpace) -> URLCredential?)? = nil,
@@ -205,7 +211,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         onEvent: ((GrowingFileEvent) -> Void)? = nil
     ) {
         self.init(
-            url: url, authHeaders: authHeaders, cacheKey: cacheKey, connectionPolicy: connectionPolicy,
+            url: url, authHeaders: authHeaders, userAgent: userAgent, cacheKey: cacheKey, connectionPolicy: connectionPolicy,
             clientCredential: clientCredential, readAhead: readAhead, store: store, session: session,
             clock: SystemGrowingFileClock.shared, onEvent: onEvent
         )
@@ -218,6 +224,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
     init(
         url: URL,
         authHeaders: [String: String],
+        userAgent: String? = nil,
         cacheKey: URL? = nil,
         connectionPolicy: GrowingFileConnectionPolicy? = nil,
         clientCredential: (@Sendable (URLProtectionSpace) -> URLCredential?)? = nil,
@@ -232,6 +239,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         self.url = url
         self.cacheKey = cacheKey ?? url
         self.authHeaders = authHeaders
+        self.userAgent = userAgent
         self.policy = connectionPolicy
         self.clientCredential = clientCredential
         self.store = store
@@ -529,6 +537,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         // (media3 DefaultHttpDataSource).
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         if target.hasSameOrigin(as: url) { applyServerHeaders(to: &request) }
+        applyUserAgent(to: &request)
         return request
     }
 
@@ -541,6 +550,10 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         for (field, value) in policy?.headers ?? [:] where !Self.isOwned(field) {
             request.setValue(value, forHTTPHeaderField: field)
         }
+    }
+
+    private func applyUserAgent(to request: inout URLRequest) {
+        if let userAgent { request.setValue(userAgent, forHTTPHeaderField: "User-Agent") }
     }
 
     private static func isOwned(_ field: String) -> Bool {
@@ -585,6 +598,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         } else {
             removeServerHeaders(from: &next)
         }
+        applyUserAgent(to: &next)
         locked { machine.redirected(toHost: next.url?.host) }
         completionHandler(next)
     }
