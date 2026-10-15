@@ -55,6 +55,7 @@ public final class LoopbackMediaServer: @unchecked Sendable {
     var _chaos: ChaosPlan?
     var _etag: String?
     var _etags: [String]?
+    var _lastModified: String?
     private var connections: [NWConnection] = []
     private var stopped = false
     private let listenerCancelled = DispatchSemaphore(value: 0)

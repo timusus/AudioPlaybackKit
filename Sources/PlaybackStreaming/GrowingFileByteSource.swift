@@ -667,6 +667,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
             mimeType: response.mimeType,
             expectedContentLength: response.expectedContentLength,
             entityTag: http?.value(forHTTPHeaderField: "ETag"),
+            lastModified: http?.value(forHTTPHeaderField: "Last-Modified"),
             url: response.url
         )
         let (allow, deferred) = locked { () -> (Bool, [Deferred]) in

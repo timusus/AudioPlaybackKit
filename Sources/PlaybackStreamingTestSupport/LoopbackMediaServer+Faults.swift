@@ -51,6 +51,12 @@ extension LoopbackMediaServer {
         set { lock.lock(); _etag = newValue; _etags = nil; lock.unlock() }
     }
 
+    /// A `Last-Modified` header on every response, e.g. `Wed, 21 Oct 2015 07:28:00 GMT`.
+    public var lastModified: String? {
+        get { lock.lock(); defer { lock.unlock() }; return _lastModified }
+        set { lock.lock(); _lastModified = newValue; lock.unlock() }
+    }
+
     /// One `ETag` per request, in order; the last serves every request after it. The counterpart
     /// of ``bodies`` for a validator that changes between a client's response and its reconnect.
     public var etags: [String]? {

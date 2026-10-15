@@ -64,6 +64,7 @@ extension GrowingFileDownload {
         /// `expectedContentLength`, -1 when unknown.
         var expectedContentLength: Int64 = -1
         var entityTag: String?
+        var lastModified: String?
         /// Where the response came from: the redirect chain's end.
         var url: URL?
     }

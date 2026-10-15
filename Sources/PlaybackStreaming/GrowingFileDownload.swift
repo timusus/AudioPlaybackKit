@@ -58,6 +58,10 @@ struct GrowingFileDownload {
     /// The resource's length as the last accepted response gave it: what ``totalLength`` and the
     /// snapshot answer once a failed read has dropped the transaction that knew it.
     private var lastKnownTotalLength: Int64?
+    /// The latest accepted response's raw validators, weak tags included: identity for the
+    /// snapshot, unlike ``SessionFile/entityTag``, which gates `If-Range`.
+    private var responseEntityTag: String?
+    private var responseLastModified: String?
     /// The host answered a ranged request with `200`: every later transaction starts at byte 0.
     private(set) var rangeIgnored = false
     /// The end of the redirect chain, from the first response; later requests go straight there
@@ -118,7 +122,9 @@ struct GrowingFileDownload {
             transactionGeneration: generation,
             seekGeneration: current?.seekGeneration,
             downloadBytesPerSecond: downloadBytesPerSecond(now: now),
-            readWaitingSince: readWaitingSince
+            readWaitingSince: readWaitingSince,
+            entityTag: responseEntityTag,
+            lastModified: responseLastModified
         )
     }
 
@@ -742,6 +748,8 @@ struct GrowingFileDownload {
         if let total { lastKnownTotalLength = total }
         if let total { effects.append(.makeRoom(bytes: total - accepted.base)) }
         current?.entityTag = strongTag
+        responseEntityTag = response.entityTag
+        responseLastModified = response.lastModified
         file.entityTag = file.entityTag ?? strongTag
         if finalURL == nil { finalURL = response.url }
         recordResponse(accepted, status: status, now: now)

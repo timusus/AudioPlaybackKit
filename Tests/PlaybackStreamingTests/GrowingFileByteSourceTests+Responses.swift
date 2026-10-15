@@ -150,6 +150,62 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(source.snapshot.transactionGeneration, 1)
     }
 
+    func testTheSnapshotCarriesTheFirstResponsesETagAndLastModified() throws {
+        let body = makeBody(32 * 1024)
+        let server = try startServer(body: body)
+        server.etag = "W/\"v1\""
+        server.lastModified = "Wed, 21 Oct 2015 07:28:00 GMT"
+        let source = makeSource(server.url)
+
+        XCTAssertEqual(try read(source, 4096), body.prefix(4096))
+        XCTAssertEqual(source.snapshot.entityTag, "W/\"v1\"", "a weak tag is identity too")
+        XCTAssertEqual(source.snapshot.lastModified, "Wed, 21 Oct 2015 07:28:00 GMT")
+    }
+
+    func testAResponseWithoutValidatorsLeavesTheSnapshotIdentityNil() throws {
+        let body = makeBody(32 * 1024)
+        let server = try startServer(body: body)
+        let source = makeSource(server.url)
+
+        XCTAssertEqual(try read(source, 4096), body.prefix(4096))
+        XCTAssertNil(source.snapshot.entityTag)
+        XCTAssertNil(source.snapshot.lastModified)
+    }
+
+    /// A restart answered `200` with a re-stitched body reports the new identity under a new generation.
+    func testARestartAfterARefusedResumeReportsTheNewIdentity() throws {
+        let first = makeBody(160_000)
+        let second = makeBody(160_000, seed: 42)
+        let server = try startServer(body: first)
+        server.bodies = [first, second]
+        server.etags = ["\"v1\"", "\"v2\""]
+        server.closesAfterBodyBytes = 100_000
+        let source = makeSource(server.url)
+
+        XCTAssertEqual(try read(source, 4096), first.prefix(4096))
+        XCTAssertEqual(source.snapshot.entityTag, "\"v1\"")
+        XCTAssertTrue(waitUntil { server.requestedRanges.count == 3 })
+        XCTAssertEqual(try readToEnd(source), second.suffix(from: 4096))
+        XCTAssertEqual(source.snapshot.transactionGeneration, 2)
+        XCTAssertEqual(source.snapshot.entityTag, "\"v2\"")
+    }
+
+    func testAPartialResumeKeepsTheIdentity() throws {
+        let body = makeBody(160_000)
+        let server = try startServer(body: body)
+        server.etag = "\"v1\""
+        server.lastModified = "Wed, 21 Oct 2015 07:28:00 GMT"
+        server.closesAfterBodyBytes = 100_000
+        let source = makeSource(server.url)
+
+        XCTAssertEqual(try read(source, 4096), body.prefix(4096))
+        XCTAssertEqual(try readToEnd(source).count, body.count - 4096)
+        XCTAssertEqual(server.requestedRanges.count, 2)
+        XCTAssertEqual(source.snapshot.transactionGeneration, 1)
+        XCTAssertEqual(source.snapshot.entityTag, "\"v1\"")
+        XCTAssertEqual(source.snapshot.lastModified, "Wed, 21 Oct 2015 07:28:00 GMT")
+    }
+
     func testCancelDuringARetryBackoffEndsTheRetries() throws {
         let body = makeBody(32 * 1024)
         let server = try startServer(body: body)

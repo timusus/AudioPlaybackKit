@@ -52,6 +52,7 @@ extension LoopbackMediaServer {
         lock.lock()
         let body = _bodies.map { $0[min(_requestedRanges.count, $0.count - 1)] } ?? _body
         let etag = _etags.map { $0[min(_requestedRanges.count, $0.count - 1)] } ?? _etag
+        let lastModified = _lastModified
         let gzips = _gzipsBody
         let strict416 = _answers416AtOrAfterEnd
         lock.unlock()
@@ -119,6 +120,7 @@ extension LoopbackMediaServer {
             header += "Content-Range: bytes \(range.lowerBound)-\(range.upperBound)/\(body.count)\r\n"
         }
         if let etag { header += "ETag: \(etag)\r\n" }
+        if let lastModified { header += "Last-Modified: \(lastModified)\r\n" }
         if gzips { header += "Content-Encoding: gzip\r\n" }
         lock.lock()
         let chunks = _usesChunkedEncoding
