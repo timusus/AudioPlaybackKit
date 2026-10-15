@@ -54,7 +54,13 @@ extension LoopbackMediaServer {
     /// A `Last-Modified` header on every response, e.g. `Wed, 21 Oct 2015 07:28:00 GMT`.
     public var lastModified: String? {
         get { lock.lock(); defer { lock.unlock() }; return _lastModified }
-        set { lock.lock(); _lastModified = newValue; lock.unlock() }
+        set { lock.lock(); _lastModified = newValue; _lastModifieds = nil; lock.unlock() }
+    }
+
+    /// One `Last-Modified` per request, in order; the last serves every request after it, as ``etags``.
+    public var lastModifieds: [String]? {
+        get { lock.lock(); defer { lock.unlock() }; return _lastModifieds }
+        set { lock.lock(); _lastModifieds = newValue; lock.unlock() }
     }
 
     /// One `ETag` per request, in order; the last serves every request after it. The counterpart

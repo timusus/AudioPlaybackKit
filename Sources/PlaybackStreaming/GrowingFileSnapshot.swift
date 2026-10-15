@@ -34,10 +34,12 @@ public struct GrowingFileSnapshot: Equatable, Sendable {
     /// (`systemUptime` seconds outside a test); nil while no read waits. It spans the whole read,
     /// through retries and restarts, so `now - readWaitingSince` is how long the read has stalled.
     public var readWaitingSince: TimeInterval?
-    /// The latest response's `ETag`, weak tags included, verbatim; nil when it gave none. A
-    /// restart whose identity differs may carry a different body (a re-stitched ad break).
+    /// The `ETag`, weak tags included, verbatim, of the response this ``transactionGeneration``'s
+    /// body started from: nil until that response is accepted, or when it gave none, never the
+    /// previous generation's. A resume's `206` keeps it. A new generation whose identity differs
+    /// may carry a different body (a re-stitched ad break).
     public var entityTag: String?
-    /// The latest response's `Last-Modified`, verbatim; nil when it gave none.
+    /// The same response's `Last-Modified`, verbatim, on the same terms as ``entityTag``.
     public var lastModified: String?
 
     public init(

@@ -437,13 +437,13 @@ final class Harness {
     /// The latest request's response: whether its body is taken.
     @discardableResult
     func respond(
-        _ status: Int, range: String? = nil, length: Int64 = -1, etag: String? = nil, url: URL? = nil,
-        mimeType: String = "audio/mpeg"
+        _ status: Int, range: String? = nil, length: Int64 = -1, etag: String? = nil,
+        lastModified: String? = nil, url: URL? = nil, mimeType: String = "audio/mpeg"
     ) -> Bool {
         let request = requests.last!
         let response = GrowingFileDownload.Response(
             status: status, contentRange: range, mimeType: mimeType, expectedContentLength: length,
-            entityTag: etag, url: url ?? request.url
+            entityTag: etag, lastModified: lastModified, url: url ?? request.url
         )
         let answer = machine.received(response, attempt: request.attempt, now: now)
         run(answer.effects)

@@ -58,8 +58,9 @@ struct GrowingFileDownload {
     /// The resource's length as the last accepted response gave it: what ``totalLength`` and the
     /// snapshot answer once a failed read has dropped the transaction that knew it.
     private var lastKnownTotalLength: Int64?
-    /// The latest accepted response's raw validators, weak tags included: identity for the
-    /// snapshot, unlike ``SessionFile/entityTag``, which gates `If-Range`.
+    /// The raw validators, weak tags included, of the response this generation's body started
+    /// from: identity for the snapshot, unlike ``SessionFile/entityTag``, which gates `If-Range`.
+    /// Nil from the generation's bump until its response is accepted (``nextGeneration()``).
     private var responseEntityTag: String?
     private var responseLastModified: String?
     /// The host answered a ranged request with `200`: every later transaction starts at byte 0.
@@ -300,7 +301,7 @@ struct GrowingFileDownload {
             return takeEffects() + [.wake]
         }
         file.exists = true
-        generation += 1
+        nextGeneration()
         transactionsOpened += 1
         current = Transaction(
             id: transactionsOpened, generation: generation, seekGeneration: open.seekGeneration,
@@ -640,6 +641,7 @@ struct GrowingFileDownload {
             current?.totalLength = total
             lastKnownTotalLength = total
             promoteIfWhole()
+            recordIdentity(response)
             if finalURL == nil { finalURL = response.url }
             recordResponse(tx, status: status, now: now)
             effects.append(.emit(.transaction(base: tx.base, generation: tx.generation, seekGeneration: tx.seekGeneration, httpStatus: status)))
@@ -679,6 +681,9 @@ struct GrowingFileDownload {
                 end(Self.notAudio("content-type=\(response.mimeType ?? "?")"), retryable: tx.remembered, refused: true, now: now)
                 return false
             }
+            // A whole body is a new response's bytes from 0, kept in this generation since its base
+            // and frontier stand; a 206 continues the body the identity already names.
+            if status != 206 { recordIdentity(response) }
             if tx.totalLength == nil { current?.totalLength = range?.total ?? (status == 206 ? nil : wholeLength) }
             lastKnownTotalLength = current?.totalLength
             if let total = current?.totalLength { effects.append(.makeRoom(bytes: total - resumeAt)) }
@@ -710,7 +715,7 @@ struct GrowingFileDownload {
                     downloadLog.warning("download: range_ignored host=\(host, privacy: .public) asked=\(tx.base)")
                 }
                 rangeIgnored = true
-                generation += 1
+                nextGeneration()
                 // The run at byte 0 comes again: compared like any overlap, and written past (ADR-0016).
                 current?.base = file.ranges.run(containing: 0)?.upperBound ?? 0
                 current?.generation = generation
@@ -748,8 +753,7 @@ struct GrowingFileDownload {
         if let total { lastKnownTotalLength = total }
         if let total { effects.append(.makeRoom(bytes: total - accepted.base)) }
         current?.entityTag = strongTag
-        responseEntityTag = response.entityTag
-        responseLastModified = response.lastModified
+        recordIdentity(response)
         file.entityTag = file.entityTag ?? strongTag
         if finalURL == nil { finalURL = response.url }
         recordResponse(accepted, status: status, now: now)
@@ -769,6 +773,19 @@ struct GrowingFileDownload {
     /// A page served where audio should be: media3's `IO_INVALID_HTTP_CONTENT_TYPE`.
     private static func notAudio(_ why: String) -> StreamFailure {
         StreamFailure(.unsupported, detail: "not audio: \(why)")
+    }
+
+    /// A new generation is a new response's, so the previous one's identity never shows under it.
+    private mutating func nextGeneration() {
+        generation += 1
+        responseEntityTag = nil
+        responseLastModified = nil
+    }
+
+    /// An accepted response whose body starts the generation's bytes: the identity the snapshot gives.
+    private mutating func recordIdentity(_ response: Response) {
+        responseEntityTag = response.entityTag
+        responseLastModified = response.lastModified
     }
 
     /// An accepted response to `tx`'s current request: its latency, and the startup's first answer.

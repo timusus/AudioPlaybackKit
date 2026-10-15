@@ -190,11 +190,12 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(source.snapshot.entityTag, "\"v2\"")
     }
 
+    /// A `206` the `If-Range` and the overlap accept continues the same body, whatever date it carries.
     func testAPartialResumeKeepsTheIdentity() throws {
         let body = makeBody(160_000)
         let server = try startServer(body: body)
         server.etag = "\"v1\""
-        server.lastModified = "Wed, 21 Oct 2015 07:28:00 GMT"
+        server.lastModifieds = ["Wed, 21 Oct 2015 07:28:00 GMT", "Thu, 22 Oct 2015 07:28:00 GMT"]
         server.closesAfterBodyBytes = 100_000
         let source = makeSource(server.url)
 

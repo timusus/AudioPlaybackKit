@@ -52,7 +52,7 @@ extension LoopbackMediaServer {
         lock.lock()
         let body = _bodies.map { $0[min(_requestedRanges.count, $0.count - 1)] } ?? _body
         let etag = _etags.map { $0[min(_requestedRanges.count, $0.count - 1)] } ?? _etag
-        let lastModified = _lastModified
+        let lastModified = _lastModifieds.map { $0[min(_requestedRanges.count, $0.count - 1)] } ?? _lastModified
         let gzips = _gzipsBody
         let strict416 = _answers416AtOrAfterEnd
         lock.unlock()
