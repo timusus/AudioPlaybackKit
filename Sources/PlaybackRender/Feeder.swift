@@ -198,10 +198,13 @@ final class Feeder {
     // MARK: Private
 
     private var canStart: Bool {
+        guard !failed else { return false }
+        // At the end nothing more is written, so nothing can land behind the clock: start while
+        // anything unheard remains, even with the clock past the written end.
+        if upstreamEnded { return map.writtenEnd - playhead() > 0 }
         // From the clock, like the pause and `fill`: a lead over the heard playhead can be nil at the clock.
-        let depth = map.writtenEnd - output.currentTime()
         let needed = afterUnderrun ? targetDepth : resumeDepth
-        return !failed && (upstreamEnded ? depth > 0 : depth >= needed * rate)
+        return map.writtenEnd - output.currentTime() >= needed * rate
     }
 
     /// Rewinds the clock to the written end, where the next chunk is stamped; the playhead stays on what is heard.

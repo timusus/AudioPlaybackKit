@@ -208,6 +208,22 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(Array(heard.prefix(12)), ramp(0, 0..<8) + ramp(1, 0..<4))
     }
 
+    // #183: a pause after the end, with the clock past the written end, left canStart measuring a
+    // negative depth from the clock, so play never started and `.ended` never came.
+    func testWithATwoSecondRouteLatencyPlayAfterAPauseNearTheEndPlaysOnToTheEnd() {
+        makeFeeder([item(0, 8)], chunkFrames: 1, latency: 2)
+        feeder.play()
+        run(for: 3)
+        XCTAssertEqual(output.currentTime(), 3, "a second past the written end, the last second still to be heard")
+        feeder.pause()
+
+        feeder.play()
+        XCTAssertEqual(output.rate, 1)
+        run(for: 1)
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .playing, .ended])
+        XCTAssertEqual(positions.last, pos(0, 8))
+    }
+
     // A speaker reports about 10 ms: the pause moves by that much and nothing else changes.
     func testWithSpeakerLatencyAStallPausesAtTheWrittenEndAndResumesWithoutLosingFrames() {
         makeFeeder([item(0, 80)], chunkFrames: 1, latency: 1.0 / 64)
