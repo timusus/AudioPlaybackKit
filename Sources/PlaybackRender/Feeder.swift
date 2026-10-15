@@ -43,8 +43,9 @@ enum FeederEvent {
 /// that the next `pump()` drains, and call `wake` so the caller pumps now.
 final class Feeder {
     let targetDepth: TimeInterval
-    /// Depth at which a buffering output starts again; well under `targetDepth` so a slow upstream
-    /// still resumes promptly.
+    /// Depth at which a buffering output starts, first or after a seek, re-feed or pause; well under
+    /// `targetDepth` so a slow upstream still starts promptly. After an underrun it waits for the full
+    /// `targetDepth` instead, as media3's `bufferForPlaybackAfterRebufferMs`.
     let resumeDepth: TimeInterval
 
     private let output: AudioOutput
@@ -57,6 +58,8 @@ final class Feeder {
     private var playWhenReady = false
     private var outputRunning = false
     private var upstreamEnded = false
+    /// The current buffering began as an underrun, so it waits for `targetDepth`, not `resumeDepth`.
+    private var afterUnderrun = false
     private var failed = false
     /// Set by a renderer recovery and cleared on `.playing`: a second failure in between surfaces
     /// instead of rebuilding again, as media3's `pendingRecoverableRendererError` allows one retry.
@@ -182,6 +185,7 @@ final class Feeder {
             if playWhenReady {
                 output.setRate(rate, at: nil)
                 outputRunning = true
+                afterUnderrun = false
                 setStatus(.playing)
             } else {
                 setStatus(.paused)
@@ -196,7 +200,8 @@ final class Feeder {
     private var canStart: Bool {
         // From the clock, like the pause and `fill`: a lead over the heard playhead can be nil at the clock.
         let depth = map.writtenEnd - output.currentTime()
-        return !failed && (upstreamEnded ? depth > 0 : depth >= resumeDepth * rate)
+        let needed = afterUnderrun ? targetDepth : resumeDepth
+        return !failed && (upstreamEnded ? depth > 0 : depth >= needed * rate)
     }
 
     /// Rewinds the clock to the written end, where the next chunk is stamped; the playhead stays on what is heard.
@@ -204,6 +209,7 @@ final class Feeder {
         map.hold(at: playhead())
         output.setRate(0, at: map.writtenEnd)
         outputRunning = false
+        afterUnderrun = true
     }
 
     private func playhead() -> TimeInterval {
@@ -230,6 +236,7 @@ final class Feeder {
         let anchor = output.currentTime()
         output.setRate(0, at: anchor)
         outputRunning = false
+        afterUnderrun = false
         map.reset(at: anchor)
         upstreamEnded = false
         failed = false

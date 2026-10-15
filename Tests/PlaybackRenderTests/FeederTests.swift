@@ -249,6 +249,100 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(statuses.last, .ended)
     }
 
+    // timusus/shuttle2#1064: resuming at the half-second resume depth gave a run of short stalls on a
+    // flaky stream; media3 waits for `bufferForPlaybackAfterRebufferMs` after a rebuffer.
+    func testAfterAnUnderrunTheOutputWaitsForTheFullTargetDepth() {
+        makeFeeder([item(0, 40)])
+        upstream.available = 2
+        feeder.play()
+        output.advance(by: 1.5)
+        feeder.pump()
+        XCTAssertEqual(output.rate, 0)
+
+        for chunks in 1...3 {
+            upstream.available = 1
+            feeder.pump()
+            XCTAssertEqual(output.rate, 0, "\(chunks) chunks is \(Double(chunks) / 2) s of 2 s")
+            XCTAssertEqual(statuses.last, .buffering)
+        }
+        upstream.available = 1
+        feeder.pump()
+        XCTAssertNotEqual(output.rate, 0)
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing])
+    }
+
+    func testAfterAnUnderrunTheFullTargetDepthScalesWithTheRate() {
+        makeFeeder([item(0, 80)])
+        feeder.setRate(2)
+        upstream.available = 4
+        feeder.play()
+        output.advance(by: 1)
+        feeder.pump()
+        XCTAssertEqual(output.rate, 0)
+
+        // Four seconds of playout at 2x is eight chunks.
+        for _ in 1...7 {
+            upstream.available = 1
+            feeder.pump()
+            XCTAssertEqual(output.rate, 0)
+        }
+        upstream.available = 1
+        feeder.pump()
+        XCTAssertEqual(output.rate, 2)
+    }
+
+    func testTheFirstStartAndAStartAfterASeekBeginAtTheResumeDepth() {
+        makeFeeder([item(0, 40)])
+        upstream.available = 1
+        feeder.play()
+        XCTAssertNotEqual(output.rate, 0, "first start")
+
+        output.advance(by: 1)
+        feeder.pump()
+        XCTAssertEqual(output.rate, 0, "underrun")
+
+        feeder.seek(to: SeekTarget(item: 0, offset: .frame(8, sampleRate: 4)))
+        upstream.available = 1
+        feeder.pump()
+        XCTAssertNotEqual(output.rate, 0, "after a seek")
+
+        output.advance(by: 1)
+        feeder.pump()
+        XCTAssertEqual(output.rate, 0, "underrun again")
+        feeder.flush(from: feeder.heardPosition)
+        upstream.available = 1
+        feeder.pump()
+        XCTAssertNotEqual(output.rate, 0, "after a re-feed")
+    }
+
+    func testAfterAUserPauseAndPlayTheOutputResumesAtTheResumeDepth() {
+        makeFeeder([item(0, 40)])
+        upstream.available = 1
+        feeder.play()
+        feeder.pause()
+        XCTAssertEqual(output.rate, 0)
+
+        feeder.play()
+        XCTAssertNotEqual(output.rate, 0)
+        XCTAssertEqual(statuses, [.buffering, .playing, .paused, .playing])
+    }
+
+    func testTheEndOfUpstreamDuringARebufferStartsAtAnyPositiveDepth() {
+        makeFeeder([item(0, 6)])
+        upstream.available = 2
+        feeder.play()
+        output.advance(by: 1.5)
+        feeder.pump()
+        XCTAssertEqual(output.rate, 0)
+
+        upstream.available = nil
+        feeder.pump()
+        XCTAssertNotEqual(output.rate, 0)
+        run(for: 2)
+        XCTAssertEqual(heard, ramp(0, 0..<6))
+        XCTAssertEqual(statuses.last, .ended)
+    }
+
     // #134: on the phone a resume reported buffering first, so `isPlaying` and the lock screen's
     // rate went true, false, true.
     func testAResumeWithEnoughQueuedPlaysOnWithoutReportingBuffering() {
