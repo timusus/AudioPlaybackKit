@@ -361,6 +361,21 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(statuses, [.buffering, .playing, .paused, .playing])
     }
 
+    // media3 resets isRebuffering when playWhenReady changes, so a start after a pause is a plain start.
+    func testAPauseDuringARebufferMakesTheNextStartAtTheResumeDepth() {
+        makeFeeder([item(0, 40)])
+        upstream.available = 2
+        feeder.play()
+        output.advance(by: 1.5)
+        feeder.pump()
+        XCTAssertEqual(output.rate, 0, "underrun")
+        feeder.pause()
+
+        upstream.available = 1
+        feeder.play()
+        XCTAssertNotEqual(output.rate, 0, "0.5 s is the resume depth")
+    }
+
     func testTheEndOfUpstreamDuringARebufferStartsAtAnyPositiveDepth() {
         makeFeeder([item(0, 6)])
         upstream.available = 2

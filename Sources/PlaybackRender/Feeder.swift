@@ -111,6 +111,8 @@ final class Feeder {
 
     func pause() {
         playWhenReady = false
+        // As media3 resets isRebuffering on a playWhenReady change: the next start is a plain one.
+        afterUnderrun = false
         if outputRunning {
             output.setRate(0, at: nil)
             outputRunning = false
