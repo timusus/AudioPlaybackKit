@@ -296,8 +296,9 @@ final class Feeder {
             if upstreamEnded {
                 upstreamEnded = false
                 if status == .ended { setStatus(.buffering) }
-                // The clock ran on past the end while its audio was still reaching the hardware.
-                if case .chunk = supply, outputRunning, output.currentTime() >= map.writtenEnd {
+                // The clock ran on past the end while its audio was still reaching the hardware. Paused
+                // too: a pause leaves the clock where it stopped, past the end, and the next play would run on from there.
+                if case .chunk = supply, output.currentTime() >= map.writtenEnd {
                     holdForUnderrun()
                     setStatus(.buffering)
                 }

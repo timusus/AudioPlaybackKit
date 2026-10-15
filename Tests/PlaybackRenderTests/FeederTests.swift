@@ -224,6 +224,24 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(positions.last, pos(0, 8))
     }
 
+    // #183: the same pause with the next item arriving while paused wrote it behind the stopped clock.
+    func testWithATwoSecondRouteLatencyANextItemWhilePausedPastTheEndIsNotStampedBehindTheClock() {
+        makeFeeder([item(0, 8)], chunkFrames: 1, latency: 2)
+        feeder.play()
+        run(for: 3)
+        feeder.pause()
+
+        upstream.items.append(item(1, 40))
+        let seen = output.enqueues.count
+        feeder.pump()
+        XCTAssertEqual(output.enqueues[seen...].filter { $0.time < output.currentTime() }.count, 0)
+
+        feeder.play()
+        run(for: 8)
+        XCTAssertEqual(Array(heard.prefix(12)), ramp(0, 0..<8) + ramp(1, 0..<4))
+        XCTAssertEqual(crossed, [0, 1])
+    }
+
     // A speaker reports about 10 ms: the pause moves by that much and nothing else changes.
     func testWithSpeakerLatencyAStallPausesAtTheWrittenEndAndResumesWithoutLosingFrames() {
         makeFeeder([item(0, 80)], chunkFrames: 1, latency: 1.0 / 64)
