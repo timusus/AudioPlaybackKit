@@ -172,7 +172,8 @@ final class Feeder {
         } else if let time = pending.time {
             restart(from: currentPosition(at: max(map.epochStart, time)))
             // A stall is the renderer starving, a downstream underrun; a route change's flush is not.
-            if pending.stalled { afterUnderrun = true }
+            // Not while paused: a pause ends the rebuffer even if the stall is drained after it.
+            if pending.stalled && playWhenReady { afterUnderrun = true }
         }
 
         // Pause before refilling: audio stamped behind a running clock never plays, and the clock is
