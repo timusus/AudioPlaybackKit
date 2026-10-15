@@ -509,6 +509,31 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(positions.map(\.mediaFrame), Array(0...40))
     }
 
+    // A stalled renderer starved, which media3 counts as a rebuffer; a route change's flush is no starvation.
+    func testAfterAStallTheOutputWaitsForTheFullTargetDepth() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1)
+        output.injectStall()
+        upstream.available = 1
+        feeder.pump()
+        XCTAssertEqual(output.rate, 0, "0.5 s of 2 s")
+
+        upstream.available = 3
+        feeder.pump()
+        XCTAssertNotEqual(output.rate, 0)
+    }
+
+    func testAfterAnAutoFlushTheOutputResumesAtTheResumeDepth() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1)
+        output.injectAutoFlush()
+        upstream.available = 1
+        feeder.pump()
+        XCTAssertNotEqual(output.rate, 0, "0.5 s is the resume depth")
+    }
+
     // Podcasts #396: the engine played the pre-seek audio still queued when resumed after a paused seek.
     func testASeekWhilePausedLeavesNoStaleAudioOrPosition() {
         makeFeeder([item(0, 40)])

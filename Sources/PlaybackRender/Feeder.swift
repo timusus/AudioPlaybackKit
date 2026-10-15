@@ -91,7 +91,7 @@ final class Feeder {
             // The flush time is where the output dropped audio, not a clock reading: no latency to take off.
             case let .autoFlushed(at: time): inbox.post(time)
             // A stalled clock stops tracking what is heard, so take the time it stalled at now.
-            case .stalled: inbox.post(output.currentTime() - output.outputLatency)
+            case .stalled: inbox.post(output.currentTime() - output.outputLatency, stalled: true)
             case let .failed(error): inbox.post(failure: error)
             case .mediaServicesReset: inbox.postReset()
             }
@@ -171,6 +171,8 @@ final class Feeder {
             recover(from: pending.reset ? nil : pending.failure, flushedAt: pending.time)
         } else if let time = pending.time {
             restart(from: currentPosition(at: max(map.epochStart, time)))
+            // A stall is the renderer starving, a downstream underrun; a route change's flush is not.
+            if pending.stalled { afterUnderrun = true }
         }
 
         // Pause before refilling: audio stamped behind a running clock never plays, and the clock is
@@ -355,11 +357,15 @@ final class Feeder {
 private final class RestartInbox: @unchecked Sendable {
     private let lock = NSLock()
     private var time: TimeInterval?
+    private var stalled = false
     private var failure: (any Error)?
     private var reset = false
 
-    func post(_ time: TimeInterval) {
-        lock.withLock { self.time = min(self.time ?? time, time) }
+    func post(_ time: TimeInterval, stalled: Bool = false) {
+        lock.withLock {
+            self.time = min(self.time ?? time, time)
+            self.stalled = self.stalled || stalled
+        }
     }
 
     func post(failure: any Error) {
@@ -370,16 +376,16 @@ private final class RestartInbox: @unchecked Sendable {
         lock.withLock { reset = true }
     }
 
-    func drain() -> (time: TimeInterval?, failure: (any Error)?, reset: Bool) {
+    func drain() -> (time: TimeInterval?, stalled: Bool, failure: (any Error)?, reset: Bool) {
         lock.withLock {
-            defer { (time, failure, reset) = (nil, nil, false) }
-            return (time, failure, reset)
+            defer { (time, stalled, failure, reset) = (nil, false, nil, false) }
+            return (time, stalled, failure, reset)
         }
     }
 
     func drainTime() -> TimeInterval? {
         lock.withLock {
-            defer { time = nil }
+            defer { (time, stalled) = (nil, false) }
             return time
         }
     }
