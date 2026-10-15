@@ -178,7 +178,11 @@ final class Feeder {
         // of the stream nothing more is written and the hold would report `.ended` early: wait for the playhead.
         if outputRunning, (upstreamEnded ? playhead() : output.currentTime()) >= map.writtenEnd {
             holdForUnderrun()
-            if !upstreamEnded { setStatus(.buffering) }
+            // The end of the stream is no rebuffer: a next item after it starts like a first one.
+            if !upstreamEnded {
+                afterUnderrun = true
+                setStatus(.buffering)
+            }
         }
 
         fill()
@@ -214,7 +218,6 @@ final class Feeder {
         map.hold(at: playhead())
         output.setRate(0, at: map.writtenEnd)
         outputRunning = false
-        afterUnderrun = true
     }
 
     private func playhead() -> TimeInterval {

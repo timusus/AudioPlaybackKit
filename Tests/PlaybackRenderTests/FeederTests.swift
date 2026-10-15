@@ -376,6 +376,20 @@ final class FeederTests: XCTestCase {
         XCTAssertNotEqual(output.rate, 0, "0.5 s is the resume depth")
     }
 
+    // The end of the stream is not a rebuffer: a next item appended after `.ended` starts like a first one.
+    func testANextItemAfterTheEndStartsAtTheResumeDepth() {
+        makeFeeder([item(0, 4)])
+        feeder.play()
+        run(for: 2)
+        XCTAssertEqual(statuses.last, .ended)
+
+        upstream.items.append(item(1, 40))
+        upstream.available = 1
+        feeder.pump()
+        XCTAssertNotEqual(output.rate, 0, "0.5 s is the resume depth")
+        XCTAssertEqual(statuses.suffix(2), [.buffering, .playing])
+    }
+
     func testTheEndOfUpstreamDuringARebufferStartsAtAnyPositiveDepth() {
         makeFeeder([item(0, 6)])
         upstream.available = 2
