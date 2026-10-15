@@ -36,14 +36,30 @@ trap cleanup EXIT
 
 echo "package-ffmpeg-source: FFmpeg $ffmpeg_tag source as $archive"
 root="$staging/$source_name"
-git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$ffmpeg_tag" https://git.ffmpeg.org/ffmpeg.git \
-    "$root/ffmpeg-$ffmpeg_tag"
-rm -rf "$root/ffmpeg-$ffmpeg_tag/.git"
+# The fetch is flaky and runs after the 30-minute test run, so keep the tree per tag across releases.
+cache_dir="${XDG_CACHE_HOME:-$HOME/Library/Caches}/AudioPlaybackKit"
+cache="$cache_dir/ffmpeg-$ffmpeg_tag.tar"
+mkdir -p "$root"
+if [[ -f "$cache" ]] && tar -xf "$cache" -C "$root"; then
+    echo "package-ffmpeg-source: using cached $cache"
+else
+    # A corrupt cache may have half-extracted; start clean.
+    rm -rf "$root/ffmpeg-$ffmpeg_tag"
+    . scripts/lib/fetch-ffmpeg.sh
+    fetch_ffmpeg_source "$ffmpeg_tag" "$root/ffmpeg-$ffmpeg_tag"
+    rm -rf "$root/ffmpeg-$ffmpeg_tag/.git"
+    # Temp file plus mv, so an interrupted write never leaves a partial cache.
+    mkdir -p "$cache_dir"
+    cache_tmp="$(mktemp "$cache_dir/.ffmpeg-$ffmpeg_tag.XXXXXX")"
+    tar -cf "$cache_tmp" -C "$root" "ffmpeg-$ffmpeg_tag"
+    mv "$cache_tmp" "$cache"
+fi
 # Without .git, ffbuild/version.sh embeds an empty FFMPEG_VERSION; a VERSION file restores the git-describe string (the tag).
 echo "$ffmpeg_tag" > "$root/ffmpeg-$ffmpeg_tag/VERSION"
 mkdir -p "$root/scripts"
 cp -R scripts/ffmpeg-patches "$root/scripts/ffmpeg-patches"
 cp scripts/build-ffmpeg.sh scripts/ffmpeg-exports.txt "$root/scripts/"
+cp -R scripts/lib "$root/scripts/lib"
 cp Frameworks/FFmpeg.xcframework/VERSION.txt "$root/"
 cat > "$root/README.txt" <<README
 FFmpeg $ffmpeg_tag source, local patches and build recipe for AudioPlaybackKit $version.

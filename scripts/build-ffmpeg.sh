@@ -145,7 +145,9 @@ if [ ! -f "$FFMPEG/configure" ]; then
         rm -rf "$FFMPEG"
     fi
     log "Cloning FFmpeg $FFMPEG_TAG into $FFMPEG"
-    git clone --depth 1 --branch "$FFMPEG_TAG" https://git.ffmpeg.org/ffmpeg.git "$FFMPEG"
+    # shellcheck source=lib/fetch-ffmpeg.sh
+    . "$SCRIPT_DIR/lib/fetch-ffmpeg.sh"
+    fetch_ffmpeg_source "$FFMPEG_TAG" "$FFMPEG"
 fi
 [ -f "$FFMPEG/configure" ] || { echo "ERROR: no FFmpeg source at $FFMPEG"; exit 1; }
 
