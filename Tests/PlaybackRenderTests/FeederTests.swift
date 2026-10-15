@@ -102,6 +102,85 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(statuses, [.buffering, .playing])
     }
 
+    // #183: after a stall the underrun was judged from the heard playhead, so for one route latency the
+    // clock was past the written end, nothing paused, and the catch-up was stamped behind the clock.
+    func testWithATwoSecondRouteLatencyAStallPausesAtTheClockAndNothingIsWrittenBehindIt() {
+        makeFeeder([item(0, 80)], chunkFrames: 1, latency: 2)
+        upstream.available = 8
+        feeder.play()
+
+        var stale: [TimeInterval] = []
+        for _ in 0..<12 {
+            output.advance(by: 0.25)
+            feeder.pump()
+        }
+        XCTAssertEqual(output.rate, 0, "the clock passed the written end at 2 s")
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering])
+
+        upstream.available = nil
+        let before = output.enqueues.count
+        feeder.pump()
+        for enqueue in output.enqueues[before...] where enqueue.time < output.currentTime() {
+            stale.append(enqueue.time)
+        }
+        XCTAssertEqual(stale, [])
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing])
+
+        for _ in 0..<16 {
+            output.advance(by: 0.25)
+            let seen = output.enqueues.count
+            feeder.pump()
+            for enqueue in output.enqueues[seen...] where enqueue.time < output.currentTime() {
+                stale.append(enqueue.time)
+            }
+        }
+        XCTAssertEqual(stale, [])
+        XCTAssertEqual(heard, ramp(0, 0..<Int64(heard.count)))
+        XCTAssertGreaterThan(heard.count, 20)
+    }
+
+    // #183: a lead counted from the heard playhead started the output with less than `resumeDepth`
+    // ahead of the clock.
+    func testWithATwoSecondRouteLatencyPlayWaitsForResumeDepthAheadOfTheClock() {
+        makeFeeder([item(0, 80)], chunkFrames: 1, latency: 2)
+        upstream.available = 8
+        feeder.play()
+        run(for: 1.75)
+        feeder.pause()
+        events = []
+
+        feeder.play()
+        XCTAssertEqual(output.rate, 0, "0.25 s ahead of the clock is under the resume depth")
+        XCTAssertEqual(statuses, [.buffering])
+
+        upstream.available = nil
+        feeder.pump()
+        XCTAssertNotEqual(output.rate, 0)
+        XCTAssertEqual(statuses, [.buffering, .playing])
+    }
+
+    // A speaker reports about 10 ms: the pause moves by that much and nothing else changes.
+    func testWithSpeakerLatencyAStallPausesAtTheWrittenEndAndResumesWithoutLosingFrames() {
+        makeFeeder([item(0, 80)], chunkFrames: 1, latency: 1.0 / 64)
+        upstream.available = 8
+        feeder.play()
+
+        var pausedAt: TimeInterval?
+        for _ in 0..<200 where pausedAt == nil {
+            output.advance(by: 1.0 / 64)
+            let clock = output.currentTime()
+            feeder.pump()
+            if output.rate == 0 { pausedAt = clock }
+        }
+        XCTAssertEqual(pausedAt, 2)
+
+        upstream.available = nil
+        feeder.pump()
+        run(for: 4)
+        XCTAssertEqual(Array(heard.prefix(24)), ramp(0, 0..<24))
+        XCTAssertEqual(Array(statuses.prefix(4)), [.buffering, .playing, .buffering, .playing])
+    }
+
     func testAnUnderrunPausesAtTheWrittenEndAndResumesWithoutLosingFrames() {
         makeFeeder([item(0, 16)])
         upstream.available = 2

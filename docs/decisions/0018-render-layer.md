@@ -48,7 +48,7 @@ It holds four parts:
 - **A current-plus-next scheduler** that joins items gaplessly at each item's native rate and channel count.
 - **One `AudioOutput` seam** over ASBAR and the synchronizer.
 
-The core assigns contiguous output timestamps itself. It detects underruns from the clock passing the enqueued end. It keeps its own depth ahead of `currentTime()`, and does not wait to be asked. Speed is the synchronizer rate. The effects stay in the apps ([ADR-0005](0005-shared-engine-repo.md)), as processors.
+The core assigns contiguous output timestamps itself. It detects underruns from the clock passing the enqueued end. It keeps its own depth ahead of `currentTime()`, and does not wait to be asked. Fill, underrun and resume are all judged from `currentTime()`, never from the heard playhead, so nothing is stamped behind a running clock; output latency only offsets the reported position and heard events (#128, #183). Speed is the synchronizer rate. The effects stay in the apps ([ADR-0005](0005-shared-engine-repo.md)), as processors.
 
 ### Layering
 
