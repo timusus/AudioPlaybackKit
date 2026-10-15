@@ -172,11 +172,7 @@ final class Feeder {
         // past the written end one output latency before it is heard, so judge by the clock. At the end
         // of the stream nothing more is written and the hold would report `.ended` early: wait for the playhead.
         if outputRunning, (upstreamEnded ? playhead() : output.currentTime()) >= map.writtenEnd {
-            // The hold moves the playhead to the written end: report what was heard up to now first.
-            report()
-            output.setRate(0, at: map.writtenEnd)
-            map.holdAtWrittenEnd()
-            outputRunning = false
+            holdForUnderrun()
             if !upstreamEnded { setStatus(.buffering) }
         }
 
@@ -201,6 +197,13 @@ final class Feeder {
         // From the clock, like the pause and `fill`: a lead over the heard playhead can be nil at the clock.
         let depth = map.writtenEnd - output.currentTime()
         return !failed && (upstreamEnded ? depth > 0 : depth >= resumeDepth * rate)
+    }
+
+    /// Rewinds the clock to the written end, where the next chunk is stamped; the playhead stays on what is heard.
+    private func holdForUnderrun() {
+        map.hold(at: playhead())
+        output.setRate(0, at: map.writtenEnd)
+        outputRunning = false
     }
 
     private func playhead() -> TimeInterval {
@@ -283,6 +286,11 @@ final class Feeder {
             if upstreamEnded {
                 upstreamEnded = false
                 if status == .ended { setStatus(.buffering) }
+                // The clock ran on past the end while its audio was still reaching the hardware.
+                if case .chunk = supply, outputRunning, output.currentTime() >= map.writtenEnd {
+                    holdForUnderrun()
+                    setStatus(.buffering)
+                }
             }
             guard case let .chunk(chunk) = supply else { return }
             write(chunk)

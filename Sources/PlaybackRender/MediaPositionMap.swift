@@ -68,10 +68,10 @@ struct MediaPositionMap: Sendable {
         writtenEnd = time
     }
 
-    /// An underrun re-anchored the clock at `writtenEnd` once all of it was heard: the playhead holds
-    /// there, as after a reset, while audio written next is still reaching the hardware.
-    mutating func holdAtWrittenEnd() {
-        epochStart = writtenEnd
+    /// An underrun re-anchored the clock at `writtenEnd`: the playhead holds at what is heard now (never
+    /// past the written end), then follows the clock again, a latency behind it.
+    mutating func hold(at playhead: TimeInterval) {
+        epochStart = min(playhead, writtenEnd)
     }
 
     mutating func append(_ tag: SegmentTag, format: PCMFormat) {

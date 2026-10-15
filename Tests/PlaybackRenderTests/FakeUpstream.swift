@@ -9,7 +9,8 @@ final class FakeUpstream: FeederUpstream {
         var format: PCMFormat
     }
 
-    let items: [Item]
+    /// Items appended later are supplied after the end, as a next item that resolves late.
+    var items: [Item]
     let chunkFrames: Int64
     /// Chunks it supplies before answering `.pending`; nil is unlimited.
     var available: Int?

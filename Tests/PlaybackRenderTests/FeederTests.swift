@@ -159,6 +159,55 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(statuses, [.buffering, .playing])
     }
 
+    // #183: the hold moved the playhead to the written end, a latency ahead of what was heard.
+    func testWithATwoSecondRouteLatencyAStallHoldsThePositionAtTheHeardFrame() {
+        makeFeeder([item(0, 80)], chunkFrames: 1, latency: 2)
+        upstream.available = 12
+        feeder.play()
+        run(for: 3)
+        XCTAssertEqual(output.rate, 0)
+        XCTAssertEqual(feeder.heardPosition, SeekTarget(pos(0, 4)))
+        XCTAssertEqual(positions.last, pos(0, 4))
+
+        upstream.available = nil
+        feeder.pump()
+        run(for: 2)
+        XCTAssertEqual(feeder.heardPosition, SeekTarget(pos(0, 12)))
+        XCTAssertEqual(positions.map(\.mediaFrame), Array(0...12))
+    }
+
+    // #183: an item joined inside the last latency before the written end was reported at the stall.
+    func testWithATwoSecondRouteLatencyAJoinInsideTheLastLatencyIsHeardOnlyWhenItPlays() {
+        makeFeeder([item(0, 8), item(1, 80)], chunkFrames: 1, latency: 2)
+        upstream.available = 12
+        feeder.play()
+        run(for: 3)
+        XCTAssertEqual(output.rate, 0)
+        XCTAssertEqual(crossed, [0], "the join at 2 s is still a second from the hardware")
+
+        upstream.available = nil
+        feeder.pump()
+        run(for: 1)
+        XCTAssertEqual(crossed, [0, 1])
+    }
+
+    // #183: the clock runs a latency past the end with no pause, so a next item arriving then was stamped behind it.
+    func testWithATwoSecondRouteLatencyANextItemAfterTheEndIsNotStampedBehindTheClock() {
+        makeFeeder([item(0, 8)], chunkFrames: 1, latency: 2)
+        feeder.play()
+        run(for: 3)
+        XCTAssertEqual(output.rate, 1, "an ended stream waits for the playhead")
+
+        upstream.items.append(item(1, 40))
+        let seen = output.enqueues.count
+        feeder.pump()
+        XCTAssertEqual(output.enqueues[seen...].filter { $0.time < output.currentTime() }.count, 0)
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing])
+
+        run(for: 8)
+        XCTAssertEqual(Array(heard.prefix(12)), ramp(0, 0..<8) + ramp(1, 0..<4))
+    }
+
     // A speaker reports about 10 ms: the pause moves by that much and nothing else changes.
     func testWithSpeakerLatencyAStallPausesAtTheWrittenEndAndResumesWithoutLosingFrames() {
         makeFeeder([item(0, 80)], chunkFrames: 1, latency: 1.0 / 64)
@@ -249,7 +298,7 @@ final class FeederTests: XCTestCase {
 
         XCTAssertEqual(output.currentTime(), 1, "re-anchored at the written end")
         XCTAssertEqual(output.rate, 0)
-        XCTAssertEqual(positions.map(\.mediaFrame), [0, 1, 2, 3, 4])
+        XCTAssertEqual(positions.map(\.mediaFrame), [0, 1, 2, 3], "held at the heard frame, a latency short of the written end")
         XCTAssertEqual(statuses, [.buffering, .playing, .buffering])
 
         upstream.available = nil
