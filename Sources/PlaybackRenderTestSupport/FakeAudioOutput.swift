@@ -3,7 +3,8 @@ import Foundation
 
 /// An `AudioOutput` on a manual clock, with the renderer's measured timing (ADR-0018): a timestamp
 /// hole plays as silence, an overlap trims the later audio, audio stamped behind the clock never
-/// plays, and the clock runs on through an underrun with no event.
+/// plays, and the clock runs on through an underrun with no event. It is ready for more until
+/// `capacity` is enqueued ahead of its clock, and a `routeDepth` models a deep route such as AirPlay.
 public final class FakeAudioOutput: @unchecked Sendable {
     public struct Enqueue: Equatable, Sendable {
         public var samples: [Float]
@@ -49,8 +50,28 @@ public final class FakeAudioOutput: @unchecked Sendable {
     private var _rateChanges: [RateChange] = []
     private var _events: [AudioOutputEvent] = []
     private var stepAfterRead: TimeInterval?
+    private var _capacity: TimeInterval = 2
+    private var _routeDepth: TimeInterval = 0
+    private var _dropped = 0
+    private var requested = false
 
     public init() {}
+
+    /// Seconds of clock time the output takes ahead of its clock before it stops being ready.
+    public var capacity: TimeInterval {
+        get { locked { _capacity } }
+        set { locked { _capacity = newValue } }
+    }
+
+    /// While the clock runs, audio enqueued with less than this ahead of it is accepted but never
+    /// plays, as a route that buffers this deep drops what reaches it late.
+    public var routeDepth: TimeInterval {
+        get { locked { _routeDepth } }
+        set { locked { _routeDepth = newValue } }
+    }
+
+    /// Enqueues the route dropped.
+    public var dropped: Int { locked { _dropped } }
 
     public var enqueues: [Enqueue] { locked { _enqueues } }
     /// The clock time of each flush, injected auto-flushes included.
@@ -73,6 +94,14 @@ public final class FakeAudioOutput: @unchecked Sendable {
             guard !rendererFailed else { throw AudioOutputError.rendererFailed }
             guard !rejected.contains(format) else { throw AudioOutputError.formatRejected(format) }
             _enqueues.append(Enqueue(samples: samples, format: format, time: time))
+            // Without a route depth, the part of a late buffer still ahead of the clock plays.
+            if _routeDepth > 0, _rate > 0, time - clock < _routeDepth {
+                _dropped += 1
+                // Taken as far as the output knows: it fills its capacity like audio that plays.
+                let end = Buffer(start: time, format: format, samples: samples).end
+                timelineEnd = max(timelineEnd ?? end, end)
+                return
+            }
             var buffer = Buffer(start: time, format: format, samples: samples)
             if let end = timelineEnd, time < end {
                 let trimmed = min(frameCount(end - time, format), samples.count / format.channelCount)
@@ -91,6 +120,7 @@ public final class FakeAudioOutput: @unchecked Sendable {
             timelineEnd = nil
             stalled = false
         }
+        sendReadyIfRequested()
     }
 
     public func setRate(_ rate: Double, at time: TimeInterval?) {
@@ -99,6 +129,14 @@ public final class FakeAudioOutput: @unchecked Sendable {
             if let time { clock = time }
             _rateChanges.append(RateChange(time: clock, rate: rate))
         }
+        sendReadyIfRequested()
+    }
+
+    public var isReadyForMoreMediaData: Bool { locked { ready } }
+
+    public func requestMediaDataWhenReady() {
+        locked { requested = true }
+        sendReadyIfRequested()
     }
 
     public func setVolume(_ volume: Float) {
@@ -126,6 +164,7 @@ public final class FakeAudioOutput: @unchecked Sendable {
             timelineEnd = nil
             stalled = false
             rendererFailed = false
+            requested = false
         }
     }
 
@@ -162,6 +201,7 @@ public final class FakeAudioOutput: @unchecked Sendable {
             }
             if cursor < to { record(.silence(start: cursor, duration: to - cursor)) }
         }
+        sendReadyIfRequested()
     }
 
     /// Advances by `seconds` just after the next `currentTime()` read, as a live clock moves on
@@ -231,6 +271,22 @@ public final class FakeAudioOutput: @unchecked Sendable {
 
     public func reject(_ format: PCMFormat) {
         locked { _ = rejected.insert(format) }
+    }
+
+    // Under the lock.
+    private var ready: Bool {
+        (timelineEnd ?? clock) - clock < _capacity
+    }
+
+    /// Sends the one requested `.readyForMoreMediaData` once the output is ready, outside the lock.
+    private func sendReadyIfRequested() {
+        let handler: (@Sendable (AudioOutputEvent) -> Void)? = locked {
+            guard requested, ready else { return nil }
+            requested = false
+            _events.append(.readyForMoreMediaData)
+            return self.handler
+        }
+        handler?(.readyForMoreMediaData)
     }
 
     private func frameCount(_ seconds: TimeInterval, _ format: PCMFormat) -> Int {

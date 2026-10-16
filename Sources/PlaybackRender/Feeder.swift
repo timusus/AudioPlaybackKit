@@ -94,8 +94,9 @@ final class Feeder {
             case .stalled: inbox.post(output.currentTime() - output.outputLatency, stalled: true)
             case let .failed(error): inbox.post(failure: error)
             case .mediaServicesReset: inbox.postReset()
+            case .readyForMoreMediaData: break
             }
-            // The output is silent until a pump restarts it.
+            // The output is silent until a pump restarts it, or wants more than the last pump wrote.
             wake()
         }
     }

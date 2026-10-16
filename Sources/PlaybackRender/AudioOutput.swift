@@ -25,11 +25,14 @@ public struct PCMFormat: Hashable, Sendable {
     /// The media services were reset. Unlike `.failed` it names no renderer and arrives once per
     /// reset, so it may follow a failure the caller already recovered from; `rebuild()` answers it.
     case mediaServicesReset
+    /// The output can take more audio, once per `requestMediaDataWhenReady()`.
+    case readyForMoreMediaData
 
     public static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
         case let (.autoFlushed(a), .autoFlushed(b)): a == b
-        case (.stalled, .stalled), (.mediaServicesReset, .mediaServicesReset): true
+        case (.stalled, .stalled), (.mediaServicesReset, .mediaServicesReset),
+             (.readyForMoreMediaData, .readyForMoreMediaData): true
         case let (.failed(a), .failed(b)): a as NSError == b as NSError
         default: false
         }
@@ -61,6 +64,11 @@ public struct PCMFormat: Hashable, Sendable {
     func setVolume(_ volume: Float)
     func currentTime() -> TimeInterval
     var outputLatency: TimeInterval { get }
+    /// Whether the output wants more audio now. The output decides how far ahead of its clock it
+    /// buffers; a deep route such as AirPlay drops audio that arrives with less than its depth to spare.
+    var isReadyForMoreMediaData: Bool { get }
+    /// Sends `.readyForMoreMediaData` once, as soon as the output is ready; repeated calls arm it once.
+    func requestMediaDataWhenReady()
     /// Replaces a failed renderer with a fresh one, keeping volume and settings. Everything queued
     /// is gone and the clock starts again from 0 at rate 0. No event from before it is sent after it.
     func rebuild() throws

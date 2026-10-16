@@ -19,6 +19,9 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     private var observers = Observers()
     private var settings: RendererSettings
     private var handler: (@Sendable (AudioOutputEvent) -> Void)?
+    // Under `lock`: the current renderer has a ready-for-more request armed.
+    private var requesting = false
+    private let readyQueue = DispatchQueue(label: "SampleBufferAudioOutput.ready")
     #if os(iOS)
     private var resetObserver: (any NSObjectProtocol)?
     #endif
@@ -91,6 +94,26 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
         #endif
     }
 
+    var isReadyForMoreMediaData: Bool {
+        renderer.isReadyForMoreMediaData
+    }
+
+    func requestMediaDataWhenReady() {
+        let renderer: AVSampleBufferAudioRenderer? = lock.withLock {
+            guard !requesting else { return nil }
+            requesting = true
+            return _renderer
+        }
+        guard let renderer else { return }
+        // The renderer calls the block for as long as it stays ready; one call is all the feeder needs.
+        renderer.requestMediaDataWhenReady(on: readyQueue) { [weak self, weak renderer] in
+            guard let self, let renderer else { return }
+            renderer.stopRequestingMediaData()
+            lock.withLock { if renderer === self._renderer { self.requesting = false } }
+            send(.readyForMoreMediaData, from: renderer)
+        }
+    }
+
     /// A fresh renderer on a fresh synchronizer: Apple does not say whether a synchronizer survives
     /// a media-services reset, and a new one costs little.
     func rebuild() throws {
@@ -98,10 +121,14 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
         if renderer.status == .failed { throw renderer.error ?? AudioOutputError.rendererFailed }
         let observers = observe(renderer)
         let old = lock.withLock {
-            defer { (_renderer, _synchronizer, self.observers) = (renderer, synchronizer, observers) }
+            defer {
+                (_renderer, _synchronizer, self.observers) = (renderer, synchronizer, observers)
+                requesting = false
+            }
             return (renderer: _renderer, synchronizer: _synchronizer, observers: self.observers)
         }
         old.observers.remove()
+        old.renderer.stopRequestingMediaData()
         old.synchronizer.removeRenderer(old.renderer, at: old.synchronizer.currentTime())
     }
 

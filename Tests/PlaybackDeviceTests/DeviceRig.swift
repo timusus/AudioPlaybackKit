@@ -75,6 +75,8 @@ final class TappedOutput: AudioOutput, @unchecked Sendable {
     func setVolume(_ volume: Float) { base.setVolume(volume) }
     func currentTime() -> TimeInterval { base.currentTime() }
     var outputLatency: TimeInterval { base.outputLatency }
+    var isReadyForMoreMediaData: Bool { base.isReadyForMoreMediaData }
+    func requestMediaDataWhenReady() { base.requestMediaDataWhenReady() }
     func rebuild() throws { try base.rebuild() }
     func setEventHandler(_ handler: @escaping @Sendable (AudioOutputEvent) -> Void) { base.setEventHandler(handler) }
 }

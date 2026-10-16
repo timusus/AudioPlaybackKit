@@ -125,4 +125,53 @@ final class FakeAudioOutputTests: XCTestCase {
             .audio(start: 0.5, format: stereo8, samples: [3, 3, 4, 4, 5, 5, 6, 6]),
         ])
     }
+
+    func testReadyUntilItsCapacityIsAheadOfTheClockAndARequestIsAnsweredOnce() throws {
+        let output = FakeAudioOutput()
+        output.capacity = 1
+        try output.enqueue([1, 2, 3], format: mono, at: 0)
+        XCTAssertTrue(output.isReadyForMoreMediaData)
+        try output.enqueue([4], format: mono, at: 0.75)
+        XCTAssertFalse(output.isReadyForMoreMediaData)
+
+        output.requestMediaDataWhenReady()
+        output.requestMediaDataWhenReady()
+        output.setRate(1, at: 0)
+        XCTAssertEqual(output.events, [])
+        output.advance(by: 0.25)
+        XCTAssertTrue(output.isReadyForMoreMediaData)
+        output.advance(by: 0.25)
+        XCTAssertEqual(output.events, [.readyForMoreMediaData])
+    }
+
+    func testARequestWhileReadyIsAnsweredAtOnceAndARebuildDropsAnArmedOne() throws {
+        let output = FakeAudioOutput()
+        output.capacity = 1
+        output.requestMediaDataWhenReady()
+        XCTAssertEqual(output.events, [.readyForMoreMediaData])
+
+        try output.enqueue([1, 2, 3, 4], format: mono, at: 0)
+        output.requestMediaDataWhenReady()
+        try output.rebuild()
+        output.setRate(1, at: 0)
+        output.advance(by: 1)
+        XCTAssertEqual(output.events, [.readyForMoreMediaData])
+    }
+
+    func testADeepRouteDropsAudioEnqueuedLessThanItsDepthAheadOfARunningClock() throws {
+        let output = FakeAudioOutput()
+        output.routeDepth = 1
+        try output.enqueue([1, 2], format: mono, at: 0)
+        output.setRate(1, at: 0)
+        try output.enqueue([3, 4], format: mono, at: 0.5)
+        try output.enqueue([5, 6], format: mono, at: 1)
+        output.advance(by: 1.5)
+
+        XCTAssertEqual(output.dropped, 1, "paused, nothing is late")
+        XCTAssertEqual(output.played, [
+            .audio(start: 0, format: mono, samples: [1, 2]),
+            .silence(start: 0.5, duration: 0.5),
+            .audio(start: 1, format: mono, samples: [5, 6]),
+        ])
+    }
 }
