@@ -2,8 +2,6 @@ import CryptoKit
 import Foundation
 import OSLog
 
-private let downloadLog = Logger(subsystem: "com.simplecityapps.AudioPlaybackKit", category: "download")
-
 /// **Where the growing files live.**
 ///
 /// One directory under `Caches`, so iOS may purge it, excluded from backup. Two kinds of file, and
