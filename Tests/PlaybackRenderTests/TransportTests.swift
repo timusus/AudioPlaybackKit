@@ -209,8 +209,9 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(timer.wakes, wakes + 1)
         timer.fire()
         XCTAssertEqual(output.rate, 0, "nothing decoded from the flush time yet")
+        XCTAssertEqual(timer.wakes, wakes + 2, "the flush answers the output's armed ready request")
         executor.runUntilIdle()
-        XCTAssertEqual(timer.wakes, wakes + 2)
+        XCTAssertEqual(timer.wakes, wakes + 3)
         timer.fire()
         XCTAssertEqual(output.rate, 1)
 

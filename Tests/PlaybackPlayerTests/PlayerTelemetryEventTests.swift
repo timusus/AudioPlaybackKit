@@ -139,7 +139,7 @@ final class PlayerTelemetryEventTests: XCTestCase {
         XCTAssertEqual(position, written, accuracy: 0.25)
         XCTAssertGreaterThanOrEqual(steps, 8, "two seconds of queue were heard first")
 
-        // Supply returns: after an underrun audio resumes only once the full target depth is written again.
+        // Supply returns: after an underrun audio resumes only once the rebuffer depth is written again.
         rig.executor.runNext()
         rig.timer.fire()
         player.drainTransportEvents()

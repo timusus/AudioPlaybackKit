@@ -244,7 +244,7 @@ target in seconds, like every time in this module. A listener reads the file bac
 
 `PlaybackRender` (depends on `PlaybackDecode`) replaces an `AVAudioEngine` graph with one `Transport`
 ([ADR-0018](decisions/0018-render-layer.md)). It owns the `AVSampleBufferAudioRenderer` and its
-synchronizer, keeps about two seconds of PCM written ahead of the playhead, joins items gaplessly, and
+synchronizer, writes PCM ahead of the playhead as far as the renderer takes it, joins items gaplessly, and
 reports what is heard. The app keeps the `AVAudioSession` (category, activation, interruptions), Now
 Playing and remote commands, the queue, and the effects. The transport never touches the session: set
 the category and activate it before `play()`.
@@ -396,7 +396,7 @@ player.seek(to: 90)                               // within the current item
 player.seek(by: -15)                              // clamped to the item
 player.seek(to: 10, itemAt: 0)                    // across items
 player.rate = 1.5                                 // 0.25...4, pitch kept; pause is not rate 0
-player.bufferedAhead                              // seconds of PCM written past the playhead; about 2 while decode keeps up
+player.bufferedAhead                              // seconds of PCM written past the playhead; what the renderer takes, at most 30
 player.volume = 0.5                               // 0...1, applied at once; a fade is a ramp from your timer
 player.setProcessors([silenceGate, voiceBoost])   // AudioProcessors, as for Transport
 player.stop()                                     // idle, session deactivated; play() starts again

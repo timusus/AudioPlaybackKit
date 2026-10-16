@@ -90,7 +90,8 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private var takenDiscontinuities = 0
 
     /// Seconds of the media decoded and queued past what is heard, as of the last pump (every
-    /// `pumpInterval`); any thread. About two seconds while decode keeps up, less near the end of what is set.
+    /// `pumpInterval`); any thread. While decode keeps up, as much as the output
+    /// takes, at most 30 s; less near the end of what is set.
     /// 0 from the return of a `setCurrent` or `seek`, and after any flush, until a pump refills it.
     public var bufferedAhead: TimeInterval {
         discontinuityLock.withLock { lastBufferedAhead }

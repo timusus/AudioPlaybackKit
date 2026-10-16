@@ -3,7 +3,7 @@ import PlaybackRenderTestSupport
 import XCTest
 
 /// The feeder against the fake output's manual clock: no test sleeps, and every pump is explicit.
-/// Four frames a second keeps every time exact in binary; the default 2 s target is 8 frames.
+/// Four frames a second keeps every time exact in binary; the fake output takes 2 s, 8 frames, by default.
 final class FeederTests: XCTestCase {
     private let mono = PCMFormat(sampleRate: 4, channelCount: 1)
     private let stereo = PCMFormat(sampleRate: 8, channelCount: 2)
@@ -73,7 +73,7 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(output.enqueues.map(\.format), [mono, mono, stereo, stereo, stereo, stereo])
     }
 
-    func testDepthIsHeldAtTheTargetAsTheClockAdvances() {
+    func testDepthIsHeldAtTheOutputCapacityAsTheClockAdvances() {
         makeFeeder([item(0, 80)], chunkFrames: 1)
         feeder.play()
 
@@ -88,7 +88,7 @@ final class FeederTests: XCTestCase {
 
     // #128: over AirPlay (2 s latency) a lead counted from the heard playhead was nil at the clock,
     // so after the prefill every buffer arrived late and the renderer dropped it.
-    func testWithATwoSecondRouteLatencyTheLeadOverTheClockStaysAtTheTarget() {
+    func testWithATwoSecondRouteLatencyTheLeadOverTheClockStaysAtTheOutputCapacity() {
         makeFeeder([item(0, 80)], chunkFrames: 1, latency: 2)
         feeder.play()
 
@@ -100,6 +100,49 @@ final class FeederTests: XCTestCase {
         }
         XCTAssertEqual(heard, ramp(0, 0..<16))
         XCTAssertEqual(statuses, [.buffering, .playing])
+    }
+
+    // timusus/shuttle2#1064: AirPlay played choppily with a 2 s lead and smoothly with 8 s. A route
+    // that buffers 8 s deep drops what arrives later than that, so the feeder fills what the output takes.
+    func testOnADeepRouteEverythingWrittenArrivesInTimeToPlay() {
+        makeFeeder([item(0, 200)], chunkFrames: 1, latency: 2)
+        output.capacity = 10
+        output.routeDepth = 8
+        feeder.play()
+        run(for: 20)
+
+        XCTAssertEqual(output.dropped, 0)
+        XCTAssertEqual(heard, ramp(0, 0..<80))
+        XCTAssertEqual(statuses, [.buffering, .playing])
+    }
+
+    func testAnOutputThatTakesEverythingIsFilledThirtySecondsAhead() {
+        makeFeeder([item(0, 400)])
+        output.capacity = .infinity
+        feeder.play()
+        output.advance(by: 1)
+        feeder.pump()
+
+        let last = output.enqueues.last!
+        XCTAssertEqual(last.time + 0.5 - output.currentTime(), 30)
+    }
+
+    func testAnOutputThatTakesLessThanTheRebufferDepthStillResumesAfterAnUnderrun() {
+        makeFeeder([item(0, 40)])
+        output.capacity = 1
+        upstream.available = 2
+        feeder.play()
+        output.advance(by: 1.5)
+        feeder.pump()
+        XCTAssertEqual(output.rate, 0)
+
+        upstream.available = 1
+        feeder.pump()
+        XCTAssertEqual(output.rate, 0, "half a second, and the output takes more")
+        upstream.available = 1
+        feeder.pump()
+        XCTAssertEqual(output.rate, 1, "the output is full at 1 s")
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing])
     }
 
     // #183: after a stall the underrun was judged from the heard playhead, so for one route latency the
@@ -285,7 +328,7 @@ final class FeederTests: XCTestCase {
 
     // timusus/shuttle2#1064: resuming at the half-second resume depth gave a run of short stalls on a
     // flaky stream; media3 waits for `bufferForPlaybackAfterRebufferMs` after a rebuffer.
-    func testAfterAnUnderrunTheOutputWaitsForTheFullTargetDepth() {
+    func testAfterAnUnderrunTheOutputWaitsForTheRebufferDepth() {
         makeFeeder([item(0, 40)])
         upstream.available = 2
         feeder.play()
@@ -305,8 +348,9 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing])
     }
 
-    func testAfterAnUnderrunTheFullTargetDepthScalesWithTheRate() {
+    func testAfterAnUnderrunTheRebufferDepthScalesWithTheRate() {
         makeFeeder([item(0, 80)])
+        output.capacity = 10
         feeder.setRate(2)
         upstream.available = 4
         feeder.play()
@@ -510,7 +554,7 @@ final class FeederTests: XCTestCase {
     }
 
     // A stalled renderer starved, which media3 counts as a rebuffer; a route change's flush is no starvation.
-    func testAfterAStallTheOutputWaitsForTheFullTargetDepth() {
+    func testAfterAStallTheOutputWaitsForTheRebufferDepth() {
         makeFeeder([item(0, 40)])
         feeder.play()
         run(for: 1)

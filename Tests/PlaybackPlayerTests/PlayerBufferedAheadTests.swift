@@ -3,7 +3,8 @@ import PlaybackRender
 import XCTest
 @_spi(Testing) @testable import PlaybackPlayer
 
-/// `bufferedAhead` is the media written past what is heard: the transport keeps two seconds ahead,
+/// `bufferedAhead` is the media written past what is heard: the transport fills what the fake output
+/// takes, two seconds,
 /// and less once the list's end is written. Each fake item is 10 s at 8 Hz, in 0.25 s chunks.
 @MainActor
 final class PlayerBufferedAheadTests: XCTestCase {
@@ -76,7 +77,7 @@ final class PlayerBufferedAheadTests: XCTestCase {
     }
 
     /// Playback starts once the feeder's `resumeDepth` (0.5 s, two chunks) is written, not before and
-    /// not after the full two seconds; a stream of unknown length or a live one waits for no more.
+    /// not once the output is full; a stream of unknown length or a live one waits for no more.
     func testPlaybackStartsOnceHalfASecondIsBufferedForLocalAndStreamedItems() {
         for (label, configure) in [
             ("local", {}),

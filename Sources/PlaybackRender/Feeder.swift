@@ -32,20 +32,27 @@ enum FeederEvent {
     case recovered
 }
 
-/// Moves tagged chunks from upstream into an `AudioOutput`: stamps them contiguously, keeps
-/// `targetDepth` written ahead of the output clock, pauses through an underrun and re-feeds after any
-/// flush (ADR-0018). It knows nothing of items beyond the tags.
+/// Moves tagged chunks from upstream into an `AudioOutput`: stamps them contiguously, writes while
+/// the output is ready for more, pauses through an underrun and re-feeds after any flush (ADR-0018).
+/// It knows nothing of items beyond the tags.
 ///
-/// Both depths are playout time, wall seconds at the current rate: the time between pumps is wall
-/// time, so a depth in media time would shrink at speed until one late pump runs the output dry.
+/// The output decides how far ahead it buffers, as media3's `DefaultAudioSink` writes while its
+/// `AudioTrack` takes data: a deep route such as AirPlay drops audio that reaches it late.
+///
+/// Both start depths are playout time, wall seconds at the current rate: the time between pumps is
+/// wall time, so a depth in media time would shrink at speed until one late pump runs the output dry.
 ///
 /// Threading: confined to the caller's one serial queue; output events, on any thread, wait in an inbox
 /// that the next `pump()` drains, and call `wake` so the caller pumps now.
 final class Feeder {
-    let targetDepth: TimeInterval
+    /// Media seconds written ahead of the clock however much the output takes: about 11 MB of 48 kHz
+    /// stereo Float32, under media3's 50 s `maxBufferMs`, and still 7.5 s of playout at 4x.
+    static let maxDepth: TimeInterval = 30
+    /// Depth at which an output starts after an underrun, as media3's `bufferForPlaybackAfterRebufferMs`,
+    /// so a flaky stream gives one longer pause, not a run of short stalls.
+    let rebufferDepth: TimeInterval
     /// Depth at which a buffering output starts, first or after a seek, re-feed or pause; well under
-    /// `targetDepth` so a slow upstream still starts promptly. After an underrun it waits for the full
-    /// `targetDepth` instead, as media3's `bufferForPlaybackAfterRebufferMs`.
+    /// `rebufferDepth` so a slow upstream still starts promptly.
     let resumeDepth: TimeInterval
 
     private let output: AudioOutput
@@ -58,7 +65,7 @@ final class Feeder {
     private var playWhenReady = false
     private var outputRunning = false
     private var upstreamEnded = false
-    /// The current buffering began as an underrun, so it waits for `targetDepth`, not `resumeDepth`.
+    /// The current buffering began as an underrun, so it waits for `rebufferDepth`, not `resumeDepth`.
     private var afterUnderrun = false
     private var failed = false
     /// Set by a renderer recovery and cleared on `.playing`: a second failure in between surfaces
@@ -72,15 +79,15 @@ final class Feeder {
     init(
         output: AudioOutput,
         upstream: FeederUpstream,
-        targetDepth: TimeInterval = 2,
+        rebufferDepth: TimeInterval = 2,
         resumeDepth: TimeInterval = 0.5,
         wake: @escaping @Sendable () -> Void = {},
         onEvent: @escaping (FeederEvent) -> Void
     ) {
-        precondition(resumeDepth > 0 && resumeDepth <= targetDepth)
+        precondition(resumeDepth > 0 && resumeDepth <= rebufferDepth)
         self.output = output
         self.upstream = upstream
-        self.targetDepth = targetDepth
+        self.rebufferDepth = rebufferDepth
         self.resumeDepth = resumeDepth
         self.onEvent = onEvent
         // The map's first epoch starts at 0, so the clock must too.
@@ -127,8 +134,7 @@ final class Feeder {
         precondition(rate > 0, "pause() stops playback")
         self.rate = rate
         if outputRunning { output.setRate(rate, at: nil) }
-        // The depths scale with the rate, so refill now: the next tick plays faster than the last fill
-        // allowed for. Paused, `play()` pumps.
+        // The start depths scale with the rate, so judge them now. Paused, `play()` pumps.
         if playWhenReady { pump() }
     }
 
@@ -164,8 +170,8 @@ final class Feeder {
 
     // MARK: Tick
 
-    /// All the feeder's work; the caller calls it on its queue from a timer or the output's
-    /// ready-for-more callback, often enough that `resumeDepth` outlasts the gap between calls.
+    /// All the feeder's work; the caller calls it on its queue from a timer and on `wake`, often
+    /// enough that `resumeDepth` outlasts the gap between calls.
     func pump() {
         let pending = inbox.drain()
         if pending.reset || pending.failure != nil {
@@ -213,8 +219,10 @@ final class Feeder {
         // anything unheard remains, even with the clock past the written end.
         if upstreamEnded { return map.writtenEnd - playhead() > 0 }
         // From the clock, like the pause and `fill`: a lead over the heard playhead can be nil at the clock.
-        let needed = afterUnderrun ? targetDepth : resumeDepth
-        return map.writtenEnd - output.currentTime() >= needed * rate
+        let needed = afterUnderrun ? rebufferDepth : resumeDepth
+        let lead = map.writtenEnd - output.currentTime()
+        // An output that takes no more would never reach a depth deeper than it buffers.
+        return lead >= needed * rate || (lead > 0 && !output.isReadyForMoreMediaData)
     }
 
     /// Rewinds the clock to the written end, where the next chunk is stamped; the playhead stays on what is heard.
@@ -296,7 +304,9 @@ final class Feeder {
     /// later (a next item) is written at `writtenEnd` and resumes through the underrun path.
     private func fill() {
         // The lead counts from the clock, not the heard playhead: the renderer drops audio stamped behind its clock.
-        while !failed, map.writtenEnd - output.currentTime() < targetDepth * rate {
+        while !failed, map.writtenEnd - output.currentTime() < Self.maxDepth {
+            // Its one ready event wakes the pump, so a deep route refills as fast as it drains.
+            guard output.isReadyForMoreMediaData else { return output.requestMediaDataWhenReady() }
             let supply = upstream.pull()
             if case .ended = supply {
                 upstreamEnded = true
