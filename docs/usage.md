@@ -293,8 +293,8 @@ wrapper forwards `currentFormat` too: it has a default, nil, for a format fixed 
 **Gapless.** Call `setNext(item:source:)` for the track after the current one as soon as the app
 knows it, and again when the queue changes (the last next item is replaced if decode has not reached it;
 `clearNext()` removes it). Items of different sample rates join in one stream. `.crossed` says when the
-speaker reached the new item. An `ItemSource.open()` may block resolving its URL: the next item opens about
-two seconds ahead of the join, and one removed, replaced or skipped while it opens is interrupted through
+speaker reached the new item. An `ItemSource.open()` may block resolving its URL: the next item opens as decode of the
+item before ends, up to 30 s ahead of the join, and one removed, replaced or skipped while it opens is interrupted through
 `interrupt(through:)`.
 
 **Effects.** Skip-silence, Voice Boost, ReplayGain, EQ and limiters are `AudioProcessor`s passed to
@@ -316,10 +316,11 @@ removing a processor, changing its `isActive` or changing its output format need
 one takes over at the next chunk. A processor's own parameters (a gain, EQ bands, or an "enabled"
 flag it reads inside a stage that stays `isActive`) apply live, read under its own lock.
 
-**Processed PCM is heard about one feed depth later.** A change a processor makes at "now", or a new
-chain from `setProcessors`, reaches the speaker roughly two seconds on, without a gap. Fades,
-ducks and mutes therefore go through `setVolume`, which acts at once: the app calls it repeatedly
-from its own timer or display link.
+**Processors run at write time.** The transport writes up to 30 s ahead of the playhead, so a
+processor's own parameter change would reach the speaker only after that audio. `setProcessors` and
+`processorsChanged()` (after a parameter change) therefore flush and re-feed from the heard frame, as a
+seek does: the change is heard at once, after a brief rebuffer. Fades, ducks and mutes go through
+`setVolume`, which acts at once without a flush: the app calls it repeatedly from its own timer or display link.
 
 **Failure.** A failed renderer or a media-services reset is recovered once: the transport rebuilds
 the output, lands paused at the same position and sends `.recovered`, and the app calls `play()` again. A second failure

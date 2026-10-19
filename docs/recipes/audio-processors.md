@@ -56,7 +56,7 @@ fade.flush(StreamMetadata(item: Track(id: 1), mediaStartFrame: 40))   // a seek
 
 `LevelMeter` leaves the audio alone and keeps `peak` for the app to poll from a display link. Its `peak`
 is read under the lock, because the transport writes it from another queue. Processed audio is heard
-about two seconds after it is processed, so a meter leads what is audible by roughly that.
+when it reaches the speaker, up to 30 s after it is processed, so a meter leads what is audible by that much.
 
 ## Mono downmix (buffering, format change)
 

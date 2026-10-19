@@ -21,7 +21,7 @@ never calls. The pipeline takes chunks `consuming`, so an in-place chain neither
 
 `configure`, `flush` and `reset` run once per item, seek or chain change and may allocate; `process`
 and `queueInput` run per chunk and should not. All of them run on the transport's queue, not the
-render thread, about two seconds ahead of the speaker.
+render thread, up to 30 s ahead of the speaker.
 
 Deviations from media3:
 
