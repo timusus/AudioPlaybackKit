@@ -1,6 +1,6 @@
 # ADR-0018: A render layer over AVSampleBufferAudioRenderer
 
-Status: Accepted
+Status: Accepted; speed amended by 0030
 Date: 2026-10-11
 
 ## Context
@@ -69,7 +69,7 @@ How features fit:
 - A gapless join is the default `Transition`, which concatenates.
 - Crossfade is a second `Transition` in its own file. It reads A's tail and B's head, brings B to A's format for the overlap, mixes them, and tags the overlap frames to whichever item should report the position. Nothing else changes.
 - Skip-silence and ad cuts are pipeline processors that drop frames and rewrite tags.
-- Speed is the transport setting the output rate.
+- Speed is a time-stretch before enqueue, re-fed like an effect change; the output stays at rate 1 ([ADR-0030](0030-speed-is-a-time-stretch-before-enqueue.md)).
 - None of them adds a branch to the feeder, the timeline or the output. A feature that needs one is designed wrong.
 
 ### Effect changes
@@ -86,13 +86,13 @@ next audio), and `processorsChanged()` does nothing while failed. A fade goes th
 
 ### Recovery
 
-A failed renderer is terminal. This happens through its `status`, a failed enqueue, or an iOS media-services reset. The feeder then rebuilds the output and restarts from the heard position through the one restart path. The rebuild makes a fresh renderer and synchronizer with the same volume, pitch algorithm and device. Recovery always lands paused, so the user chooses to play on (owner decision). As media3's `pendingRecoverableRendererError` does, it retries once: a second failure before `.playing`, or a rebuild that throws, surfaces as `.failed` with no further rebuild. A media-services reset is a separate event that always rebuilds, since it can follow the failure it caused.
+A failed renderer is terminal. This happens through its `status`, a failed enqueue, or an iOS media-services reset. The feeder then rebuilds the output and restarts from the heard position through the one restart path. The rebuild makes a fresh renderer and synchronizer with the same volume and device. Recovery always lands paused, so the user chooses to play on (owner decision). As media3's `pendingRecoverableRendererError` does, it retries once: a second failure before `.playing`, or a rebuild that throws, surfaces as `.failed` with no further rebuild. A media-services reset is a separate event that always rebuilds, since it can follow the failure it caused.
 
 ## Alternatives rejected
 
 - `AVAudioEngine`, which is what the apps run today: its clock is nil while paused and leaves output latency to us. Speed needs a time-pitch unit whose buffering the clock cannot see. It is not named for AirPlay 2 enhanced buffering.
 - `AVAudioSourceNode` with our own ring buffer: we would own real-time-thread code and estimate latency ourselves, and every route behaviour would be our bug.
-- Sonic in-process for speed: a speed change would wait behind the queued audio, and the position map would need a speed checkpoint. The synchronizer rate measured exact.
+- Sonic in-process for speed: a speed change would wait behind the queued audio, and the position map would need a speed checkpoint. The synchronizer rate measured exact. ADR-0030 later chose Sonic, re-fed like an effect change, for the synchronizer's dropout on every change.
 - One fixed output rate (as Shuttle2 does today): it rules out hi-res and multichannel, and ASBAR took the format change.
 
 ## Consequences
@@ -100,7 +100,6 @@ A failed renderer is terminal. This happens through its `status`, a failed enque
 - There is no offline render mode, so every rule lives in the Apple-free core. The core is tested against a fake output with a manual clock that can inject an auto-flush, a configuration change or a stall. The ASBAR adapter stays thin and is checked on device.
 - `PlaybackRenderTestSupport` ships the fake output, a hand-fired pump and hand-run decode, so an app can drive a `Transport` in its own tests. `AudioOutput`, `PumpTimer`, `SequencerExecutor` and the full `Transport` initialiser are `@_spi(Testing) public`, not public: the production API is unchanged, and only the support target imports the SPI, behind a public `Transport.init(output:timer:executor:onEvent:)` on its fakes. A separate public initialiser would put the seam protocols in the API for every app.
 - A route change may auto-flush. The core must re-feed from the flush time, which the sample-accurate seek ([ADR-0009](0009-seeks-are-sample-accurate.md)) allows.
-- `audioTimePitchAlgorithm` must be set explicitly, because the iOS default (`lowQualityZeroLatency`) is wrong for speech. The default is `.timeDomain`, for the shorter dropout on a speed change.
 - `flush()` and rate changes run off the main thread.
 - A format change at a join is audible, which is acceptable because it falls between unrelated tracks. If a gapless album mixes formats, the fix is to keep the earlier format through the join, not to add a mechanism in the feeder.
 - Tests to port from media3 and the fixtures are listed in [#93](https://github.com/timusus/AudioPlaybackKit/issues/93#issuecomment-6100145321).

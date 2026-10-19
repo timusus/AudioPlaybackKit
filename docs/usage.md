@@ -268,7 +268,7 @@ let source = FFmpegItemSource(reader: try FileByteReader(url: fileURL))   // or 
 transport.setCurrent(item: track.id, source: source, startSeconds: 0)
 transport.play()
 transport.seek(item: track.id, toSeconds: 90)
-transport.setRate(1.5)           // pitch kept; pause() stops, rate 0 is not allowed
+transport.setRate(1.5)           // pitch kept, heard about half a second on; pause() stops, rate 0 is not allowed
 transport.setVolume(0.5)         // 0...1, applied at once
 ```
 
@@ -370,7 +370,7 @@ The category is set at init, but the session is activated on the first `play()`,
 `.spokenAudio` is `.playback` in mode `.spokenAudio`, so another app's prompt pauses you instead of
 ducking you; `.longFormAudio` keeps long-form route sharing for AirPlay 2. On iOS,
 `AudioSessionConfiguration(category:mode:routeSharingPolicy:options:)` builds a custom one; macOS has only
-the two presets. `timePitchAlgorithm:` picks the `AVAudioTimePitchAlgorithm` for rate changes.
+the two presets.
 
 #### AirPlay
 

@@ -141,8 +141,7 @@ public enum PlayerEvent<Item: Hashable & Sendable>: Sendable {
 public final class Player<Item: Hashable & Sendable> {
     public init(
         makeSource: @escaping ItemSourceFactory<Item>,
-        audioSession: AudioSessionConfiguration = .longFormAudio,
-        timePitchAlgorithm: AVAudioTimePitchAlgorithm = .timeDomain
+        audioSession: AudioSessionConfiguration = .longFormAudio
     )
 
     // Items. The list is the app's; the player keeps a private entry id per position so an item may
