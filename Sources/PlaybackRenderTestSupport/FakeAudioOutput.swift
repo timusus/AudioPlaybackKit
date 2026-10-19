@@ -58,6 +58,7 @@ public final class FakeAudioOutput: @unchecked Sendable {
     private var _flushes: [TimeInterval] = []
     private var _partialFlushes: [TimeInterval] = []
     private var _failsPartialFlushes = false
+    private var _partialFlushHorizon: TimeInterval = 0
     private var _holdsPartialFlushes = false
     private var heldCompletions: [(completion: @Sendable (Bool) -> Void, succeeded: Bool)] = []
     private var _enqueuesDuringPartialFlush = 0
@@ -109,6 +110,13 @@ public final class FakeAudioOutput: @unchecked Sendable {
         set { locked { _failsPartialFlushes = newValue } }
     }
 
+    /// A partial flush fails, dropping nothing, unless its cut is at least this far past the clock: the
+    /// part the renderer has committed to render cannot be replaced, as on the iPhone speaker.
+    public var partialFlushHorizon: TimeInterval {
+        get { locked { _partialFlushHorizon } }
+        set { locked { _partialFlushHorizon = newValue } }
+    }
+
     /// Partial flush completions wait for `completePartialFlushes()` instead of running at once.
     public var holdsPartialFlushes: Bool {
         get { locked { _holdsPartialFlushes } }
@@ -155,7 +163,7 @@ public final class FakeAudioOutput: @unchecked Sendable {
         let (succeeded, hold) = locked { () -> (Bool, Bool) in
             _partialFlushes.append(time)
             // A cut the clock has passed is not one the renderer can make.
-            let succeeded = !_failsPartialFlushes && time > clock
+            let succeeded = !_failsPartialFlushes && time > clock && time >= clock + _partialFlushHorizon
             if succeeded {
                 // A buffer that straddles the cut is kept whole: the pessimistic case for the caller.
                 queue.removeAll { $0.start >= time }

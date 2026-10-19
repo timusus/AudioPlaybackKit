@@ -140,7 +140,7 @@ final class TransportReFeedTests: XCTestCase {
             transport.processorsChanged()
             pump()
         }
-        output.advance(by: 0.25)
+        output.advance(by: 0.125)
         pump()
 
         XCTAssertEqual(output.partialFlushes, [1.5])
@@ -173,7 +173,7 @@ final class TransportReFeedTests: XCTestCase {
         XCTAssertEqual(heard, plain(0..<18) + doubled(18..<80))
     }
 
-    func testAFailedPartialFlushReplaysFromTheFrameHeardWhenItFailsNotTheCut() {
+    func testAFailedPartialFlushThatCompletesLateStillAppendsAtTheWrittenEnd() {
         let boost = LiveGainProcessor()
         transport.setProcessors([boost])
         play("a", long, until: 1.0)
@@ -188,8 +188,99 @@ final class TransportReFeedTests: XCTestCase {
         run(for: 9.25)
 
         XCTAssertEqual(output.partialFlushes, [1.5])
-        XCTAssertEqual(output.flushes, [0, 2])
-        XCTAssertEqual(heard, plain(0..<16) + doubled(16..<80))
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(heard, plain(0..<24) + doubled(24..<80), "nothing replayed or skipped")
+    }
+
+    // MARK: A shallow queue, as on the iPhone speaker
+
+    /// The renderer takes half a second ahead and cannot replace the half second it has committed to.
+    private func useShallowRenderer() {
+        output.capacity = 0.5
+        output.partialFlushHorizon = 1
+    }
+
+    func testAChangeOnAShallowQueueAppendsTheNewChainAtTheWrittenEndWithNoFlushStopOrGap() {
+        useShallowRenderer()
+        transport.setProcessors([])
+        play("a", long, until: 1.0)
+        transport.setProcessors([GainProcessor()])
+        run(for: 9.25)
+
+        XCTAssertEqual(output.partialFlushes, [])
+        XCTAssertEqual(output.flushes, [0], "only the initial flush")
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(gaps, [])
+        XCTAssertEqual(heard, plain(0..<12) + doubled(12..<80))
+    }
+
+    func testAFailedPartialFlushLeavesTheQueueSoTheNewChainFollowsItWithNoStopOrGap() {
+        output.partialFlushHorizon = 100
+        let boost = LiveGainProcessor()
+        transport.setProcessors([boost])
+        play("a", long, until: 1.0)
+        boost.gain = 2
+        transport.processorsChanged()
+        run(for: 9.25)
+
+        XCTAssertEqual(output.partialFlushes, [1.75])
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(gaps, [])
+        XCTAssertEqual(heard, plain(0..<24) + doubled(24..<80))
+    }
+
+    func testAChangeWhoseFlushWouldReplaceLessThanTheKeptDepthAppendsInstead() {
+        // Written to 1.75 at clock 1.0: the cut at 1.5 would replace a quarter second, under the half second kept.
+        output.capacity = 0.75
+        transport.setProcessors([])
+        play("a", long, until: 1.0)
+        transport.setProcessors([GainProcessor()])
+        pump()
+        run(for: 9.25)
+
+        XCTAssertEqual(output.partialFlushes, [])
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(heard, plain(0..<14) + doubled(14..<80))
+    }
+
+    func testRapidChangesOnAShallowQueueStackNothingAndTheLastChainIsHeard() {
+        output.capacity = 0.75
+        output.partialFlushHorizon = 1
+        transport.setProcessors([])
+        play("a", long, until: 1.0)
+        for _ in 0..<5 {
+            transport.setProcessors([GainProcessor()])
+            pump()
+        }
+        run(for: 9.25)
+
+        XCTAssertEqual(output.partialFlushes, [])
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(gaps, [])
+        XCTAssertEqual(heard.last, 158)
+    }
+
+    func testAFailedFlushAfterTheClockPassedTheCutRestartsFromTheHeardFrame() {
+        let boost = LiveGainProcessor()
+        transport.setProcessors([boost])
+        play("a", long, until: 1.0)
+        output.holdsPartialFlushes = true
+        output.failsPartialFlushes = true
+        boost.gain = 2
+        transport.processorsChanged()
+        pump()
+        // The output ran dry under the pending flush, so its clock was rewound: the queue's state is unknown.
+        output.advance(by: 4)
+        pump()
+        output.completePartialFlushes()
+        pump()
+        run(for: 9.25)
+
+        XCTAssertEqual(output.flushes.count, 2)
+        XCTAssertEqual(heard.last, 158)
     }
 
     func testAChangeAfterTheFlushCompletedMakesTheNextFlush() {
@@ -211,7 +302,7 @@ final class TransportReFeedTests: XCTestCase {
         XCTAssertEqual(output.flushes, [0])
     }
 
-    func testAFailedPartialFlushFallsBackToAFullFlushFromTheHeardFrame() {
+    func testAFailedPartialFlushAppendsInsteadOfRestarting() {
         let boost = LiveGainProcessor()
         transport.setProcessors([boost])
         play("a", long, until: 1.0)
@@ -221,9 +312,9 @@ final class TransportReFeedTests: XCTestCase {
         run(for: 9.25)
 
         XCTAssertEqual(output.partialFlushes, [1.75])
-        XCTAssertEqual(output.flushes, [0, 1.25])
-        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing, .ended])
-        XCTAssertEqual(heard, plain(0..<10) + doubled(10..<80))
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(heard, plain(0..<24) + doubled(24..<80))
     }
 
     func testAPartialFlushThatFailsAfterAFullFlushIsIgnored() {

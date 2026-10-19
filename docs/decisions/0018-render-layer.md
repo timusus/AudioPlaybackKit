@@ -81,9 +81,7 @@ is stamped from the end of the chunk straddling `resumeDepth` past the clock (a 
 cut and writes it again, so audio before it keeps playing, with no `buffering` status. media3's `DefaultAudioSink` drains to the end of
 stream on a pending configuration, but with up to 30 s queued that would delay the effect too long, so
 we deviate; the change is heard about `resumeDepth` plus a chunk late. Calls made while a partial flush is pending fold
-into it (the next pulled chunk carries the newest parameters), so a slider cannot pile up flushes. If the
-completion reports failure (the cut has passed) the feeder takes the full restart path, as a seek does, from the frame heard at that moment (not the cut),
-and rebuffers briefly. Whether an AirPlay receiver survives a partial flush is checked on device (#1064). After `.ended` nothing is re-fed (the chain applies to the
+into it (the next pulled chunk carries the newest parameters), so a slider cannot pile up flushes. A cut is made only when at least `resumeDepth` is written past it: replacing less gains under half a second over appending and risks a refused flush. A refused flush leaves the enqueued buffers unchanged (the `flush(fromSourceTime:)` header: "the set of enqueued sample buffers remains unchanged"), so the feeder restores its map and appends from `writtenEnd` (`processor change appended at writtenEnd`), as it does with no cut. Only when an underrun hold rewound the clock while the flush was pending is the queue unknown, and the feeder takes the full restart path from the frame heard then. Whether an AirPlay receiver survives a partial flush is checked on device (#1064). After `.ended` nothing is re-fed (the chain applies to the
 next audio), and `processorsChanged()` does nothing while failed. A fade goes through `setVolume`, which needs no flush.
 
 ### Recovery
