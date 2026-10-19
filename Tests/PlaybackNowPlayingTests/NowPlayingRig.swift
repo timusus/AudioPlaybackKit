@@ -58,6 +58,7 @@ final class NowPlayingRig {
     static let format = PCMFormat(sampleRate: 8, channelCount: 1)
 
     let base: PlayerTestRig<String>
+    let factory: FakeItemFactory<String>
     let info = FakeNowPlayingInfoCenter()
     let commands = FakeRemoteCommandCenter()
     private(set) var session: NowPlayingSession<String>!
@@ -80,8 +81,9 @@ final class NowPlayingRig {
         unknownLength: Set<String> = [],
         wrap: (Player<String>) -> any NowPlayingControllable<String> = { $0 }
     ) {
-        let factory = FakeItemFactory<String>(format: Self.format)
+        factory = FakeItemFactory<String>(format: Self.format)
         (factory.live, factory.unknownLength) = (live, unknownLength)
+        let factory = factory
         base = PlayerTestRig { try factory.make($0) }
         controlled = wrap(base.player)
         self.supportedRates = supportedRates

@@ -280,6 +280,10 @@ final class PlayerCoreTests: XCTestCase {
     }
 
     func testRateAndVolumeReachTheOutput() {
+        // The unit's 2048-frame lead only passes in a few seconds at a real sample rate.
+        rig.factory.formats["a"] = PCMFormat(sampleRate: 44100, channelCount: 1)
+        rig.factory.lengths["a"] = 44100 * 30
+        rig.factory.chunkFrames = 4410
         player.setItems(["a"])
         player.play()
         rig.pump()
@@ -292,7 +296,6 @@ final class PlayerCoreTests: XCTestCase {
         let before = player.position
         rig.run(for: 1)
         XCTAssertEqual(player.position - before, 2, accuracy: 0.25)
-        // Above 2x an 8 Hz item has no pitch period to stretch by, so only the clamp is checked here.
         player.rate = 10
         rig.settle()
         XCTAssertEqual(player.rate, 4)

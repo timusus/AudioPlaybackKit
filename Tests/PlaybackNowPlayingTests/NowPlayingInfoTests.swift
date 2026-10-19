@@ -1,5 +1,6 @@
 import MediaPlayer
 import PlaybackPlayer
+import PlaybackRender
 import XCTest
 @testable import PlaybackNowPlaying
 
@@ -156,6 +157,10 @@ final class NowPlayingInfoTests: XCTestCase {
 
     // ADR-0027, media3 MediaSessionLegacyStub: speed is 0 until playing, while the button shows pause.
     func testRateStaysZeroWhileBufferingWithPlayIntentThenFollowsTheRate() async {
+        // The stretch unit's 2048-frame lead only passes in a few seconds at a real sample rate.
+        rig.factory.formats["a"] = PCMFormat(sampleRate: 44100, channelCount: 1)
+        rig.factory.lengths["a"] = 44100 * 30
+        rig.factory.chunkFrames = 4410
         rig.player.setItems(["a"])
         rig.player.rate = 1.5
         rig.player.play()

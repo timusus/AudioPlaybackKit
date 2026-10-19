@@ -18,6 +18,8 @@ public final class FakeItemFactory<Item: Hashable & Sendable> {
     public let format: PCMFormat
     /// Every item's length unless `lengths` has its own: ten seconds at the default 8 Hz.
     public var frames: Int64 = 80
+    /// Frames per decoded chunk; a stretching test raises it with the sample rate, since the unit's lead is in frames.
+    public var chunkFrames: Int64 = 2
     public var lengths: [Item: Int64] = [:]
     /// Items decoded at their own format rather than `format`.
     public var formats: [Item: PCMFormat] = [:]
@@ -58,7 +60,7 @@ public final class FakeItemFactory<Item: Hashable & Sendable> {
     public func make(_ item: Item) throws -> any ItemSource {
         calls.append(item)
         if failing.contains(item) { throw FakeItemError(item: item) }
-        let source = FakeItemSource(format: formats[item] ?? format, frames: lengths[item] ?? frames, chunkFrames: 2, base: base(item))
+        let source = FakeItemSource(format: formats[item] ?? format, frames: lengths[item] ?? frames, chunkFrames: chunkFrames, base: base(item))
         if live.contains(item) { source.frameCount = nil }
         if unknownLength.contains(item) { (source.frameCount, source.seekable) = (nil, true) }
         if unseekable.contains(item) { source.seekable = false }
