@@ -258,6 +258,33 @@ final class FeederRateTests: XCTestCase {
         XCTAssertEqual(Double(heard.count) / 8000, 6 / rate, accuracy: 0.03, line: line)
     }
 
+    /// The real-output auto-flush test's item and changes: three seconds at 48 kHz stereo in 100 ms
+    /// chunks, 2x, 1x and 0.5x set as frames 24000, 60000 and 96000 are heard.
+    func testChangesMidItemAt48kHzPlayToTheLastFrame() {
+        let stereo = PCMFormat(sampleRate: 48000, channelCount: 2)
+        output = FakeAudioOutput()
+        upstream = FakeUpstream([.init(id: 0, frames: 144_000, format: stereo)], chunkFrames: 4800)
+        events = []
+        feeder = Feeder(output: output, upstream: upstream) { [unowned self] in
+            events.append(($0, output.currentTime()))
+        }
+        useDeepRenderer()
+        feeder.play()
+        var changes: [(frame: Int64, rate: Double)] = [(24000, 2), (60000, 1), (96000, 0.5)]
+        for _ in 0..<60 where !statuses.contains(.ended) {
+            output.advance(by: 0.1)
+            feeder.pump()
+            if let change = changes.first, (positions.last?.position.mediaFrame ?? 0) >= change.frame {
+                changes.removeFirst()
+                feeder.setRate(change.rate)
+            }
+        }
+
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(positions.last?.position, .init(item: 0, mediaFrame: 144_000, sampleRate: 48000))
+        XCTAssertEqual(gaps, [])
+    }
+
     // MARK: Rate 1 is untouched
 
     func testAtRateOneTheSamplesAndStampsAreTheSourcesExactly() {
