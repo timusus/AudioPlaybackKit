@@ -73,10 +73,21 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     func flush(fromTime time: TimeInterval, completion: @escaping @Sendable (Bool) -> Void) {
         // The lowest rate enqueued has the widest rounding, which covers every buffer stamped at the cut.
         let sampleRate = lock.withLock { lowestSampleRate }
-        renderer.flush(fromSourceTime: partialFlushSourceTime(time, sampleRate: sampleRate), completionHandler: completion)
+        let source = partialFlushSourceTime(time, sampleRate: sampleRate)
+        let requested = DispatchTime.now()
+        note("partialFlush requested cut=\(fixed(time)) source=\(fixed(source.seconds))")
+        renderer.flush(fromSourceTime: source) { [weak self] succeeded in
+            self?.note("partialFlush completed succeeded=\(succeeded) latencyMs=\(fixed(milliseconds(since: requested)))")
+            completion(succeeded)
+        }
     }
 
     func setRate(_ rate: Double, at time: TimeInterval?) {
+        let (old, sufficient) = lock.withLock { (_synchronizer.rate, _renderer.hasSufficientMediaDataForReliablePlaybackStart) }
+        defer {
+            let start = old == 0 && rate != 0 ? " hasSufficientMediaDataForReliablePlaybackStart=\(sufficient)" : ""
+            note("setRate old=\(old) new=\(Float(rate)) anchor=\(time.map(fixed) ?? "none")\(start)")
+        }
         if let time {
             synchronizer.setRate(Float(rate), time: anchorTime(time))
         } else {
@@ -170,6 +181,7 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
         ) { [weak self, weak renderer] note in
             guard let self, let renderer else { return }
             let flushTime = (note.userInfo?[AVSampleBufferAudioRendererFlushTimeKey] as? NSValue)?.timeValue
+            self.note("autoFlushed flushTime=\(flushTime.map { fixed($0.seconds) } ?? "none")")
             send(.autoFlushed(at: flushTime?.seconds ?? currentTime()), from: renderer)
         }
         // Apple's answer to a new configuration (e.g. spatial audio) is to flush and re-enqueue from
@@ -179,13 +191,23 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
             object: renderer, queue: nil
         ) { [weak self, weak renderer] _ in
             guard let self, let renderer else { return }
+            note("outputConfigurationDidChange")
             send(.autoFlushed(at: currentTime() - outputLatency), from: renderer)
         }
         let status = renderer.observe(\.status) { [weak self] renderer, _ in
+            self?.note("renderer status=\(renderer.status.rawValue)")
             guard renderer.status == .failed else { return }
             self?.send(.failed(renderer.error ?? AudioOutputError.rendererFailed), from: renderer)
         }
-        return Observers(notifications: [autoFlush, configurationChange], status: status)
+        let error = renderer.observe(\.error) { [weak self] renderer, _ in
+            self?.note("renderer error=\(renderer.error.map { String(describing: $0) } ?? "none")")
+        }
+        return Observers(notifications: [autoFlush, configurationChange], status: status, error: error)
+    }
+
+    private func note(_ message: String) {
+        let clock = fixed(currentTime())
+        renderLog.notice("\(message, privacy: .public) clock=\(clock, privacy: .public)")
     }
 
     /// Under `lock`, which `rebuild()` swaps under, so nothing from a replaced renderer reaches the
@@ -224,10 +246,12 @@ private struct RendererSettings {
 private struct Observers {
     var notifications: [any NSObjectProtocol] = []
     var status: NSKeyValueObservation?
+    var error: NSKeyValueObservation?
 
     func remove() {
         notifications.forEach(NotificationCenter.default.removeObserver)
         status?.invalidate()
+        error?.invalidate()
     }
 }
 

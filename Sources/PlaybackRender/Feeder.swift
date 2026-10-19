@@ -84,6 +84,8 @@ final class Feeder {
     /// Where each written chunk ends, ascending and pruned behind the playhead: the map merges
     /// contiguous chunks, and a partial flush must cut between them.
     private var chunkEnds: [TimeInterval] = []
+    /// Diagnostics: the flush whose re-feed is being timed, until its first buffer and `resumeDepth` are logged.
+    private var refeedTrace: (label: String, began: DispatchTime, firstEnqueued: Bool)?
 
     init(
         output: AudioOutput,
@@ -142,6 +144,7 @@ final class Feeder {
     /// Speed. The map needs no checkpoint: the output plays media time at any rate.
     func setRate(_ rate: Double) {
         precondition(rate > 0, "pause() stops playback")
+        note("feeder setRate old=\(self.rate) new=\(rate) running=\(outputRunning)")
         self.rate = rate
         if outputRunning { output.setRate(rate, at: nil) }
         // The start depths scale with the rate, so judge them now. Paused, `play()` pumps.
@@ -180,8 +183,9 @@ final class Feeder {
         upstream.resupply(from: SeekTarget(cut.resume))
         upstreamEnded = false
         let inbox = inbox, wake = wake
+        note("partialFlush begin cut=\(fixed(cut.time)) sourceResume=\(fixed(cut.resume.seconds))")
         output.flush(fromTime: cut.time) { succeeded in
-            inbox.post(partialFlush: token, succeeded: succeeded)
+            inbox.post(partialFlush: token, succeeded: succeeded, at: .now())
             wake()
         }
         pump()
@@ -214,7 +218,9 @@ final class Feeder {
         if pending.reset || pending.failure != nil {
             recover(from: pending.reset ? nil : pending.failure, flushedAt: pending.time)
         } else if let time = pending.time {
+            note("restart after \(pending.stalled ? "stall" : "autoFlush") flushTime=\(fixed(time))")
             restart(from: currentPosition(at: max(map.epochStart, time)))
+            refeedTrace = (pending.stalled ? "stall" : "autoFlush", .now(), false)
             // A stall is the renderer starving, a downstream underrun; a route change's flush is not.
             // Not while paused: a pause ends the rebuffer even if the stall is drained after it.
             if pending.stalled && playWhenReady { afterUnderrun = true }
@@ -224,7 +230,10 @@ final class Feeder {
             let before = pendingPartialFlush?.before
             pendingPartialFlush = nil
             // The map was truncated at the cut, which can be ahead of the frame heard by now.
-            if !result.succeeded {
+            if result.succeeded {
+                refeedTrace = ("partialFlush", result.completedAt, false)
+            } else {
+                note("partialFlush failed, full restart")
                 restart(from: before?.position(at: playhead()).map(SeekTarget.init) ?? heardPosition)
             }
         }
@@ -236,12 +245,18 @@ final class Feeder {
             holdForUnderrun()
             // The end of the stream is no rebuffer: a next item after it starts like a first one.
             if !upstreamEnded {
+                note("underrun")
                 afterUnderrun = true
                 setStatus(.buffering)
             }
         }
 
         fill()
+
+        if let trace = refeedTrace, trace.firstEnqueued, map.writtenEnd - output.currentTime() >= resumeDepth * rate {
+            note("refeed reached resumeDepth after=\(trace.label) sinceMs=\(fixed(milliseconds(since: trace.began)))")
+            refeedTrace = nil
+        }
 
         if !outputRunning, status == .buffering || status == .paused, canStart {
             if playWhenReady {
@@ -275,6 +290,7 @@ final class Feeder {
 
     /// Rewinds the clock to the written end, where the next chunk is stamped; the playhead stays on what is heard.
     private func holdForUnderrun() {
+        note("hold at writtenEnd=\(fixed(map.writtenEnd)) status=\(status)")
         map.hold(at: playhead())
         output.setRate(0, at: map.writtenEnd)
         outputRunning = false
@@ -299,6 +315,7 @@ final class Feeder {
     private func restart(from position: SeekTarget?, status: FeederStatus? = nil) {
         // Flush times already posted predate this flush, which covers them; a failure does not.
         _ = inbox.drainTime()
+        refeedTrace = nil
         output.flush()
         // Held at rate 0 until `resumeDepth` is written, so the first audio is not stamped behind the clock.
         let anchor = output.currentTime()
@@ -320,6 +337,7 @@ final class Feeder {
     /// from what was heard, paused, so the user chooses to play on. A reset always rebuilds, even
     /// mid-recovery: it can follow the failure it caused, and each notification comes once.
     private func recover(from error: (any Error)?, flushedAt time: TimeInterval? = nil) {
+        note("recover error=\(error.map { String(describing: $0) } ?? "mediaServicesReset")")
         if let error, recovering { return fail(error) }
         let heard = min(time ?? .infinity, playhead())
         let position = currentPosition(at: max(map.epochStart, heard))
@@ -380,6 +398,10 @@ final class Feeder {
 
     private func write(_ chunk: TaggedChunk) {
         if chunk.frameCount > 0 {
+            if let trace = refeedTrace, !trace.firstEnqueued {
+                refeedTrace?.firstEnqueued = true
+                note("refeed first buffer after=\(trace.label) pts=\(fixed(map.writtenEnd)) sinceMs=\(fixed(milliseconds(since: trace.began)))")
+            }
             do {
                 try output.enqueue(chunk.samples, format: chunk.format, at: map.writtenEnd)
             } catch AudioOutputError.rendererFailed {
@@ -409,8 +431,15 @@ final class Feeder {
         }
     }
 
+    private func note(_ message: String) {
+        let clock = output.currentTime()
+        let depth = fixed(map.writtenEnd - clock)
+        renderLog.notice("\(message, privacy: .public) clock=\(fixed(clock), privacy: .public) depth=\(depth, privacy: .public)")
+    }
+
     private func setStatus(_ status: FeederStatus) {
         guard status != self.status else { return }
+        if status == .buffering { note("buffering") }
         self.status = status
         if status == .playing { recovering = false }
         onEvent(.status(status))
@@ -425,10 +454,10 @@ private final class RestartInbox: @unchecked Sendable {
     private var stalled = false
     private var failure: (any Error)?
     private var reset = false
-    private var partialFlushes: [(token: Int, succeeded: Bool)] = []
+    private var partialFlushes: [(token: Int, succeeded: Bool, completedAt: DispatchTime)] = []
 
-    func post(partialFlush token: Int, succeeded: Bool) {
-        lock.withLock { partialFlushes.append((token, succeeded)) }
+    func post(partialFlush token: Int, succeeded: Bool, at completedAt: DispatchTime) {
+        lock.withLock { partialFlushes.append((token, succeeded, completedAt)) }
     }
 
     func post(_ time: TimeInterval, stalled: Bool = false) {
@@ -448,7 +477,7 @@ private final class RestartInbox: @unchecked Sendable {
 
     func drain() -> (
         time: TimeInterval?, stalled: Bool, failure: (any Error)?, reset: Bool,
-        partialFlushes: [(token: Int, succeeded: Bool)]
+        partialFlushes: [(token: Int, succeeded: Bool, completedAt: DispatchTime)]
     ) {
         lock.withLock {
             defer { (time, stalled, failure, reset, partialFlushes) = (nil, false, nil, false, []) }
