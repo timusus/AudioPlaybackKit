@@ -38,8 +38,9 @@ final class SequencedUpstream: FeederUpstream {
         freshStart = SeekTarget(item: item, offset: .seconds(startSeconds))
     }
 
-    /// Takes effect at the next chunk pulled: the old chain drains first, as at a format change, so
-    /// nothing queued is re-fed and the timeline stays contiguous. A resupply applies it at once.
+    /// Takes effect at the next chunk pulled, as at a format change. The transport re-feeds from the
+    /// heard frame to apply it at once, and that resupply starts the new chain; after the end it waits
+    /// for the next audio.
     func setProcessors(_ processors: [any AudioProcessor]) {
         pendingProcessors = processors
     }

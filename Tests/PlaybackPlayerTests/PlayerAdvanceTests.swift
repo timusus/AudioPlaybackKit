@@ -216,6 +216,41 @@ final class PlayerAdvanceTests: XCTestCase {
         XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [.init(value: false, reason: .endOfItem)])
     }
 
+    func testProcessorChangesWhilePausedAtTheEndOfAnItemDoNotEndItAgain() async {
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 1)
+        player.pauseAtEndOfItem = true
+        rig.run(for: 11)
+        XCTAssertEqual(player.position, 10)
+
+        player.setProcessors([])
+        player.processorsChanged()
+        rig.run(for: 2)
+
+        XCTAssertEqual(player.currentItem, "a")
+        XCTAssertEqual(player.position, 10)
+        XCTAssertEqual(player.state, .ready)
+        let events = await rig.finish()
+        XCTAssertEqual(PlayerRig.playWhenReadyChanges(events), [.init(value: false, reason: .endOfItem)])
+    }
+
+    func testProcessorChangesAfterTheLastItemEndedKeepItEnded() {
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 12)
+        XCTAssertEqual(player.state, .ended)
+
+        let flushes = rig.output.flushes
+
+        player.setProcessors([])
+        player.processorsChanged()
+        rig.run(for: 2)
+
+        XCTAssertEqual(player.state, .ended)
+        XCTAssertEqual(rig.output.flushes, flushes)
+    }
+
     // A seek while paused at the end stays on the item, as media3's seek within the current item does.
     func testASeekWhilePausedAtTheEndOfAnItemStaysOnIt() {
         player.setItems(["a", "b"])

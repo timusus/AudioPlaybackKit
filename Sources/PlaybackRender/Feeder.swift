@@ -45,8 +45,9 @@ enum FeederEvent {
 /// Threading: confined to the caller's one serial queue; output events, on any thread, wait in an inbox
 /// that the next `pump()` drains, and call `wake` so the caller pumps now.
 final class Feeder {
-    /// Media seconds written ahead of the clock however much the output takes: about 11 MB of 48 kHz
-    /// stereo Float32, under media3's 50 s `maxBufferMs`, and still 7.5 s of playout at 4x.
+    /// Media seconds written ahead of the clock however much the output takes, under media3's 50 s
+    /// `maxBufferMs` and still 7.5 s of playout at 4x. It bounds time, not bytes: about 11 MB at 48 kHz
+    /// stereo Float32, several times that at a high sample rate or channel count.
     static let maxDepth: TimeInterval = 30
     /// Depth at which an output starts after an underrun, as media3's `bufferForPlaybackAfterRebufferMs`,
     /// so a flaky stream gives one longer pause, not a run of short stalls.
@@ -162,6 +163,8 @@ final class Feeder {
     var bufferedAhead: TimeInterval {
         max(map.writtenEnd - playhead(), 0)
     }
+
+    var hasEnded: Bool { status == .ended }
 
     /// The frame heard now, or where the last restart asked for until its audio is written.
     var heardPosition: SeekTarget? {

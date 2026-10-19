@@ -235,8 +235,9 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
 
     /// Replaces the processor chain and re-feeds from the heard frame, as a seek does, so the new
     /// chain is heard at once instead of after the up to 30 s already written. That costs a brief
-    /// rebuffer. Each processor's `flush` gets the `Item` whose frames follow. Call it again after a
-    /// change that alters a processor's `isActive` or output format.
+    /// rebuffer. After `.ended` the chain is installed for the next audio but nothing is re-fed, and
+    /// after a failure it replays from the heard frame. Each processor's `flush` gets the `Item` whose
+    /// frames follow. Call it again after a change that alters a processor's `isActive` or output format.
     public func setProcessors(_ processors: [any AudioProcessor]) {
         queue.async { [self] in
             upstream.setProcessors(processors)
@@ -246,9 +247,13 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
 
     /// Re-feeds from the heard frame after an app changed a processor's own parameters (a gain, EQ
     /// bands), which apply from the next chunk processed and so would otherwise wait out the audio
-    /// already written. Costs a brief rebuffer, so set a fade through `setVolume`, not here.
+    /// already written. Costs a brief rebuffer, so set a fade through `setVolume`, not here. Does
+    /// nothing after a failure, which only a seek, `setCurrent` or `setProcessors` clears.
     public func processorsChanged() {
-        queue.async { [self] in refeedFromHeard() }
+        queue.async { [self] in
+            guard !failed else { return }
+            refeedFromHeard()
+        }
     }
 
     private func callDiscontinuity() {
@@ -265,10 +270,11 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         return lastID
     }
 
-    // With nothing heard or failed there is nothing written to replace, and a flush would report buffering.
+    // With nothing heard there is nothing written to replace, and a flush would report buffering. After
+    // `.ended` a re-feed would reopen the source at its end and report the end again.
     private func refeedFromHeard() {
         let position = feeder.heardPosition
-        guard failed || position != nil else { return }
+        guard failed || (position != nil && !feeder.hasEnded) else { return }
         failed = false
         feeder.flush(from: position)
         publishBufferedAhead()

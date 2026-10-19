@@ -472,6 +472,39 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(statuses.last, .ended)
     }
 
+    func testProcessorChangesAfterTheEndReFeedNothing() {
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        pump()
+        run(for: 3.25)
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+
+        transport.setProcessors([GainProcessor()])
+        transport.processorsChanged()
+        run(for: 1)
+
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+    }
+
+    func testProcessorsChangedAfterAProcessorFailedKeepsTheFailure() {
+        transport.setProcessors([FixedRateProcessor(sampleRate: 44100)])
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        pump()
+        XCTAssertEqual(failedItems, ["a"])
+        let flushes = output.flushes
+
+        transport.processorsChanged()
+        transport.play()
+        pump()
+        run(for: 1)
+
+        XCTAssertEqual(output.flushes, flushes)
+        XCTAssertEqual(failedItems, ["a"])
+        XCTAssertEqual(heard, [])
+    }
+
     func testProcessorChangesWithNothingPlayingFlushNothing() {
         transport.setProcessors([GainProcessor()])
         transport.processorsChanged()
