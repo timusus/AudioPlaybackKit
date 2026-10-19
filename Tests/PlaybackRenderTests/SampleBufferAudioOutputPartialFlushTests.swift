@@ -23,6 +23,16 @@ final class SampleBufferAudioOutputPartialFlushTests: XCTestCase {
         var value = false
     }
 
+    func testTheCutIsNeverLaterThanAPresentationTimeStampRoundedDownFromIt() {
+        for sampleRate in [8000.0, 44100, 48000] {
+            // A segment start 0.4 frame past the grid: the stamp rounds to the frame 0.4 before it.
+            let cut = 1 + 0.4 / sampleRate
+            let stamp = presentationTime(cut, sampleRate: sampleRate).seconds
+            XCTAssertLessThan(stamp, cut)
+            XCTAssertLessThanOrEqual(partialFlushSourceTime(cut, sampleRate: sampleRate).seconds, stamp, "\(sampleRate)")
+        }
+    }
+
     func testAPartialFlushAheadOfTheClockCompletesAndTheCutIsWrittenAgain() throws {
         let output = SampleBufferAudioOutput()
         try output.enqueue(silence(seconds: 1), format: format, at: 0)

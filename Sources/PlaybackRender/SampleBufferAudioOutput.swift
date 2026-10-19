@@ -21,6 +21,8 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     private var handler: (@Sendable (AudioOutputEvent) -> Void)?
     // Under `lock`: the current renderer has a ready-for-more request armed.
     private var requesting = false
+    // Under `lock`: the lowest sample rate ever enqueued, for the partial flush's rounding margin.
+    private var lowestSampleRate = 48000.0
     private let readyQueue = DispatchQueue(label: "SampleBufferAudioOutput.ready")
     #if os(iOS)
     private var resetObserver: (any NSObjectProtocol)?
@@ -54,6 +56,7 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     private var synchronizer: AVSampleBufferRenderSynchronizer { lock.withLock { _synchronizer } }
 
     func enqueue(_ samples: [Float], format: PCMFormat, at time: TimeInterval) throws {
+        lock.withLock { lowestSampleRate = min(lowestSampleRate, format.sampleRate) }
         let buffer = try makeSampleBuffer(
             samples, description: formats.description(for: format),
             presentationTime: presentationTime(time, sampleRate: format.sampleRate)
@@ -68,11 +71,9 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     }
 
     func flush(fromTime time: TimeInterval, completion: @escaping @Sendable (Bool) -> Void) {
-        // The epsilon is under a frame at any rate, so a buffer stamped exactly at the cut is dropped.
-        renderer.flush(
-            fromSourceTime: CMTime(seconds: time - 1e-6, preferredTimescale: 1_000_000_000),
-            completionHandler: completion
-        )
+        // The lowest rate enqueued has the widest rounding, which covers every buffer stamped at the cut.
+        let sampleRate = lock.withLock { lowestSampleRate }
+        renderer.flush(fromSourceTime: partialFlushSourceTime(time, sampleRate: sampleRate), completionHandler: completion)
     }
 
     func setRate(_ rate: Double, at time: TimeInterval?) {
@@ -243,6 +244,12 @@ func anchorTime(_ time: TimeInterval) -> CMTime {
 /// buffer stamped at the previous one's end in the same format joins with no gap or overlap.
 func presentationTime(_ time: TimeInterval, sampleRate: Double) -> CMTime {
     CMTime(value: CMTimeValue((time * sampleRate).rounded()), timescale: CMTimeScale(sampleRate))
+}
+
+/// The flush source time for a cut at `time`. `presentationTime` rounds a stamp to the nearest frame,
+/// so a buffer stamped at the cut can land up to half a frame before it; the cut moves back by that.
+func partialFlushSourceTime(_ time: TimeInterval, sampleRate: Double) -> CMTime {
+    CMTime(seconds: time - 0.5 / sampleRate - 1e-9, preferredTimescale: 1_000_000_000)
 }
 
 /// One `CMAudioFormatDescription` per format, so a long run of buffers shares one description.
