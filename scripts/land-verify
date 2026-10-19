@@ -37,7 +37,7 @@ test_failures() {
 run_phase() {
     local phase="$1" extractor="$2"
     shift 2
-    local log="$artifacts/$phase.log"
+    local log="$artifacts/$phase.log" started=$SECONDS
     echo "verify: == $phase"
     # A stale .build would report another tree's failures.
     if [[ "$phase" == test && "$failed" -ne 0 ]]; then
@@ -45,6 +45,7 @@ run_phase() {
         return
     fi
     if "$@" >"$log" 2>&1; then
+        echo "verify:    $phase: $((SECONDS - started)) s"
         return
     fi
     failed=1
@@ -53,6 +54,7 @@ run_phase() {
     if [[ -n "$failures" ]]; then
         while IFS= read -r line; do echo "verify: !! $line"; done <<<"$failures"
     fi
+    echo "verify:    $phase: $((SECONDS - started)) s"
     echo "verify: -- $phase failed: see $log"
     tail -n 15 "$log" | sed 's/^/  | /' >&2
 }
