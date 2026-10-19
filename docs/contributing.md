@@ -3,7 +3,7 @@
 For the pull-request process (discuss first) see [CONTRIBUTING.md](../CONTRIBUTING.md). The
 commands to build, test and release, the FFmpeg licence rules, the layout and the engineering
 principles are in [CLAUDE.md](../CLAUDE.md). This page holds what those do not say. The repository has no hosted CI:
-`swift test` locally plus `scripts/release.sh` is the gate.
+`scripts/test-all` locally plus `scripts/release.sh` is the gate.
 
 ## Test suites
 
@@ -83,7 +83,7 @@ Xcode with the iOS SDKs and reads `FFMPEG_TAG`, `FFMPEG_SRC`, `OUT_DIR`, `BUILD_
 and `MACOS_DEPLOYMENT_TARGET` (defaults in the script). After a rebuild:
 
 1. `git diff` on `VERSION.txt` shows only the intended change.
-2. `swift test`, conformance suite included, passes.
+2. `scripts/test-all` (the full suite, conformance included, about 8 min) passes.
 3. The framework is its own commit: `build: rebuild ffmpeg ...`; changed headers go with it.
 
 Patches in `scripts/ffmpeg-patches/` are applied by the script to the cloned source and listed in
@@ -95,7 +95,7 @@ the Xing frame count, losing the gapless trim and the duration).
 
 `scripts/release.sh X.Y.Z NOTES.md` refuses missing notes or a bad or existing version. It runs from any checkout, in
 its own worktree `.claude/worktrees/release` detached at `origin/main` (never the landing worktree, which a
-concurrent `land` may be verifying); it pushes only the tag. It runs `swift test`, runs `PlaybackStreamingTests` on an iOS simulator
+concurrent `land` may be verifying); it pushes only the tag. It runs `scripts/test-all`, runs `PlaybackStreamingTests` on an iOS simulator
 (`IOS_SIM_UDID`, else the first available iPhone), tags the bare semver, pushes, and publishes the GitHub
 release with the notes and the FFmpeg source tarball attached. Then bump the
 consumer's `Package.swift` if the change matters to it and run its tests. A fix that changes neither API

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#
+# The whole suite, conformance included (about 8 min, mostly PlaybackDecodeConformanceTests). For `land` and
+# releases; iterate with `swift test --filter <Class>` or scripts/test-fast. Extra args pass through.
+set -euo pipefail
+
+cd "$(dirname "$0")/.." || exit 2
+exec swift test --parallel --num-workers 4 "$@"

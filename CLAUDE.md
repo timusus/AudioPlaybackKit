@@ -34,6 +34,7 @@ patches and linkage. The headers sit in `Sources/CFFmpeg/include`, also generate
 ```sh
 swift test --filter <Class>                         # iterate on the tests you touch
 scripts/test-fast                                   # before you finish: all but conformance, parallel, about 90 s
+scripts/test-all                                    # whole suite, about 490 s: land and releases only; a bare `swift test` is serial, slower still
 swift test --filter PlaybackDecodeConformance       # about 410-480 s (the matrix test alone about 234 s)
 GOLDEN_UPDATE=1 swift test --filter PlaybackDecodeConformance   # after an intended change; review the JSON diff
 xcodebuild test -scheme AudioPlaybackKit-Package -only-testing:PlaybackStreamingTests \

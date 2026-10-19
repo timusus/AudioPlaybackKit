@@ -68,8 +68,8 @@ if ! grep -qF "exports only $(tr '\n' ' ' < scripts/ffmpeg-exports.txt)(ffmpeg-e
     exit 1
 fi
 
-echo "release.sh: swift test"
-swift test
+echo "release.sh: scripts/test-all"
+scripts/test-all
 
 # The byte source runs on iOS URLSession in the apps, so its tests also run on a simulator.
 # This worktree's own simulator (sim); IOS_SIM_UDID overrides it.
