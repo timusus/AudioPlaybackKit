@@ -312,8 +312,8 @@ seek and at a format change within an item (a source re-opened at another rate o
 to `Transport` or `Player`; cast it back) and its `mediaStartFrame`. ReplayGain reads its gain for
 `metadata.item` there (ADR-0021). Filter memory and a limiter's envelope reset at each join. Adding or
 removing a processor, changing its `isActive` or changing its output format needs another
-`setProcessors` call, which never flushes: the old chain drains into the queued audio and the new
-one takes over at the next chunk. A processor's own parameters (a gain, EQ bands, or an "enabled"
+`setProcessors` call, which re-feeds from the heard frame (a brief rebuffer) so the new chain is
+heard at once; after the end of the stream it only installs the chain. A processor's own parameters (a gain, EQ bands, or an "enabled"
 flag it reads inside a stage that stays `isActive`) apply live, read under its own lock.
 
 **Processors run at write time.** The transport writes up to 30 s ahead of the playhead, so a
