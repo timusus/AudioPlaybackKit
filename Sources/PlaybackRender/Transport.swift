@@ -45,7 +45,7 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     case recovered
 }
 
-/// Gap between pumps. The feeder's 0.5 s `resumeDepth` is playout time at any rate, so even a pump
+/// Gap between pumps. The feeder's 0.5 s `resumeDepth` is output time at any speed, so even a pump
 /// the OS coalesces to twice this never starves the output.
 let pumpInterval: TimeInterval = 0.1
 
@@ -99,15 +99,9 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
 
     /// Plays through the device's audio output (`AVSampleBufferAudioRenderer`). The transport never
     /// touches `AVAudioSession`; whatever drives it owns the session. `onEvent` is called on the transport's queue.
-    ///
-    /// `timePitchAlgorithm` is how speed keeps pitch: `.timeDomain` (the default) had the shortest
-    /// dropout on a speed change on the iPhone probe (97 ms to 2x, 140 ms back); `.spectral` suits music.
-    public convenience init(
-        timePitchAlgorithm: AVAudioTimePitchAlgorithm = .timeDomain,
-        onEvent: @escaping @Sendable (TransportEvent<Item>) -> Void
-    ) {
+    public convenience init(onEvent: @escaping @Sendable (TransportEvent<Item>) -> Void) {
         self.init(
-            output: SampleBufferAudioOutput(timePitchAlgorithm: timePitchAlgorithm),
+            output: SampleBufferAudioOutput(),
             timer: DispatchPumpTimer(),
             executor: SerialQueueExecutor(),
             onEvent: onEvent
@@ -206,7 +200,8 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         queue.async { [self] in feeder.pause() }
     }
 
-    /// Speed, with pitch kept; the output plays media time at `rate`. Use `pause()` to stop.
+    /// Speed, with pitch kept: a time-stretch before enqueue, re-fed gaplessly like a processor change
+    /// (ADR-0030). Audio already queued within half a second plays at the old speed. Use `pause()` to stop.
     public func setRate(_ rate: Double) {
         precondition(rate > 0, "pause() stops playback")
         queue.async { [self] in feeder.setRate(rate) }

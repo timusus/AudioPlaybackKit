@@ -348,7 +348,7 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing])
     }
 
-    func testAfterAnUnderrunTheRebufferDepthScalesWithTheRate() {
+    func testAfterAnUnderrunTheRebufferDepthIsOutputTimeAtAnyRate() {
         makeFeeder([item(0, 80)])
         output.capacity = 10
         feeder.setRate(2)
@@ -358,7 +358,7 @@ final class FeederTests: XCTestCase {
         feeder.pump()
         XCTAssertEqual(output.rate, 0)
 
-        // Four seconds of playout at 2x is eight chunks.
+        // Two seconds of output stretched at 2x is four media seconds, eight chunks.
         for _ in 1...7 {
             upstream.available = 1
             feeder.pump()
@@ -366,7 +366,7 @@ final class FeederTests: XCTestCase {
         }
         upstream.available = 1
         feeder.pump()
-        XCTAssertEqual(output.rate, 2)
+        XCTAssertEqual(output.rate, 1)
     }
 
     func testTheFirstStartAndAStartAfterASeekBeginAtTheResumeDepth() {
@@ -594,6 +594,7 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(positions.last, pos(0, 22))
     }
 
+    // The queued audio within the resume depth plays at the old speed; the re-fed rest at the new one.
     func testASpeedChangeWithOldSpeedAudioQueuedKeepsThePositionContinuous() {
         makeFeeder([item(0, 40)])
         feeder.play()
@@ -602,30 +603,12 @@ final class FeederTests: XCTestCase {
         feeder.setRate(2)
         output.advance(by: 0.5)
         feeder.pump()
+        output.advance(by: 0.5)
+        feeder.pump()
 
-        XCTAssertEqual(positions, [pos(0, 0), pos(0, 2), pos(0, 6)])
-        XCTAssertEqual(heard, ramp(0, 0..<6))
-        XCTAssertEqual(output.rate, 2)
-    }
-
-    // macOS coalesces the 0.1 s pump timer to about 0.2 s: at 3x that tick plays 0.6 s of audio, more
-    // than a resume depth counted in media time.
-    func testCoalescedTicksAtThreeTimesNeverRunTheOutputDry() {
-        let tenths = PCMFormat(sampleRate: 10, channelCount: 1)
-        makeFeeder([item(0, 400, tenths)], chunkFrames: 1)
-        feeder.setRate(3)
-        // Decode has just reached half a second when the output could start, then supplies 0.8 s a tick.
-        upstream.available = 5
-        feeder.play()
-        for _ in 0..<25 {
-            output.advance(by: 0.2)
-            upstream.available = (upstream.available ?? 0) + 8
-            feeder.pump()
-        }
-
-        XCTAssertEqual(statuses, [.buffering, .playing])
-        let gaps = output.played.filter { if case let .silence(_, duration) = $0 { duration > 1e-6 } else { false } }
-        XCTAssertEqual(gaps, [])
+        XCTAssertEqual(positions, [pos(0, 0), pos(0, 2), pos(0, 4), pos(0, 8)])
+        XCTAssertEqual(heard.prefix(4), ramp(0, 0..<4)[...])
+        XCTAssertEqual(output.rate, 1)
     }
 
     // Started at 1x with only the resume depth queued, a switch to 3x must refill before the next
@@ -654,7 +637,8 @@ final class FeederTests: XCTestCase {
         feeder.pump()
         run(for: 5)
 
-        XCTAssertEqual(positions.map(\.mediaFrame), Array(0...4) + Array(stride(from: 5, through: 39, by: 2)) + [40])
+        // The resume depth plays on at 1x, then the re-fed audio at 2x.
+        XCTAssertEqual(positions.map(\.mediaFrame), Array(0...6) + Array(stride(from: 8, through: 40, by: 2)))
     }
 
     func testThePositionHoldsWhenTheClockStepsBackOnResume() {
@@ -757,9 +741,10 @@ final class FeederTests: XCTestCase {
         XCTAssertTrue(failures.isEmpty)
 
         feeder.play()
-        XCTAssertEqual(output.rate, 2, "resumes at the stored speed")
+        XCTAssertEqual(output.rate, 1)
         run(for: 5)
-        XCTAssertEqual(heard, ramp(0, 0..<40))
+        // The stored speed survives the rebuild: at 2x and four frames a second, every other frame.
+        XCTAssertEqual(heard, stride(from: 0, to: 40, by: 2).map { FakeUpstream.sample(0, Int64($0)) })
         XCTAssertEqual(positions.map(\.mediaFrame), positions.map(\.mediaFrame).sorted())
         XCTAssertEqual(positions.last, pos(0, 40))
         XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .paused, .playing, .ended])

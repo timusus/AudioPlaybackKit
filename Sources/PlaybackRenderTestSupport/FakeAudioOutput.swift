@@ -247,7 +247,8 @@ public final class FakeAudioOutput: @unchecked Sendable {
             while let buffer = queue.first, buffer.start < to {
                 let start = max(cursor, buffer.start), end = min(buffer.end, to)
                 if start < end {
-                    if start > cursor { record(.silence(start: cursor, duration: start - cursor)) }
+                    // Within the overlap tolerance: the real output stamps whole frames, so float noise is no hole.
+                    if start > cursor + 1e-9 { record(.silence(start: cursor, duration: start - cursor)) }
                     let first = frameCount(start - buffer.start, buffer.format)
                     let last = frameCount(end - buffer.start, buffer.format)
                     let channels = buffer.format.channelCount

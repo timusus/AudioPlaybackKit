@@ -267,7 +267,7 @@ final class MediaPositionMapTests: XCTestCase {
 
         XCTAssertEqual(map.position(at: at(44100 + 14700))?.mediaFrame, 66150)
         XCTAssertEqual(map.position(at: at(44100 + 44100))?.mediaFrame, 110250)
-        XCTAssertEqual(map.writtenEnd, at(44100 + 58800))
+        XCTAssertEqual(map.writtenEnd, at(44100 + 58800), accuracy: 1e-9)
     }
 
     func testAStretchedSegmentWithNoOutputYetAddsNoTime() {

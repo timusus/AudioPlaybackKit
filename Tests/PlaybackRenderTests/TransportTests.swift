@@ -239,7 +239,8 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(statuses, [.buffering, .playing, .paused, .playing, .ended])
     }
 
-    func testRateSpeedsTheOutputClockAndThePositionFollowsIt() {
+    // The output stays at rate 1: the half second queued plays at the old speed, the rest is stretched.
+    func testRateStretchesTheAudioPastWhatIsQueuedAndThePositionFollowsIt() {
         transport.setCurrent(item: "a", source: a)
         transport.play()
         pump()
@@ -248,12 +249,12 @@ final class TransportTests: XCTestCase {
 
         transport.setRate(2)
         timer.sync()
-        XCTAssertEqual(output.rate, 2)
+        XCTAssertEqual(output.rate, 1)
         run(for: 0.5)
-        XCTAssertEqual(positions.last, Heard(item: "a", frame: 12))
+        XCTAssertEqual(positions.last, Heard(item: "a", frame: 8))
 
         run(for: 1)
-        XCTAssertEqual(heard, allOfA)
+        XCTAssertEqual(heard, [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 22])
         XCTAssertEqual(statuses.last, .ended)
     }
 
@@ -901,6 +902,8 @@ final class TransportTests: XCTestCase {
         pump()
         XCTAssertEqual(output.rebuilds, 1)
         XCTAssertEqual(statuses, [.buffering, .playing, .buffering], "paused, waiting for the restart's decode (#151)")
+        // The stretch holds input back, so the restart's decode reaches the depth a pump later.
+        pump()
         pump()
         XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .paused])
         XCTAssertEqual(failedItems, [])
@@ -908,10 +911,11 @@ final class TransportTests: XCTestCase {
 
         transport.play()
         pump()
-        XCTAssertEqual(output.rate, 2)
+        XCTAssertEqual(output.rate, 1)
         XCTAssertEqual(output.volume, 0.5)
         run(for: 1.5)
-        XCTAssertEqual(heard, allOfA)
+        // Every media frame once, at the stored 2x: every other sample of the ramp.
+        XCTAssertEqual(heard, [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22])
         XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .paused, .playing, .ended])
     }
 
@@ -1002,9 +1006,10 @@ final class TransportTests: XCTestCase {
         // The clock stands still until advanced, so nothing has paused it since.
         XCTAssertEqual(output.rate, 1)
 
-        // All of b written first, so the advance lands inside written audio, past the join.
+        // All of b written first, so the advance lands inside written audio, past the join. Audio the
+        // stretch held from an earlier rate may lead b's last chunk out.
         let bWritten = expectation(for: NSPredicate { _, _ in
-            output.enqueues.contains { $0.samples == [1002, 1003] }
+            output.enqueues.contains { $0.samples.last == 1003 }
         }, evaluatedWith: nil)
         wait(for: [bWritten], timeout: 5)
         output.advance(by: 0.75)

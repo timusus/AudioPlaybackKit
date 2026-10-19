@@ -10,8 +10,14 @@
     "#7 t=1.7500 frames=2 8Hzx1 pcm=9309ea685648e64b",
     "#8 t=2.0000 frames=2 8Hzx1 pcm=76984304b0c9e882",
     "#9 t=2.2500 frames=2 8Hzx1 pcm=1ab8133677b9e5a3",
-    "#10 t=2.5000 frames=2 8Hzx1 pcm=a6bb0045d82f0f6e",
-    "#11 t=2.7500 frames=2 8Hzx1 pcm=a162e24f69d58458"
+    "#10 t=1.0000 frames=1 8Hzx1 pcm=03e3c2420f5066a5",
+    "#11 t=1.1250 frames=1 8Hzx1 pcm=80c8a717ccd70c88",
+    "#12 t=1.2500 frames=1 8Hzx1 pcm=d9fc8a5176395348",
+    "#13 t=1.3750 frames=1 8Hzx1 pcm=f523ae6cdb082f6b",
+    "#14 t=1.5000 frames=1 8Hzx1 pcm=140efb356462f70d",
+    "#15 t=1.6250 frames=1 8Hzx1 pcm=1ad3b99b167daa0c",
+    "#16 t=1.7500 frames=1 8Hzx1 pcm=8502957747a29907",
+    "#17 t=1.8750 frames=1 8Hzx1 pcm=2c173cfb1af55c53"
   ],
   "events" : [
     "sought a 0.0 applied=true",
@@ -21,13 +27,11 @@
     "position a 0.0 duration=3.0 seekable=true",
     "position a 0.25 duration=3.0 seekable=true",
     "position a 0.5 duration=3.0 seekable=true",
+    "position a 0.75 duration=3.0 seekable=true",
     "position a 1.0 duration=3.0 seekable=true",
     "position a 1.5 duration=3.0 seekable=true",
-    "position a 1.75 duration=3.0 seekable=true",
     "position a 2.0 duration=3.0 seekable=true",
-    "position a 2.25 duration=3.0 seekable=true",
     "position a 2.5 duration=3.0 seekable=true",
-    "position a 2.75 duration=3.0 seekable=true",
     "position a 3.0 duration=3.0 seekable=true",
     "status ended"
   ],
@@ -35,14 +39,12 @@
     "t=0.0000"
   ],
   "played" : [
-    "audio t=0.0000 for=3.0000 8Hzx1 pcm=45a99655901702d5"
+    "audio t=0.0000 for=2.0000 8Hzx1 pcm=582025f372595dec"
   ],
   "rates" : [
     "t=0.0000 rate=0.0000",
     "t=0.0000 rate=0.0000",
     "t=0.0000 rate=1.0000",
-    "t=0.5000 rate=2.0000",
-    "t=1.5000 rate=1.0000",
-    "t=3.0000 rate=0.0000"
+    "t=2.0000 rate=0.0000"
   ]
 }

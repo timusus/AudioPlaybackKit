@@ -16,9 +16,9 @@ struct SegmentTag: Equatable, Sendable {
 /// between tags, so the position moves when they would have played. media3 credits dropped frames
 /// when the processor drops them (`getSkippedOutputFrameCount`), a buffer-depth early.
 ///
-/// Speed is the output's rate over this same timeline (the synchronizer plays media time), so an
-/// output second always carries one second of its tag's frames and, unlike media3, there are no
-/// speed checkpoints.
+/// Speed is a time-stretch before the output, which always plays at rate 1 (ADR-0030). Each segment
+/// records the output frames its media frames became, so a segment's ratio is the speed it was
+/// written at, and frames within it map linearly. This replaces media3's speed checkpoints.
 ///
 /// Output time is in seconds rather than frames because each item keeps its native rate across a
 /// join. An item id names a queue entry, not a track: a repeated track needs a new id to be reported.
@@ -45,8 +45,15 @@ struct MediaPositionMap: Sendable {
         /// Decoded; processors cannot resample, so its rate is also the output's.
         var format: PCMFormat
         var start: TimeInterval
+        /// What `tag.frameCount` media frames became after the stretch; zero while it holds them.
+        var outputFrames: Int64
         var sampleRate: Double { format.sampleRate }
-        var end: TimeInterval { start + Double(tag.frameCount) / sampleRate }
+        var end: TimeInterval { start + Double(outputFrames) / sampleRate }
+
+        func mediaFrames(ofOutput frames: Int64) -> Int64 {
+            if frames == 0 { return 0 }
+            return frames == outputFrames ? tag.frameCount : (frames * tag.frameCount + outputFrames / 2) / outputFrames
+        }
     }
 
     private(set) var epochStart: TimeInterval
@@ -74,12 +81,16 @@ struct MediaPositionMap: Sendable {
         epochStart = min(playhead, writtenEnd)
     }
 
-    mutating func append(_ tag: SegmentTag, format: PCMFormat) {
+    /// `outputFrames` is what the tag's frames became after the stretch, by default as many.
+    mutating func append(_ tag: SegmentTag, format: PCMFormat, outputFrames: Int64? = nil) {
+        let outputFrames = outputFrames ?? tag.frameCount
         if let last = segments.last, last.tag.item == tag.item, last.format == format,
-           last.tag.mediaStartFrame + last.tag.frameCount == tag.mediaStartFrame {
+           last.tag.mediaStartFrame + last.tag.frameCount == tag.mediaStartFrame,
+           last.tag.frameCount * outputFrames == tag.frameCount * last.outputFrames {
             segments[segments.count - 1].tag.frameCount += tag.frameCount
+            segments[segments.count - 1].outputFrames += outputFrames
         } else {
-            segments.append(Segment(tag: tag, format: format, start: writtenEnd))
+            segments.append(Segment(tag: tag, format: format, start: writtenEnd, outputFrames: outputFrames))
         }
         writtenEnd = segments[segments.count - 1].end
     }
@@ -90,33 +101,35 @@ struct MediaPositionMap: Sendable {
     /// so none was reported and the reported item and format stay valid.
     mutating func truncate(from time: TimeInterval) -> (time: TimeInterval, resume: Position)? {
         guard var index = segments.firstIndex(where: { $0.end > time || $0.start >= time }) else { return nil }
-        var kept = Self.keptFrames(of: segments[index], at: time)
+        var kept = Self.keptOutputFrames(of: segments[index], at: time)
         // A cut within rounding of a segment's end keeps it whole and resumes at the next.
-        if kept == segments[index].tag.frameCount, kept > 0 {
+        if kept == segments[index].outputFrames, kept > 0 {
             index += 1
             guard index < segments.count else { return nil }
             kept = 0
         }
         let segment = segments[index]
+        let keptMedia = segment.mediaFrames(ofOutput: kept)
         let cut = segment.start + Double(kept) / segment.sampleRate
         let resume = Position(
             item: segment.tag.item,
-            mediaFrame: segment.tag.mediaStartFrame + kept,
+            mediaFrame: segment.tag.mediaStartFrame + keptMedia,
             sampleRate: segment.sampleRate
         )
         segments.removeSubrange(index...)
         if kept > 0 {
             var shortened = segment
-            shortened.tag.frameCount = kept
+            shortened.tag.frameCount = keptMedia
+            shortened.outputFrames = kept
             segments.append(shortened)
         }
         writtenEnd = cut
         return (cut, resume)
     }
 
-    private static func keptFrames(of segment: Segment, at time: TimeInterval) -> Int64 {
+    private static func keptOutputFrames(of segment: Segment, at time: TimeInterval) -> Int64 {
         let frames = Int64((((time - segment.start) * segment.sampleRate) - 1e-6).rounded(.up))
-        return min(max(frames, 0), segment.tag.frameCount)
+        return min(max(frames, 0), segment.outputFrames)
     }
 
     /// The output time being heard, by the `AudioOutput` rule. It never precedes the epoch: just
@@ -131,9 +144,10 @@ struct MediaPositionMap: Sendable {
         guard let index = segmentIndex(at: playhead) else { return nil }
         let segment = segments[index]
         let played = Int64(((min(playhead, writtenEnd) - segment.start) * segment.sampleRate).rounded())
+        let output = min(max(played, 0), segment.outputFrames)
         return Position(
             item: segment.tag.item,
-            mediaFrame: segment.tag.mediaStartFrame + min(max(played, 0), segment.tag.frameCount),
+            mediaFrame: segment.tag.mediaStartFrame + segment.mediaFrames(ofOutput: output),
             sampleRate: segment.sampleRate
         )
     }

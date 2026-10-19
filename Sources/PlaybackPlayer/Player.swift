@@ -117,11 +117,10 @@ public final class Player<Item: Hashable & Sendable> {
 
     public convenience init(
         makeSource: @escaping ItemSourceFactory<Item>,
-        audioSession: AudioSessionConfiguration = .longFormAudio,
-        timePitchAlgorithm: AVAudioTimePitchAlgorithm = .timeDomain
+        audioSession: AudioSessionConfiguration = .longFormAudio
     ) {
         self.init(makeSource: makeSource, session: SystemAudioSession(configuration: audioSession)) {
-            Transport(timePitchAlgorithm: timePitchAlgorithm, onEvent: $0)
+            Transport(onEvent: $0)
         }
     }
 

@@ -17,7 +17,7 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     private var _renderer: AVSampleBufferAudioRenderer
     private var _synchronizer: AVSampleBufferRenderSynchronizer
     private var observers = Observers()
-    private var settings: RendererSettings
+    private var settings = RendererSettings()
     private var handler: (@Sendable (AudioOutputEvent) -> Void)?
     // Under `lock`: the current renderer has a ready-for-more request armed.
     private var requesting = false
@@ -28,8 +28,7 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     private var resetObserver: (any NSObjectProtocol)?
     #endif
 
-    init(timePitchAlgorithm: AVAudioTimePitchAlgorithm = .timeDomain) {
-        settings = RendererSettings(timePitchAlgorithm: timePitchAlgorithm)
+    init() {
         (_renderer, _synchronizer) = settings.makeRenderer()
         observers = observe(_renderer)
         #if os(iOS)
@@ -222,7 +221,6 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
 
 /// What the output keeps across a rebuild.
 private struct RendererSettings {
-    let timePitchAlgorithm: AVAudioTimePitchAlgorithm
     var volume: Float = 1
     #if os(macOS)
     var deviceUniqueID: String?
@@ -230,8 +228,6 @@ private struct RendererSettings {
 
     func makeRenderer() -> (AVSampleBufferAudioRenderer, AVSampleBufferRenderSynchronizer) {
         let renderer = AVSampleBufferAudioRenderer()
-        // Always set: the iOS default (lowQualityZeroLatency) is wrong for speech.
-        renderer.audioTimePitchAlgorithm = timePitchAlgorithm
         renderer.volume = volume
         #if os(macOS)
         // Nil is the system default already, and setting it raises.

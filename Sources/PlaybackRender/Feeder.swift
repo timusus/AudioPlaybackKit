@@ -39,14 +39,14 @@ enum FeederEvent {
 /// The output decides how far ahead it buffers, as media3's `DefaultAudioSink` writes while its
 /// `AudioTrack` takes data: a deep route such as AirPlay drops audio that reaches it late.
 ///
-/// Both start depths are playout time, wall seconds at the current rate: the time between pumps is
-/// wall time, so a depth in media time would shrink at speed until one late pump runs the output dry.
+/// Speed is a time-stretch before enqueue and the output always plays at rate 1 (ADR-0030), so every
+/// depth is output time, which is wall time.
 ///
 /// Threading: confined to the caller's one serial queue; output events, on any thread, wait in an inbox
 /// that the next `pump()` drains, and call `wake` so the caller pumps now.
 final class Feeder {
-    /// Media seconds written ahead of the clock however much the output takes, under media3's 50 s
-    /// `maxBufferMs` and still 7.5 s of playout at 4x. It bounds time, not bytes: about 11 MB at 48 kHz
+    /// Output seconds written ahead of the clock however much the output takes, under media3's 50 s
+    /// `maxBufferMs`. It bounds time, not bytes: about 11 MB at 48 kHz
     /// stereo Float32, several times that at a high sample rate or channel count.
     static let maxDepth: TimeInterval = 30
     /// Depth at which an output starts after an underrun, as media3's `bufferForPlaybackAfterRebufferMs`,
@@ -64,6 +64,7 @@ final class Feeder {
 
     private var map = MediaPositionMap()
     private var rate: Double = 1
+    private var stretch = TimeStretch()
     private var playWhenReady = false
     private var outputRunning = false
     private var upstreamEnded = false
@@ -150,14 +151,14 @@ final class Feeder {
         if status == .playing { setStatus(.paused) }
     }
 
-    /// Speed. The map needs no checkpoint: the output plays media time at any rate.
+    /// Speed, stretched from the next chunk pulled; what is queued past `resumeDepth` is re-fed at it
+    /// like a processor change, so changes while one is pending fold into it.
     func setRate(_ rate: Double) {
         precondition(rate > 0, "pause() stops playback")
+        guard rate != self.rate else { return }
         note("feeder setRate old=\(self.rate) new=\(rate) running=\(outputRunning)")
         self.rate = rate
-        if outputRunning { output.setRate(rate, at: nil) }
-        // The start depths scale with the rate, so judge them now. Paused, `play()` pumps.
-        if playWhenReady { pump() }
+        if !hasEnded { refeedAhead() }
     }
 
     /// The one place the reported position may go back within an item.
@@ -180,13 +181,13 @@ final class Feeder {
     func refeedAhead() {
         // The cut lands on the end of the chunk that straddles the target: a cut inside a chunk
         // would re-feed audio the renderer still holds, and an overlap is trimmed or dropped by it.
-        let target = output.currentTime() + resumeDepth * rate
+        let target = output.currentTime() + resumeDepth
         guard pendingPartialFlush == nil, !failed else { return }
         let before = map, endsBefore = chunkEnds
         // A flush replacing under `resumeDepth` of audio gains less than appending would delay the
         // change, and a cut that close to the tail is inside what a shallow renderer has committed to.
         guard let boundary = chunkEnds.first(where: { $0 >= target }),
-              map.writtenEnd - boundary >= resumeDepth * rate,
+              map.writtenEnd - boundary >= resumeDepth,
               let cut = map.truncate(from: boundary) else { return appendAtWrittenEnd() }
         chunkEnds.removeAll { $0 > cut.time }
         lastPartialFlush += 1
@@ -215,7 +216,7 @@ final class Feeder {
         restart(from: nil, status: .ended)
     }
 
-    /// Media seconds written past the playhead.
+    /// Output seconds written past the playhead.
     var bufferedAhead: TimeInterval {
         max(map.writtenEnd - playhead(), 0)
     }
@@ -248,7 +249,8 @@ final class Feeder {
             guard let flush = pendingPartialFlush else { continue }
             pendingPartialFlush = nil
             if result.succeeded {
-                // Resupplied only now: a failed flush leaves the source where it was.
+                // Resupplied only now: a failed flush leaves the source and the stretch where they were.
+                stretch.reset()
                 upstream.resupply(from: SeekTarget(flush.resume))
                 upstreamEnded = false
                 refeedTrace = ("partialFlush", result.completedAt, false)
@@ -280,14 +282,14 @@ final class Feeder {
 
         fill()
 
-        if let trace = refeedTrace, trace.firstEnqueued, map.writtenEnd - output.currentTime() >= resumeDepth * rate {
+        if let trace = refeedTrace, trace.firstEnqueued, map.writtenEnd - output.currentTime() >= resumeDepth {
             note("refeed reached resumeDepth after=\(trace.label) sinceMs=\(fixed(milliseconds(since: trace.began)))")
             refeedTrace = nil
         }
 
         if !outputRunning, status == .buffering || status == .paused, canStart {
             if playWhenReady {
-                output.setRate(rate, at: nil)
+                output.setRate(1, at: nil)
                 outputRunning = true
                 afterUnderrun = false
                 setStatus(.playing)
@@ -309,7 +311,7 @@ final class Feeder {
         // From the clock, like the pause and `fill`: a lead over the heard playhead can be nil at the clock.
         let needed = afterUnderrun ? rebufferDepth : resumeDepth
         let lead = map.writtenEnd - output.currentTime()
-        if lead >= needed * rate { return true }
+        if lead >= needed { return true }
         // A rebuffer depth deeper than the output takes would wait forever; a first start or a
         // resume is shallow enough to be reached, so a near-empty output must not start it.
         return afterUnderrun && lead > 0 && !output.isReadyForMoreMediaData
@@ -351,6 +353,7 @@ final class Feeder {
         outputRunning = false
         afterUnderrun = false
         map.reset(at: anchor)
+        stretch.reset()
         chunkEnds = []
         upstreamEnded = false
         failed = false
@@ -406,6 +409,7 @@ final class Feeder {
             guard output.isReadyForMoreMediaData else { return output.requestMediaDataWhenReady() }
             let supply = upstream.pull()
             if case .ended = supply {
+                guard stretch.finish().allSatisfy(write) else { continue }
                 upstreamEnded = true
                 return
             }
@@ -420,11 +424,15 @@ final class Feeder {
                 }
             }
             guard case let .chunk(chunk) = supply else { return }
-            write(chunk)
+            if rate != stretch.rate { note("stretch rate applied old=\(stretch.rate) new=\(rate)") }
+            for stretched in stretch.process(chunk, rate: rate) {
+                guard write(stretched) else { break }
+            }
         }
     }
 
-    private func write(_ chunk: TaggedChunk) {
+    /// False when the output refused it: the feeder restarted or failed, so what follows it is stale.
+    private func write(_ chunk: TimeStretch.Chunk) -> Bool {
         if chunk.frameCount > 0 {
             if let trace = refeedTrace, !trace.firstEnqueued {
                 refeedTrace?.firstEnqueued = true
@@ -433,13 +441,16 @@ final class Feeder {
             do {
                 try output.enqueue(chunk.samples, format: chunk.format, at: map.writtenEnd)
             } catch AudioOutputError.rendererFailed {
-                return recover(from: AudioOutputError.rendererFailed)
+                recover(from: AudioOutputError.rendererFailed)
+                return false
             } catch {
-                return fail(error)
+                fail(error)
+                return false
             }
         }
-        for tag in chunk.tags { map.append(tag, format: chunk.decodedFormat) }
+        for span in chunk.spans { map.append(span.tag, format: span.format, outputFrames: span.outputFrames) }
         if chunk.frameCount > 0 { chunkEnds.append(map.writtenEnd) }
+        return true
     }
 
     private func report() {

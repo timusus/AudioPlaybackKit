@@ -103,7 +103,7 @@ final class TransportReFeedTests: XCTestCase {
         XCTAssertEqual(frames, Array(stride(from: Int64(0), through: 80, by: 2)))
     }
 
-    func testTheKeptDepthIsPlayoutTimeSoItScalesWithTheRateAndTheOutputLatency() {
+    func testTheKeptDepthIsOutputTimeAtAnyRateAndCountsFromTheClock() {
         output.outputLatency = 0.25
         transport.setRate(2)
         let boost = LiveGainProcessor()
@@ -113,8 +113,9 @@ final class TransportReFeedTests: XCTestCase {
         transport.processorsChanged()
         pump()
 
-        // One second of media past the clock, which already runs a latency ahead of what is heard.
-        XCTAssertEqual(output.partialFlushes, [3])
+        // Half a second of output past the clock at 2x as at 1x, since the stretch runs before enqueue;
+        // the clock already runs a latency ahead of what is heard.
+        XCTAssertEqual(output.partialFlushes, [2.25])
     }
 
     func testAChangeWithNothingWrittenPastTheKeptDepthFlushesNothing() {

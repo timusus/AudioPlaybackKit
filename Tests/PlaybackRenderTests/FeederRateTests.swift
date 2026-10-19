@@ -164,6 +164,23 @@ final class FeederRateTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(seconds(at: 3)), 4.5, accuracy: 0.03, "the last rate is the one heard")
     }
 
+    // macOS coalesces the 0.1 s pump timer to about 0.2 s: at 3x that tick plays 0.6 s of media.
+    func testCoalescedTicksAtThreeTimesNeverRunTheOutputDry() {
+        makeFeeder([item(0, seconds: 30)])
+        feeder.setRate(3)
+        // Decode has just reached half a second when the output could start, then supplies 0.75 s a tick.
+        upstream.available = 2
+        feeder.play()
+        for _ in 0..<25 {
+            output.advance(by: 0.2)
+            upstream.available = (upstream.available ?? 0) + 3
+            feeder.pump()
+        }
+
+        XCTAssertEqual(statuses, [.buffering, .playing])
+        XCTAssertEqual(gaps, [])
+    }
+
     func testARateChangeAfterTheEndReFeedsNothing() {
         makeFeeder([item(0, seconds: 2)])
         feeder.play()
@@ -202,6 +219,18 @@ final class FeederRateTests: XCTestCase {
         XCTAssertEqual(output.enqueues[written].samples.first, FakeUpstream.sample(0, 24000), line: line)
         XCTAssertEqual(try XCTUnwrap(seconds(at: 3)), mediaAfterTwoSeconds, accuracy: 0.03, line: line)
         XCTAssertEqual(output.rateChanges.last?.rate, 1, line: line)
+    }
+
+    func testThePlayersExtremeRatesStretchToo() throws {
+        for (rate, media) in [(4.0, 8.0), (0.25, 0.5)] {
+            makeFeeder([item(0, seconds: 20)])
+            feeder.setRate(rate)
+            feeder.play()
+            run(for: 2)
+
+            XCTAssertEqual(try XCTUnwrap(seconds(at: 2)), media, accuracy: 0.03, "\(rate)")
+            XCTAssertEqual(gaps, [], "\(rate)")
+        }
     }
 
     func testAGaplessJoinAndTheEndLandAtOneAndAHalf() {

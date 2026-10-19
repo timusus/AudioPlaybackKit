@@ -284,13 +284,18 @@ final class PlayerCoreTests: XCTestCase {
         player.play()
         rig.pump()
 
+        // The renderer stays at 1; the speed is in the audio, after the half second already queued.
         player.rate = 2
         rig.settle()
-        XCTAssertEqual(rig.output.rate, 2)
+        XCTAssertEqual(rig.output.rate, 1)
+        rig.run(for: 1)
+        let before = player.position
+        rig.run(for: 1)
+        XCTAssertEqual(player.position - before, 2, accuracy: 0.25)
+        // Above 2x an 8 Hz item has no pitch period to stretch by, so only the clamp is checked here.
         player.rate = 10
         rig.settle()
         XCTAssertEqual(player.rate, 4)
-        XCTAssertEqual(rig.output.rate, 4)
         player.rate = 0.1
         XCTAssertEqual(player.rate, 0.25)
 
