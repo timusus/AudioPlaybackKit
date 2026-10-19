@@ -7,6 +7,15 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 2
 
+# The paths whose change can move decode output; scripts/land-verify asks here so the rule lives once.
+# `--print-needs-conformance <base>` prints yes or no (yes when the base cannot be diffed) and runs nothing.
+conformance_paths='^(Sources/(PlaybackDecode|CStreamDecode|CFFmpeg)/|Frameworks/|Package\.swift|Package\.resolved|Tests/PlaybackDecodeConformanceTests/)'
+if [[ "${1:-}" == --print-needs-conformance ]]; then
+    changed=$(git diff --name-only "${2:-origin/main}" -- 2>/dev/null) || { echo yes; exit 0; }
+    if grep -qE "$conformance_paths" <<<"$changed"; then echo yes; else echo no; fi
+    exit 0
+fi
+
 args=(--skip PlaybackDecodeConformanceTests)
 passthrough=()
 for arg in "$@"; do

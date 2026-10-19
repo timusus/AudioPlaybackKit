@@ -43,7 +43,9 @@ xcodebuild test -scheme AudioPlaybackKit-Package -only-testing:PlaybackStreaming
 
 Iterate with `--filter` and finish with one `scripts/test-fast` run (`--filter` and other args pass
 through; `--with-conformance` adds the conformance bundle). Conformance runs only when decode or demux code
-changes. CI runs the full gate on every PR.
+changes. `land` skips conformance unless the batch touches `Sources/{PlaybackDecode,CStreamDecode,CFFmpeg}`,
+`Frameworks/`, `Package.swift` or the conformance tests (`scripts/test-fast --print-needs-conformance <base>`).
+CI runs the full gate on every PR.
 `scripts/test-fast` writes `.build/test-fast.log` and prints a verdict: read the log, and never pipe test
 output through `tail` or `head`, which hide the verdict (swift-testing's "Test run with 0 tests" is not the XCTest result).
 

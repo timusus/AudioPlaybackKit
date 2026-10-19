@@ -53,6 +53,9 @@ are in `Tests/PlaybackDecodeConformanceTests/Fixtures/NOTICE`.
 `CONFORMANCE_FIXTURE=<file name>` runs one fixture; `CONFORMANCE_PLANT_DEFECT=1` drops a frame from
 the clean decode to prove the suite fails.
 
+`land` runs the conformance suite only when the batch changes decode, FFmpeg or conformance paths (the rule
+is in `scripts/test-fast`); releases always run it via `scripts/test-all`.
+
 **Corruption fuzz.** `CorruptionFuzzTests` (in `PlaybackDecodeConformanceTests`) mutates the small fixtures
 and runs them through a plain file reader and through `HostileReader` (seekability, declared size, short
 reads and early EOF from control bytes). Every outcome must be a clean end or a `.failed` error

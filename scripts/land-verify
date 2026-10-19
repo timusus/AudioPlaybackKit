@@ -117,7 +117,13 @@ else
     if [[ -n "${LAND_ONLY:-}" ]]; then
         phase_wanted test && run_phase test test_failures run_confirm_tests
     else
-        phase_wanted test && run_phase test test_failures swift test --skip-build --parallel --num-workers 4
+        test_args=()
+        # Conformance is minutes of the run and cannot change unless decode, FFmpeg or its goldens did.
+        if [[ "$(scripts/test-fast --print-needs-conformance "${LAND_BASE_SHA:-origin/main}")" == no ]]; then
+            test_args=(--skip PlaybackDecodeConformanceTests)
+            echo "verify:    conformance: skipped (no decode/demux change)"
+        fi
+        phase_wanted test && run_phase test test_failures swift test --skip-build --parallel --num-workers 4 ${test_args[@]+"${test_args[@]}"}
     fi
     phase_wanted devbuild && run_phase devbuild compile_failures build_device_suite
 fi
