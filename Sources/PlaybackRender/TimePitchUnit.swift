@@ -1,4 +1,6 @@
 import AudioToolbox
+// UnsafeMutableAudioBufferListPointer comes from this overlay on iOS; macOS finds it without.
+import AVFoundation
 
 /// Apple's AUNewTimePitch, the unit behind `AVAudioUnitTimePitch`, rendered on the caller's thread.
 /// The exact pull and the lag were measured at 0.5-4x, 44.1 and 48 kHz and any block size, while
