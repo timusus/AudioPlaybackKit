@@ -187,6 +187,10 @@ private final class RecordingOutput: AudioOutput, @unchecked Sendable {
         try base.enqueue(samples, format: format, at: time)
     }
 
+    func flush(fromTime time: TimeInterval, completion: @escaping @Sendable (Bool) -> Void) {
+        base.flush(fromTime: time, completion: completion)
+    }
+
     func flush() {
         lock.withLock {
             if allRuns[allRuns.count - 1].enqueues.isEmpty {

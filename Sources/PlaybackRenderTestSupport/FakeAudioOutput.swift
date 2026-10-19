@@ -46,6 +46,11 @@ public final class FakeAudioOutput: @unchecked Sendable {
     private var handler: (@Sendable (AudioOutputEvent) -> Void)?
     private var _enqueues: [Enqueue] = []
     private var _flushes: [TimeInterval] = []
+    private var _partialFlushes: [TimeInterval] = []
+    private var _failsPartialFlushes = false
+    private var _holdsPartialFlushes = false
+    private var heldCompletions: [(completion: @Sendable (Bool) -> Void, succeeded: Bool)] = []
+    private var _enqueuesDuringPartialFlush = 0
     private var _played: [Played] = []
     private var _rateChanges: [RateChange] = []
     private var _events: [AudioOutputEvent] = []
@@ -76,6 +81,10 @@ public final class FakeAudioOutput: @unchecked Sendable {
     public var enqueues: [Enqueue] { locked { _enqueues } }
     /// The clock time of each flush, injected auto-flushes included.
     public var flushes: [TimeInterval] { locked { _flushes } }
+    /// The cut time of each partial flush, failed ones included.
+    public var partialFlushes: [TimeInterval] { locked { _partialFlushes } }
+    /// Enqueues made between a partial flush and its completion, which the contract forbids.
+    public var enqueuesDuringPartialFlush: Int { locked { _enqueuesDuringPartialFlush } }
     public var played: [Played] { locked { _played } }
     /// Each `setRate`, with the clock time it took effect at.
     public var rateChanges: [RateChange] { locked { _rateChanges } }
@@ -83,6 +92,18 @@ public final class FakeAudioOutput: @unchecked Sendable {
     public var rate: Double { locked { _rate } }
     /// The output's gain, which a flush leaves alone as the renderer's does.
     public var volume: Float { locked { _volume } }
+
+    /// Every partial flush reports failure and drops nothing, as the renderer does when it cannot keep the cut.
+    public var failsPartialFlushes: Bool {
+        get { locked { _failsPartialFlushes } }
+        set { locked { _failsPartialFlushes = newValue } }
+    }
+
+    /// Partial flush completions wait for `completePartialFlushes()` instead of running at once.
+    public var holdsPartialFlushes: Bool {
+        get { locked { _holdsPartialFlushes } }
+        set { locked { _holdsPartialFlushes = newValue } }
+    }
 
     public var outputLatency: TimeInterval {
         get { locked { _outputLatency } }
@@ -93,6 +114,7 @@ public final class FakeAudioOutput: @unchecked Sendable {
         try locked {
             guard !rendererFailed else { throw AudioOutputError.rendererFailed }
             guard !rejected.contains(format) else { throw AudioOutputError.formatRejected(format) }
+            if !heldCompletions.isEmpty { _enqueuesDuringPartialFlush += 1 }
             _enqueues.append(Enqueue(samples: samples, format: format, time: time))
             // Without a route depth, the part of a late buffer still ahead of the clock plays.
             if _routeDepth > 0, _rate > 0, time - clock < _routeDepth {
@@ -121,6 +143,32 @@ public final class FakeAudioOutput: @unchecked Sendable {
             stalled = false
         }
         sendReadyIfRequested()
+    }
+
+    public func flush(fromTime time: TimeInterval, completion: @escaping @Sendable (Bool) -> Void) {
+        let (succeeded, hold) = locked { () -> (Bool, Bool) in
+            _partialFlushes.append(time)
+            // A cut the clock has passed is not one the renderer can make.
+            let succeeded = !_failsPartialFlushes && time > clock
+            if succeeded {
+                // A buffer that straddles the cut is kept whole: the pessimistic case for the caller.
+                queue.removeAll { $0.start >= time }
+                timelineEnd = queue.map(\.end).max()
+            }
+            if _holdsPartialFlushes { heldCompletions.append((completion, succeeded)) }
+            return (succeeded, _holdsPartialFlushes)
+        }
+        sendReadyIfRequested()
+        if !hold { completion(succeeded) }
+    }
+
+    /// Runs the held partial flush completions, oldest first.
+    public func completePartialFlushes() {
+        let held = locked { () -> [(completion: @Sendable (Bool) -> Void, succeeded: Bool)] in
+            defer { heldCompletions = [] }
+            return heldCompletions
+        }
+        for entry in held { entry.completion(entry.succeeded) }
     }
 
     public func setRate(_ rate: Double, at time: TimeInterval?) {

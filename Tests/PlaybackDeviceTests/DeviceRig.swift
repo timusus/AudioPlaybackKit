@@ -68,6 +68,9 @@ final class TappedOutput: AudioOutput, @unchecked Sendable {
     }
 
     func flush() { base.flush() }
+    func flush(fromTime time: TimeInterval, completion: @escaping @Sendable (Bool) -> Void) {
+        base.flush(fromTime: time, completion: completion)
+    }
     func setRate(_ rate: Double, at time: TimeInterval?) {
         lock.withLock { self.rate = rate }
         base.setRate(rate, at: time)

@@ -84,6 +84,41 @@ struct MediaPositionMap: Sendable {
         writtenEnd = segments[segments.count - 1].end
     }
 
+    /// A partial flush: drops everything written from `time` on, rounded up to a whole frame so nothing
+    /// before the cut is replaced, and returns that cut time and the media position to write from
+    /// there. Nil when nothing is written past `time`. The dropped segments start after the playhead,
+    /// so none was reported and the reported item and format stay valid.
+    mutating func truncate(from time: TimeInterval) -> (time: TimeInterval, resume: Position)? {
+        guard var index = segments.firstIndex(where: { $0.end > time || $0.start >= time }) else { return nil }
+        var kept = Self.keptFrames(of: segments[index], at: time)
+        // A cut within rounding of a segment's end keeps it whole and resumes at the next.
+        if kept == segments[index].tag.frameCount, kept > 0 {
+            index += 1
+            guard index < segments.count else { return nil }
+            kept = 0
+        }
+        let segment = segments[index]
+        let cut = segment.start + Double(kept) / segment.sampleRate
+        let resume = Position(
+            item: segment.tag.item,
+            mediaFrame: segment.tag.mediaStartFrame + kept,
+            sampleRate: segment.sampleRate
+        )
+        segments.removeSubrange(index...)
+        if kept > 0 {
+            var shortened = segment
+            shortened.tag.frameCount = kept
+            segments.append(shortened)
+        }
+        writtenEnd = cut
+        return (cut, resume)
+    }
+
+    private static func keptFrames(of segment: Segment, at time: TimeInterval) -> Int64 {
+        let frames = Int64((((time - segment.start) * segment.sampleRate) - 1e-6).rounded(.up))
+        return min(max(frames, 0), segment.tag.frameCount)
+    }
+
     /// The output time being heard, by the `AudioOutput` rule. It never precedes the epoch: just
     /// after a re-anchor the clock reads the anchor while flushed audio is still leaving the hardware.
     func playhead(currentTime: TimeInterval, outputLatency: TimeInterval) -> TimeInterval {

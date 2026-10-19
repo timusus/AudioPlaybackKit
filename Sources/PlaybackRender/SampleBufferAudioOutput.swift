@@ -67,6 +67,14 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
         renderer.flush()
     }
 
+    func flush(fromTime time: TimeInterval, completion: @escaping @Sendable (Bool) -> Void) {
+        // The epsilon is under a frame at any rate, so a buffer stamped exactly at the cut is dropped.
+        renderer.flush(
+            fromSourceTime: CMTime(seconds: time - 1e-6, preferredTimescale: 1_000_000_000),
+            completionHandler: completion
+        )
+    }
+
     func setRate(_ rate: Double, at time: TimeInterval?) {
         if let time {
             synchronizer.setRate(Float(rate), time: anchorTime(time))

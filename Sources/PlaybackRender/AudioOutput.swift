@@ -57,6 +57,11 @@ public struct PCMFormat: Hashable, Sendable {
 @_spi(Testing) public protocol AudioOutput: AnyObject, Sendable {
     func enqueue(_ samples: [Float], format: PCMFormat, at time: TimeInterval) throws
     func flush()
+    /// A partial flush: drops queued audio stamped at or after `time` while earlier audio keeps
+    /// playing, so a re-feed leaves no gap. `completion` may run on any thread: true when done, false
+    /// when `time` had already passed, and the caller then does a full `flush()`. The caller enqueues
+    /// nothing between the call and the completion.
+    func flush(fromTime time: TimeInterval, completion: @escaping @Sendable (Bool) -> Void)
     /// Rate 0 pauses. A `time` re-anchors the clock there (a seek); nil keeps it running from
     /// where it is (resume or speed change).
     func setRate(_ rate: Double, at time: TimeInterval?)

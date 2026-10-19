@@ -233,10 +233,12 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         queue.async { [self] in output.setVolume(min(max(volume, 0), 1)) }
     }
 
-    /// Replaces the processor chain and re-feeds from the heard frame, as a seek does, so the new
-    /// chain is heard at once instead of after the up to 30 s already written. That costs a brief
-    /// rebuffer. After `.ended` the chain is installed for the next audio but nothing is re-fed, and
-    /// after a failure it replays from the heard frame. Each processor's `flush` gets the `Item` whose
+    /// Replaces the processor chain and re-feeds the audio written past about `resumeDepth` of the
+    /// clock, so the new chain is heard within that, not after the up to 30 s already written. The
+    /// audio before it keeps playing, so there is no gap and no `buffering` status. If the output
+    /// cannot drop it in time the re-feed falls back to a full flush from the heard frame, which
+    /// rebuffers briefly. After `.ended` the chain is installed for the next audio but nothing is
+    /// re-fed, and after a failure it replays from the heard frame. Each processor's `flush` gets the `Item` whose
     /// frames follow. Call it again after a change that alters a processor's `isActive` or output format.
     public func setProcessors(_ processors: [any AudioProcessor]) {
         queue.async { [self] in
@@ -245,10 +247,11 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         }
     }
 
-    /// Re-feeds from the heard frame after an app changed a processor's own parameters (a gain, EQ
-    /// bands), which apply from the next chunk processed and so would otherwise wait out the audio
-    /// already written. Costs a brief rebuffer, so set a fade through `setVolume`, not here. Does
-    /// nothing after a failure, which only a seek, `setCurrent` or `setProcessors` clears.
+    /// Re-feeds after an app changed a processor's own parameters (a gain, EQ bands), which apply
+    /// from the next chunk processed and so would otherwise wait out the audio already written.
+    /// Gapless, as `setProcessors`; calls made while a re-feed is in flight are folded into it, since
+    /// the parameters are read when the next chunk is processed. Set a fade through `setVolume`, not
+    /// here. Does nothing after a failure, which only a seek, `setCurrent` or `setProcessors` clears.
     public func processorsChanged() {
         queue.async { [self] in
             guard !failed else { return }
@@ -270,13 +273,16 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         return lastID
     }
 
-    // With nothing heard there is nothing written to replace, and a flush would report buffering. After
-    // `.ended` a re-feed would reopen the source at its end and report the end again.
+    // With nothing heard there is nothing written to replace. After `.ended` a re-feed would reopen
+    // the source at its end and report the end again.
     private func refeedFromHeard() {
         let position = feeder.heardPosition
-        guard failed || (position != nil && !feeder.hasEnded) else { return }
-        failed = false
-        feeder.flush(from: position)
+        if failed {
+            failed = false
+            feeder.flush(from: position)
+        } else if position != nil, !feeder.hasEnded {
+            feeder.refeedAhead()
+        }
         publishBufferedAhead()
     }
 

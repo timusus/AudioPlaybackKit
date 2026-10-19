@@ -414,7 +414,8 @@ final class TransportTests: XCTestCase {
         stride(from: Int64(0), through: 80, by: 2).filter { !skipped.contains($0) }.map { Heard(item: "a", frame: $0) }
     }
 
-    /// Plays `long` for 1.25 s, so frames 0 to 9 are heard, then calls `change`.
+    /// Plays `long` for 1.25 s, so frames 0 to 9 are heard, then calls `change`. A re-feed keeps the
+    /// half second written past the clock, so the change is heard from frame 14.
     private func playLongThenChange(processors: [any AudioProcessor], _ change: () -> Void) {
         transport.setProcessors(processors)
         transport.setCurrent(item: "a", source: long)
@@ -425,8 +426,8 @@ final class TransportTests: XCTestCase {
         run(for: 9.25)
     }
 
-    // Processors run at write time, so a change is heard only by re-feeding from the heard frame,
-    // as a seek does; otherwise it waits out up to 30 s written ahead.
+    // Processors run at write time, so a change is heard only by re-feeding the audio written past
+    // the heard frame, by a partial flush; otherwise it waits out up to 30 s written ahead.
     func testALiveParameterChangeIsHeardFromTheHeardFrameOnAfterAReFeed() {
         let boost = LiveGainProcessor()
         playLongThenChange(processors: [boost]) {
@@ -434,9 +435,10 @@ final class TransportTests: XCTestCase {
             transport.processorsChanged()
         }
 
-        XCTAssertEqual(heard, (0..<10).map(Float.init) + (10..<80).map { Float($0) * 2 })
-        XCTAssertEqual(output.flushes, [0, 1.25])
-        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing, .ended])
+        XCTAssertEqual(heard, (0..<14).map(Float.init) + (14..<80).map { Float($0) * 2 })
+        XCTAssertEqual(output.partialFlushes, [1.75])
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
         XCTAssertEqual(positions, positionsOfLong())
     }
 
@@ -450,17 +452,19 @@ final class TransportTests: XCTestCase {
     func testAddingAProcessorMidPlaybackIsHeardFromTheHeardFrameOn() {
         playLongThenChange(processors: []) { transport.setProcessors([GainProcessor()]) }
 
-        XCTAssertEqual(heard, (0..<10).map(Float.init) + (10..<80).map { Float($0) * 2 })
-        XCTAssertEqual(output.flushes, [0, 1.25])
-        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing, .ended])
+        XCTAssertEqual(heard, (0..<14).map(Float.init) + (14..<80).map { Float($0) * 2 })
+        XCTAssertEqual(output.partialFlushes, [1.75])
+        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
         XCTAssertEqual(positions, positionsOfLong())
     }
 
     func testAddingADroppingProcessorMidPlaybackSkipsFramesFromTheHeardFrameOn() {
         playLongThenChange(processors: []) { transport.setProcessors([DropRangesProcessor([0..<8])]) }
 
-        XCTAssertEqual(heard, (0..<10).map(Float.init) + (18..<80).map(Float.init))
-        XCTAssertEqual(output.flushes, [0, 1.25])
+        XCTAssertEqual(heard, (0..<14).map(Float.init) + (22..<80).map(Float.init))
+        XCTAssertEqual(output.partialFlushes, [1.75])
+        XCTAssertEqual(output.flushes, [0])
         XCTAssertEqual(positions.last, Heard(item: "a", frame: 80))
     }
 
@@ -468,7 +472,8 @@ final class TransportTests: XCTestCase {
         playLongThenChange(processors: [DelayProcessor(frames: 3)]) { transport.setProcessors([]) }
 
         XCTAssertEqual(heard.suffix(70), (10..<80).map(Float.init)[...])
-        XCTAssertEqual(output.flushes, [0, 1.25])
+        XCTAssertEqual(output.partialFlushes, [1.75])
+        XCTAssertEqual(output.flushes, [0])
         XCTAssertEqual(statuses.last, .ended)
     }
 
@@ -535,7 +540,7 @@ final class TransportTests: XCTestCase {
         }
 
         XCTAssertEqual(heard, (0..<8).map(Float.init) + (40..<80).map { Float($0) * 2 })
-        XCTAssertEqual(output.flushes, [0, 1, 1])
+        XCTAssertEqual(output.flushes, [0, 1], "the seek's; the chain's re-feed is a partial flush the seek supersedes")
         XCTAssertEqual(statuses.last, .ended)
         XCTAssertEqual(positions.last, Heard(item: "a", frame: 80))
     }
@@ -563,9 +568,10 @@ final class TransportTests: XCTestCase {
         run(for: 9.25)
 
         // Stereo sample f * 2 + c, averaged to f * 2 + 0.5.
-        XCTAssertEqual(heard, (0..<20).map(Float.init) + (10..<80).map { Float($0 * 2) + 0.5 })
+        XCTAssertEqual(heard, (0..<28).map(Float.init) + (14..<80).map { Float($0 * 2) + 0.5 })
         XCTAssertEqual(positions, positionsOfLong())
-        XCTAssertEqual(output.flushes, [0, 1.25])
+        XCTAssertEqual(output.partialFlushes, [1.75])
+        XCTAssertEqual(output.flushes, [0])
         XCTAssertEqual(statuses.last, .ended)
     }
 

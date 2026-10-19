@@ -60,6 +60,7 @@ final class Feeder {
     private let upstream: FeederUpstream
     private let onEvent: (FeederEvent) -> Void
     private let inbox = RestartInbox()
+    private let wake: @Sendable () -> Void
 
     private var map = MediaPositionMap()
     private var rate: Double = 1
@@ -76,6 +77,10 @@ final class Feeder {
     private var restartTarget: SeekTarget?
     private var reportedPosition: MediaPositionMap.Position?
     private var status = FeederStatus.paused
+    /// The partial flush awaiting its completion. Nothing is pulled or written meanwhile, so calls
+    /// that arrive in between coalesce into it: processors run at pull time and apply to the next chunk.
+    private var pendingPartialFlush: Int?
+    private var lastPartialFlush = 0
 
     init(
         output: AudioOutput,
@@ -91,6 +96,7 @@ final class Feeder {
         self.rebufferDepth = rebufferDepth
         self.resumeDepth = resumeDepth
         self.onEvent = onEvent
+        self.wake = wake
         // The map's first epoch starts at 0, so the clock must too.
         output.setRate(0, at: 0)
         let inbox = inbox
@@ -153,6 +159,25 @@ final class Feeder {
         pump()
     }
 
+    /// Re-feeds what is written past `resumeDepth` of the clock, so a reconfigured pipeline applies
+    /// there without a gap or a `buffering` status. A failed partial flush falls back to a full one
+    /// from the heard frame. Does nothing while one is pending or when nothing is written past the cut.
+    func refeedAhead() {
+        guard pendingPartialFlush == nil, !failed,
+              let cut = map.truncate(from: output.currentTime() + resumeDepth * rate) else { return }
+        lastPartialFlush += 1
+        let token = lastPartialFlush
+        pendingPartialFlush = token
+        upstream.resupply(from: SeekTarget(cut.resume))
+        upstreamEnded = false
+        let inbox = inbox, wake = wake
+        output.flush(fromTime: cut.time) { succeeded in
+            inbox.post(partialFlush: token, succeeded: succeeded)
+            wake()
+        }
+        pump()
+    }
+
     /// Flushes and holds the output at rate 0, reporting `.ended`; upstream must supply nothing more.
     func stop() {
         playWhenReady = false
@@ -184,6 +209,11 @@ final class Feeder {
             // A stall is the renderer starving, a downstream underrun; a route change's flush is not.
             // Not while paused: a pause ends the rebuffer even if the stall is drained after it.
             if pending.stalled && playWhenReady { afterUnderrun = true }
+        }
+        // A restart above cleared the pending flush, so its late completion is stale and ignored here.
+        for result in pending.partialFlushes where result.token == pendingPartialFlush {
+            pendingPartialFlush = nil
+            if !result.succeeded { restart(from: heardPosition) }
         }
 
         // Pause before refilling: audio stamped behind a running clock never plays, and the clock is
@@ -265,6 +295,7 @@ final class Feeder {
         map.reset(at: anchor)
         upstreamEnded = false
         failed = false
+        pendingPartialFlush = nil
         restartTarget = position
         // With no position nothing was consumed, so upstream's next chunk is still the right one.
         if let position { upstream.resupply(from: position) }
@@ -294,6 +325,7 @@ final class Feeder {
     /// Pauses and pulls nothing more until the next restart, which re-arms one recovery.
     func halt() {
         failed = true
+        pendingPartialFlush = nil
         recovering = false
         pause()
         // No audio is coming, so it is not waiting for any.
@@ -309,7 +341,7 @@ final class Feeder {
     /// later (a next item) is written at `writtenEnd` and resumes through the underrun path.
     private func fill() {
         // The lead counts from the clock, not the heard playhead: the renderer drops audio stamped behind its clock.
-        while !failed, map.writtenEnd - output.currentTime() < Self.maxDepth {
+        while !failed, pendingPartialFlush == nil, map.writtenEnd - output.currentTime() < Self.maxDepth {
             // Its one ready event wakes the pump, so a deep route refills as fast as it drains.
             guard output.isReadyForMoreMediaData else { return output.requestMediaDataWhenReady() }
             let supply = upstream.pull()
@@ -377,6 +409,11 @@ private final class RestartInbox: @unchecked Sendable {
     private var stalled = false
     private var failure: (any Error)?
     private var reset = false
+    private var partialFlushes: [(token: Int, succeeded: Bool)] = []
+
+    func post(partialFlush token: Int, succeeded: Bool) {
+        lock.withLock { partialFlushes.append((token, succeeded)) }
+    }
 
     func post(_ time: TimeInterval, stalled: Bool = false) {
         lock.withLock {
@@ -393,10 +430,13 @@ private final class RestartInbox: @unchecked Sendable {
         lock.withLock { reset = true }
     }
 
-    func drain() -> (time: TimeInterval?, stalled: Bool, failure: (any Error)?, reset: Bool) {
+    func drain() -> (
+        time: TimeInterval?, stalled: Bool, failure: (any Error)?, reset: Bool,
+        partialFlushes: [(token: Int, succeeded: Bool)]
+    ) {
         lock.withLock {
-            defer { (time, stalled, failure, reset) = (nil, false, nil, false) }
-            return (time, stalled, failure, reset)
+            defer { (time, stalled, failure, reset, partialFlushes) = (nil, false, nil, false, []) }
+            return (time, stalled, failure, reset, partialFlushes)
         }
     }
 

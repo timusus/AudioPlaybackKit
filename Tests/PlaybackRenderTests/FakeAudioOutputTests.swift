@@ -24,6 +24,67 @@ final class FakeAudioOutputTests: XCTestCase {
         XCTAssertEqual(output.played, [.audio(start: 0, format: mono, samples: [1, 2, 3, 4])])
     }
 
+    func testAPartialFlushDropsQueuedAudioFromTheCutAndKeepsTheEarlierAudioPlaying() throws {
+        let output = FakeAudioOutput()
+        try output.enqueue([1, 2, 3, 4], format: mono, at: 0)
+        try output.enqueue([5, 6, 7, 8], format: mono, at: 1)
+        output.setRate(1, at: 0)
+        output.advance(by: 0.5)
+
+        var result: Bool?
+        output.flush(fromTime: 1) { result = $0 }
+        try output.enqueue([9, 10], format: mono, at: 1)
+        output.advance(by: 1)
+
+        XCTAssertEqual(result, true)
+        XCTAssertEqual(output.partialFlushes, [1])
+        XCTAssertEqual(output.flushes, [])
+        XCTAssertEqual(output.played, [.audio(start: 0, format: mono, samples: [1, 2, 3, 4, 9, 10])])
+    }
+
+    func testAPartialFlushAtOrBehindTheClockFails() throws {
+        let output = FakeAudioOutput()
+        try output.enqueue([1, 2, 3, 4], format: mono, at: 0)
+        output.setRate(1, at: 0)
+        output.advance(by: 0.5)
+
+        var result: Bool?
+        output.flush(fromTime: 0.5) { result = $0 }
+
+        XCTAssertEqual(result, false)
+        XCTAssertEqual(output.partialFlushes, [0.5], "attempts are recorded, failed ones too")
+    }
+
+    func testAHeldPartialFlushCompletesOnRequestAndCountsEnqueuesMeanwhile() throws {
+        let output = FakeAudioOutput()
+        output.holdsPartialFlushes = true
+        var results: [Bool] = []
+        output.flush(fromTime: 1) { results.append($0) }
+        try output.enqueue([1, 2], format: mono, at: 1)
+        XCTAssertEqual(results, [])
+        XCTAssertEqual(output.enqueuesDuringPartialFlush, 1)
+
+        output.completePartialFlushes()
+        try output.enqueue([3, 4], format: mono, at: 1.5)
+
+        XCTAssertEqual(results, [true])
+        XCTAssertEqual(output.enqueuesDuringPartialFlush, 1)
+    }
+
+    func testAForcedFailureFailsAPartialFlushAndDropsNothing() throws {
+        let output = FakeAudioOutput()
+        output.failsPartialFlushes = true
+        try output.enqueue([1, 2, 3, 4], format: mono, at: 0)
+
+        var result: Bool?
+        output.flush(fromTime: 0.5) { result = $0 }
+        output.setRate(1, at: 0)
+        output.advance(by: 1)
+
+        XCTAssertEqual(result, false)
+        XCTAssertEqual(output.played, [.audio(start: 0, format: mono, samples: [1, 2, 3, 4])])
+    }
+
     func testATimestampHolePlaysAsSilence() throws {
         let output = FakeAudioOutput()
         try output.enqueue([1, 2], format: mono, at: 0)
