@@ -312,14 +312,15 @@ seek and at a format change within an item (a source re-opened at another rate o
 to `Transport` or `Player`; cast it back) and its `mediaStartFrame`. ReplayGain reads its gain for
 `metadata.item` there (ADR-0021). Filter memory and a limiter's envelope reset at each join. Adding or
 removing a processor, changing its `isActive` or changing its output format needs another
-`setProcessors` call, which re-feeds from the heard frame (a brief rebuffer) so the new chain is
-heard at once; after the end of the stream it only installs the chain. A processor's own parameters (a gain, EQ bands, or an "enabled"
+`setProcessors` call, which re-feeds the audio written ahead (no gap) so the new chain is
+heard within about half a second; after the end of the stream it only installs the chain. A processor's own parameters (a gain, EQ bands, or an "enabled"
 flag it reads inside a stage that stays `isActive`) apply live, read under its own lock.
 
 **Processors run at write time.** The transport writes up to 30 s ahead of the playhead, so a
 processor's own parameter change would reach the speaker only after that audio. `setProcessors` and
-`processorsChanged()` (after a parameter change) therefore flush and re-feed from the heard frame, as a
-seek does: the change is heard at once, after a brief rebuffer. Fades, ducks and mutes go through
+`processorsChanged()` (after a parameter change) therefore re-feed: they drop the audio written from about 0.5 s past the clock (`flush(fromSourceTime:)`) and
+process it again, so the change is heard within about half a second, with no `buffering` status and no gap.
+If the renderer refuses the partial flush they fall back to a full flush and a brief rebuffer. Fades, ducks and mutes go through
 `setVolume`, which acts at once without a flush: the app calls it repeatedly from its own timer or display link.
 
 **Failure.** A failed renderer or a media-services reset is recovered once: the transport rebuilds

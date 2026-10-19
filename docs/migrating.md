@@ -187,7 +187,7 @@ State mapping, for both apps' adapters:
 
 An effect that changes the audio of an item is an `AudioProcessor`: skip-silence, Voice Boost (with its
 limiter), ReplayGain, the EQ. Anything that changes the level over time is `player.volume` written from
-the app's timer, because a processor change flushes and rebuffers briefly: the sleep-timer fade, a duck,
+the app's timer, because a processor change is heard about half a second late: the sleep-timer fade, a duck,
 the skip layer's pre-seek fade. An effect that is not the item's audio stays in the app: Podcasts' Smart
 Skip chime plays on its own `AVAudioPlayer` until the render layer mixes at the playhead. See
 [Writing a processor](#writing-a-processor).
@@ -312,8 +312,8 @@ Each step ships on its own. Put the new path behind a flag until step 4; the ada
 
 - **Effects are processed at write time, up to 30 s ahead of the playhead.** Fades, ducks and mutes go
   through `volume`, written repeatedly from the app's timer; never from a processor.
-- **A processor change flushes and rebuffers briefly.** `setProcessors` and `processorsChanged()` re-feed
-  from the heard frame, as a seek does, so the change is heard at once. A processor's own parameters apply
+- **A processor change is heard about 0.5 s later, with no gap.** `setProcessors` and `processorsChanged()`
+  re-feed the audio written ahead with a partial flush (a full flush if the renderer refuses it). A processor's own parameters apply
   from the next chunk it processes: call `processorsChanged()` after changing one, and not per tick.
 - **Recovery lands paused.** A renderer failure or media-services reset is rebuilt once; the player sets
   `playWhenReady` false and sends `recoveredPaused`. The app calls `play()` if the user still means to
