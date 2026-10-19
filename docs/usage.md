@@ -318,9 +318,9 @@ flag it reads inside a stage that stays `isActive`) apply live, read under its o
 
 **Processors run at write time.** The transport writes up to 30 s ahead of the playhead, so a
 processor's own parameter change would reach the speaker only after that audio. `setProcessors` and
-`processorsChanged()` (after a parameter change) therefore re-feed: they drop the audio written from about 0.5 s past the clock (`flush(fromSourceTime:)`) and
-process it again, so the change is heard within about half a second, with no `buffering` status and no gap.
-If the renderer refuses the partial flush they fall back to a full flush and a brief rebuffer. Fades, ducks and mutes go through
+`processorsChanged()` (after a parameter change) therefore re-feed: they drop the audio written from the end of the chunk that straddles 0.5 s past the clock (`flush(fromSourceTime:)`) and
+process it again, so the change is heard within about half a second plus a chunk, with no `buffering` status and no gap.
+If the renderer refuses the partial flush they fall back to a full flush from the frame heard then, and a brief rebuffer. Fades, ducks and mutes go through
 `setVolume`, which acts at once without a flush: the app calls it repeatedly from its own timer or display link.
 
 **Failure.** A failed renderer or a media-services reset is recovered once: the transport rebuilds

@@ -472,7 +472,7 @@ final class TransportTests: XCTestCase {
         playLongThenChange(processors: [DelayProcessor(frames: 3)]) { transport.setProcessors([]) }
 
         XCTAssertEqual(heard.suffix(70), (10..<80).map(Float.init)[...])
-        XCTAssertEqual(output.partialFlushes, [1.75])
+        XCTAssertEqual(output.partialFlushes, [1.875])
         XCTAssertEqual(output.flushes, [0])
         XCTAssertEqual(statuses.last, .ended)
     }

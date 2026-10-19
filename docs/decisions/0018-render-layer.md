@@ -77,12 +77,12 @@ How features fit:
 A parameter (a gain, EQ bands, a toggle) applies live under the processor's own lock from the next chunk
 it processes, and a chain change swaps at the next chunk. Both would be heard only after the up to 30 s
 already written, so `Transport.setProcessors` and `processorsChanged()` re-feed with a partial flush: the output drops what
-is stamped from `resumeDepth` past the clock, and the feeder rewinds the position map and the upstream to that
+is stamped from the end of the chunk straddling `resumeDepth` past the clock (a cut inside a chunk would overlap audio the renderer keeps), and the feeder rewinds the position map and the upstream to that
 cut and writes it again, so audio before it keeps playing, with no `buffering` status. media3's `DefaultAudioSink` drains to the end of
 stream on a pending configuration, but with up to 30 s queued that would delay the effect too long, so
-we deviate; the change is heard about `resumeDepth` late. Calls made while a partial flush is pending fold
+we deviate; the change is heard about `resumeDepth` plus a chunk late. Calls made while a partial flush is pending fold
 into it (the next pulled chunk carries the newest parameters), so a slider cannot pile up flushes. If the
-completion reports failure (the cut has passed) the feeder takes the full restart path, as a seek does,
+completion reports failure (the cut has passed) the feeder takes the full restart path, as a seek does, from the frame heard at that moment (not the cut),
 and rebuffers briefly. Whether an AirPlay receiver survives a partial flush is checked on device (#1064). After `.ended` nothing is re-fed (the chain applies to the
 next audio), and `processorsChanged()` does nothing while failed. A fade goes through `setVolume`, which needs no flush.
 

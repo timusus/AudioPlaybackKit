@@ -98,16 +98,15 @@ final class FakeAudioOutputTests: XCTestCase {
         ])
     }
 
-    func testAnOverlapIsTrimmedToTheTimeline() throws {
+    func testAnOverlapIsRejectedSoNoTestRelyOnTheRendererTrimmingIt() throws {
         let output = FakeAudioOutput()
         try output.enqueue([1, 2, 3, 4], format: mono, at: 0)
-        try output.enqueue([5, 6, 7, 8], format: mono, at: 0.5)
+        XCTAssertThrowsError(try output.enqueue([5, 6, 7, 8], format: mono, at: 0.5)) {
+            XCTAssertEqual($0 as? FakeAudioOutput.OverlapError, FakeAudioOutput.OverlapError(time: 0.5, queuedEnd: 1))
+        }
         output.setRate(1, at: 0)
-        output.advance(by: 2)
-        XCTAssertEqual(output.played, [
-            .audio(start: 0, format: mono, samples: [1, 2, 3, 4, 7, 8]),
-            .silence(start: 1.5, duration: 0.5),
-        ])
+        output.advance(by: 1)
+        XCTAssertEqual(output.played, [.audio(start: 0, format: mono, samples: [1, 2, 3, 4])])
     }
 
     func testTheClockRunsThroughAnUnderrunWithNoEventAndLateAudioNeverPlays() throws {

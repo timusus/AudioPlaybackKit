@@ -79,8 +79,11 @@ final class Feeder {
     private var status = FeederStatus.paused
     /// The partial flush awaiting its completion. Nothing is pulled or written meanwhile, so calls
     /// that arrive in between coalesce into it: processors run at pull time and apply to the next chunk.
-    private var pendingPartialFlush: Int?
+    private var pendingPartialFlush: (token: Int, before: MediaPositionMap)?
     private var lastPartialFlush = 0
+    /// Where each written chunk ends, ascending and pruned behind the playhead: the map merges
+    /// contiguous chunks, and a partial flush must cut between them.
+    private var chunkEnds: [TimeInterval] = []
 
     init(
         output: AudioOutput,
@@ -163,11 +166,17 @@ final class Feeder {
     /// there without a gap or a `buffering` status. A failed partial flush falls back to a full one
     /// from the heard frame. Does nothing while one is pending or when nothing is written past the cut.
     func refeedAhead() {
+        // The cut lands on the end of the chunk that straddles the target: a cut inside a chunk
+        // would re-feed audio the renderer still holds, and an overlap is trimmed or dropped by it.
+        let target = output.currentTime() + resumeDepth * rate
+        let before = map
         guard pendingPartialFlush == nil, !failed,
-              let cut = map.truncate(from: output.currentTime() + resumeDepth * rate) else { return }
+              let boundary = chunkEnds.first(where: { $0 >= target }),
+              let cut = map.truncate(from: boundary) else { return }
+        chunkEnds.removeAll { $0 > cut.time }
         lastPartialFlush += 1
         let token = lastPartialFlush
-        pendingPartialFlush = token
+        pendingPartialFlush = (token, before)
         upstream.resupply(from: SeekTarget(cut.resume))
         upstreamEnded = false
         let inbox = inbox, wake = wake
@@ -211,9 +220,13 @@ final class Feeder {
             if pending.stalled && playWhenReady { afterUnderrun = true }
         }
         // A restart above cleared the pending flush, so its late completion is stale and ignored here.
-        for result in pending.partialFlushes where result.token == pendingPartialFlush {
+        for result in pending.partialFlushes where result.token == pendingPartialFlush?.token {
+            let before = pendingPartialFlush?.before
             pendingPartialFlush = nil
-            if !result.succeeded { restart(from: heardPosition) }
+            // The map was truncated at the cut, which can be ahead of the frame heard by now.
+            if !result.succeeded {
+                restart(from: before?.position(at: playhead()).map(SeekTarget.init) ?? heardPosition)
+            }
         }
 
         // Pause before refilling: audio stamped behind a running clock never plays, and the clock is
@@ -293,6 +306,7 @@ final class Feeder {
         outputRunning = false
         afterUnderrun = false
         map.reset(at: anchor)
+        chunkEnds = []
         upstreamEnded = false
         failed = false
         pendingPartialFlush = nil
@@ -375,11 +389,13 @@ final class Feeder {
             }
         }
         for tag in chunk.tags { map.append(tag, format: chunk.decodedFormat) }
+        if chunk.frameCount > 0 { chunkEnds.append(map.writtenEnd) }
     }
 
     private func report() {
         let playhead = playhead()
         for heard in map.advance(to: playhead) { onEvent(.heard(heard)) }
+        chunkEnds.removeAll { $0 < playhead }
         // Within an item the position only goes forward, as media3's renderers take
         // max(current, new) unless a seek allowed a discontinuity: the clock steps back on a rate
         // change, a resume or a re-anchor, and apps count listening time from position deltas.

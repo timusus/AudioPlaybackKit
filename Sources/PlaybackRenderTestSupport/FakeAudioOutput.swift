@@ -2,14 +2,24 @@ import Foundation
 @_spi(Testing) import PlaybackRender
 
 /// An `AudioOutput` on a manual clock, with the renderer's measured timing (ADR-0018): a timestamp
-/// hole plays as silence, an overlap trims the later audio, audio stamped behind the clock never
-/// plays, and the clock runs on through an underrun with no event. It is ready for more until
+/// hole plays as silence, an overlap is rejected (the renderer trims it silently, which would hide a
+/// feeder bug), audio stamped behind the clock never plays, and the clock runs on through an underrun with no event. It is ready for more until
 /// `capacity` is enqueued ahead of its clock, and a `routeDepth` models a deep route such as AirPlay.
 public final class FakeAudioOutput: @unchecked Sendable {
     public struct Enqueue: Equatable, Sendable {
         public var samples: [Float]
         public var format: PCMFormat
         public var time: TimeInterval
+    }
+
+    /// An enqueue stamped before the end of what is queued; the renderer would trim it silently.
+    public struct OverlapError: Error, Equatable, Sendable {
+        public var time: TimeInterval
+        public var queuedEnd: TimeInterval
+
+        public init(time: TimeInterval, queuedEnd: TimeInterval) {
+            (self.time, self.queuedEnd) = (time, queuedEnd)
+        }
     }
 
     public enum Played: Equatable, Sendable {
@@ -35,7 +45,7 @@ public final class FakeAudioOutput: @unchecked Sendable {
     private var _volume: Float = 1
     private var _outputLatency: TimeInterval = 0
     private var queue: [Buffer] = []
-    // End of everything enqueued since the last flush, played or not: an overlap is trimmed to it.
+    // End of everything enqueued since the last flush, played or not: an enqueue must start at or after it.
     private var timelineEnd: TimeInterval?
     private var stalled = false
     // A failed renderer: silent, and every enqueue throws until `rebuild()`.
@@ -114,6 +124,7 @@ public final class FakeAudioOutput: @unchecked Sendable {
         try locked {
             guard !rendererFailed else { throw AudioOutputError.rendererFailed }
             guard !rejected.contains(format) else { throw AudioOutputError.formatRejected(format) }
+            if let end = timelineEnd, time < end - 1e-9 { throw OverlapError(time: time, queuedEnd: end) }
             if !heldCompletions.isEmpty { _enqueuesDuringPartialFlush += 1 }
             _enqueues.append(Enqueue(samples: samples, format: format, time: time))
             // Without a route depth, the part of a late buffer still ahead of the clock plays.
@@ -124,12 +135,7 @@ public final class FakeAudioOutput: @unchecked Sendable {
                 timelineEnd = max(timelineEnd ?? end, end)
                 return
             }
-            var buffer = Buffer(start: time, format: format, samples: samples)
-            if let end = timelineEnd, time < end {
-                let trimmed = min(frameCount(end - time, format), samples.count / format.channelCount)
-                buffer.samples.removeFirst(trimmed * format.channelCount)
-                buffer.start += Double(trimmed) / format.sampleRate
-            }
+            let buffer = Buffer(start: time, format: format, samples: samples)
             timelineEnd = max(timelineEnd ?? buffer.end, buffer.end)
             if !buffer.samples.isEmpty { queue.append(buffer) }
         }

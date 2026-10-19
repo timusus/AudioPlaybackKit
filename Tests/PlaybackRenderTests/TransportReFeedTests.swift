@@ -157,6 +157,41 @@ final class TransportReFeedTests: XCTestCase {
         XCTAssertEqual(heard, plain(0..<12) + (12..<80).map { Float($0) * 6 }, "the last gain is the one heard")
     }
 
+    func testACutInsideAChunkMovesToTheChunksEndSoTheReFeedOverlapsNothing() {
+        // Three frames a chunk: 0.375 s, so the cut target 2.0 (clock 1.5 at the change) is inside the chunk ending at 2.25.
+        let odd = FakeItemSource(format: mono, frames: 80, chunkFrames: 3)
+        let boost = LiveGainProcessor()
+        transport.setProcessors([boost])
+        play("a", odd, until: 1.25)
+        boost.gain = 2
+        transport.processorsChanged()
+        run(for: 9.25)
+
+        XCTAssertEqual(output.partialFlushes, [2.25])
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(gaps, [])
+        XCTAssertEqual(heard, plain(0..<18) + doubled(18..<80))
+    }
+
+    func testAFailedPartialFlushReplaysFromTheFrameHeardWhenItFailsNotTheCut() {
+        let boost = LiveGainProcessor()
+        transport.setProcessors([boost])
+        play("a", long, until: 1.0)
+        output.holdsPartialFlushes = true
+        output.failsPartialFlushes = true
+        boost.gain = 2
+        transport.processorsChanged()
+        pump()
+        output.advance(by: 1)
+        output.completePartialFlushes()
+        pump()
+        run(for: 9.25)
+
+        XCTAssertEqual(output.partialFlushes, [1.5])
+        XCTAssertEqual(output.flushes, [0, 2])
+        XCTAssertEqual(heard, plain(0..<16) + doubled(16..<80))
+    }
+
     func testAChangeAfterTheFlushCompletedMakesTheNextFlush() {
         let boost = LiveGainProcessor()
         transport.setProcessors([boost])
