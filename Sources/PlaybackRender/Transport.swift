@@ -108,10 +108,20 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         )
     }
 
-    @_spi(Testing) public init(
+    @_spi(Testing) public convenience init(
         output: any AudioOutput,
         timer: any PumpTimer,
         executor: any SequencerExecutor,
+        onEvent: @escaping @Sendable (TransportEvent<Item>) -> Void
+    ) {
+        self.init(output: output, timer: timer, executor: executor, stretch: TimeStretch(), onEvent: onEvent)
+    }
+
+    init(
+        output: any AudioOutput,
+        timer: any PumpTimer,
+        executor: any SequencerExecutor,
+        stretch: TimeStretch,
         onEvent: @escaping @Sendable (TransportEvent<Item>) -> Void
     ) {
         self.output = output
@@ -128,7 +138,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         }) { [weak self] item, error in
             self?.fail(item: item, error)
         }
-        feeder = Feeder(output: output, upstream: upstream, wake: { timer.wake() }) { [weak self] in self?.handle($0) }
+        feeder = Feeder(output: output, upstream: upstream, wake: { timer.wake() }, stretch: stretch) { [weak self] in self?.handle($0) }
         timer.start(interval: pumpInterval, queue: queue) { [weak self] in self?.pump() }
     }
 

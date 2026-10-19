@@ -11,7 +11,8 @@ final class TransportReFeedTests: XCTestCase {
     private let timer = ManualPumpTimer()
     private let executor = ManualExecutor()
     private let recorder = EventRecorder()
-    private lazy var transport = Transport<String>(output: output, timer: timer, executor: executor) { [recorder] in
+    private lazy var transport = Transport<String>(output: output, timer: timer, executor: executor,
+                                                   stretch: FakeStretchUnit.stretch()) { [recorder] in
         recorder.append($0)
     }
 

@@ -64,7 +64,7 @@ final class Feeder {
 
     private var map = MediaPositionMap()
     private var rate: Double = 1
-    private var stretch = TimeStretch()
+    private var stretch: TimeStretch
     private var playWhenReady = false
     private var outputRunning = false
     private var upstreamEnded = false
@@ -103,9 +103,11 @@ final class Feeder {
         rebufferDepth: TimeInterval = 2,
         resumeDepth: TimeInterval = 0.5,
         wake: @escaping @Sendable () -> Void = {},
+        stretch: TimeStretch = TimeStretch(),
         onEvent: @escaping (FeederEvent) -> Void
     ) {
         precondition(resumeDepth > 0 && resumeDepth <= rebufferDepth)
+        self.stretch = stretch
         self.output = output
         self.upstream = upstream
         self.rebufferDepth = rebufferDepth

@@ -13,11 +13,11 @@ final class FeederRateTests: XCTestCase {
     private var events: [(event: FeederEvent, clock: TimeInterval)] = []
     private var feeder: Feeder!
 
-    private func makeFeeder(_ items: [FakeUpstream.Item]) {
+    private func makeFeeder(_ items: [FakeUpstream.Item], stretch: TimeStretch = TimeStretch()) {
         output = FakeAudioOutput()
         upstream = FakeUpstream(items, chunkFrames: 2000)
         events = []
-        feeder = Feeder(output: output, upstream: upstream) { [unowned self] in
+        feeder = Feeder(output: output, upstream: upstream, stretch: stretch) { [unowned self] in
             events.append(($0, output.currentTime()))
         }
     }
@@ -207,7 +207,8 @@ final class FeederRateTests: XCTestCase {
     }
 
     private func assertSeek(rate: Double, mediaAfterTwoSeconds: TimeInterval, line: UInt = #line) throws {
-        makeFeeder([item(0, seconds: 20)])
+        // The real unit fades in a fresh stretch, so only a whole-sample one shows which frame comes first.
+        makeFeeder([item(0, seconds: 20)], stretch: FakeStretchUnit.stretch())
         feeder.setRate(rate)
         feeder.play()
         run(for: 1)

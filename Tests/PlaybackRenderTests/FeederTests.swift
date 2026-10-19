@@ -18,7 +18,7 @@ final class FeederTests: XCTestCase {
         output.outputLatency = latency
         upstream = FakeUpstream(items, chunkFrames: chunkFrames)
         events = []
-        feeder = Feeder(output: output, upstream: upstream) { [unowned self] in events.append($0) }
+        feeder = Feeder(output: output, upstream: upstream, stretch: FakeStretchUnit.stretch()) { [unowned self] in events.append($0) }
     }
 
     private func item(_ id: Int, _ frames: Int64, _ format: PCMFormat? = nil) -> FakeUpstream.Item {
