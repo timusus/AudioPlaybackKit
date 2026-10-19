@@ -6,6 +6,12 @@ not onto `Transport` first: each would write the session, state machine and adva
 page has what each app does today, where it goes, and the order of work. Paths are relative to each app's
 iOS directory (`mobile/ios` in `timusus/shuttle-podcasts`, `ios` in `timusus/shuttle2`).
 
+## Migrating from 0.16 to 0.17
+
+| Old | New |
+|---|---|
+| `Transport.init(timePitchAlgorithm:onEvent:)` and `Player`'s `timePitchAlgorithm:` | removed (breaking). Speed is now an `AUNewTimePitch` time-stretch before enqueue, so the renderer no longer changes it; drop the argument ([ADR-0030](decisions/0030-speed-is-a-time-stretch-before-enqueue.md)) |
+
 ## Migrating from 0.12 to 0.13
 
 | Old | New |

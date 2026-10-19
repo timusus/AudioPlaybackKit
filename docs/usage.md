@@ -268,7 +268,7 @@ let source = FFmpegItemSource(reader: try FileByteReader(url: fileURL))   // or 
 transport.setCurrent(item: track.id, source: source, startSeconds: 0)
 transport.play()
 transport.seek(item: track.id, toSeconds: 90)
-transport.setRate(1.5)           // pitch kept, heard about half a second on; pause() stops, rate 0 is not allowed
+transport.setRate(1.5)           // AUNewTimePitch stretch, pitch kept, heard about half a second on; no `timePitchAlgorithm` (removed in 0.17.0); pause() stops, rate 0 is not allowed
 transport.setVolume(0.5)         // 0...1, applied at once
 ```
 

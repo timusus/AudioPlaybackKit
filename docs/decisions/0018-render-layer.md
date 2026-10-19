@@ -92,7 +92,7 @@ A failed renderer is terminal. This happens through its `status`, a failed enque
 
 - `AVAudioEngine`, which is what the apps run today: its clock is nil while paused and leaves output latency to us. Speed needs a time-pitch unit whose buffering the clock cannot see. It is not named for AirPlay 2 enhanced buffering.
 - `AVAudioSourceNode` with our own ring buffer: we would own real-time-thread code and estimate latency ourselves, and every route behaviour would be our bug.
-- Sonic in-process for speed: a speed change would wait behind the queued audio, and the position map would need a speed checkpoint. The synchronizer rate measured exact. ADR-0030 later chose Sonic, re-fed like an effect change, for the synchronizer's dropout on every change.
+- A time-stretch in-process for speed: a speed change would wait behind the queued audio, and the position map would need a speed checkpoint. The synchronizer rate measured exact. ADR-0030 later chose `AUNewTimePitch`, re-fed like an effect change, for the synchronizer's dropout on every change.
 - One fixed output rate (as Shuttle2 does today): it rules out hi-res and multichannel, and ASBAR took the format change.
 
 ## Consequences
