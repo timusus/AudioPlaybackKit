@@ -286,7 +286,7 @@ final class PlayerCoreTests: XCTestCase {
         rig.factory.chunkFrames = 4410
         player.setItems(["a"])
         player.play()
-        rig.pump()
+        rig.run(for: 1)
 
         // The renderer stays at 1; the speed is in the audio, after the half second already queued.
         player.rate = 2
