@@ -221,8 +221,10 @@ final class Feeder {
         // From the clock, like the pause and `fill`: a lead over the heard playhead can be nil at the clock.
         let needed = afterUnderrun ? rebufferDepth : resumeDepth
         let lead = map.writtenEnd - output.currentTime()
-        // An output that takes no more would never reach a depth deeper than it buffers.
-        return lead >= needed * rate || (lead > 0 && !output.isReadyForMoreMediaData)
+        if lead >= needed * rate { return true }
+        // A rebuffer depth deeper than the output takes would wait forever; a first start or a
+        // resume is shallow enough to be reached, so a near-empty output must not start it.
+        return afterUnderrun && lead > 0 && !output.isReadyForMoreMediaData
     }
 
     /// Rewinds the clock to the written end, where the next chunk is stamped; the playhead stays on what is heard.

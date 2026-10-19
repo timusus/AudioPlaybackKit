@@ -25,8 +25,8 @@ public protocol ItemSource: AnyObject, Sendable {
     /// Never blocks: the calls that follow belong to the sequencer's `epoch`.
     func begin(epoch: UInt64)
     /// The format of the item's first chunks. May block on network resolution: for a next item
-    /// it runs once decode of the item before has ended, about two seconds ahead of the join, so
-    /// a slow resolve overlaps that tail. Once interrupted it may return early or throw.
+    /// it runs once decode of the item before has ended, which is up to 30 s ahead of the join
+    /// when the output takes that much, so a slow resolve overlaps that tail. Once interrupted it may return early or throw.
     func open() throws -> PCMFormat
     /// Non-nil once the item's format has changed since `open()`, as a stream re-opened at a time
     /// offset may come back at another rate or channel count; read after every `seek(toFrame:)` and

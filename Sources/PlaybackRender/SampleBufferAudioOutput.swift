@@ -43,6 +43,7 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
 
     deinit {
         observers.remove()
+        _renderer.stopRequestingMediaData()
         #if os(iOS)
         if let resetObserver { NotificationCenter.default.removeObserver(resetObserver) }
         #endif
@@ -98,6 +99,9 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
         renderer.isReadyForMoreMediaData
     }
 
+    /// Whether a ready-for-more request is armed on the current renderer.
+    var isRequestingMediaData: Bool { lock.withLock { requesting } }
+
     func requestMediaDataWhenReady() {
         let renderer: AVSampleBufferAudioRenderer? = lock.withLock {
             guard !requesting else { return nil }
@@ -105,6 +109,8 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
             return _renderer
         }
         guard let renderer else { return }
+        // Replaces any block still held from an earlier arm, so only one is ever live.
+        renderer.stopRequestingMediaData()
         // The renderer calls the block for as long as it stays ready; one call is all the feeder needs.
         renderer.requestMediaDataWhenReady(on: readyQueue) { [weak self, weak renderer] in
             guard let self, let renderer else { return }

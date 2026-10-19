@@ -25,7 +25,7 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     /// audio heard was in, the one the processors run at for it.
     case crossed(item: Item, format: PCMFormat)
     /// `item`, already crossed, is now heard in another decoded format: its source changed format
-    /// (`ItemSource.currentFormat`), heard about two seconds after it was decoded, or a seek or
+    /// (`ItemSource.currentFormat`), heard when its audio reaches the speaker, up to 30 s after it was decoded, or a seek or
     /// re-feed landed on audio in another format. media3 `AnalyticsListener.onAudioInputFormatChanged`,
     /// but sent when heard rather than decoded.
     case formatChanged(item: Item, format: PCMFormat)
@@ -233,19 +233,22 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         queue.async { [self] in output.setVolume(min(max(volume, 0), 1)) }
     }
 
-    /// Replaces the processor chain without a flush: the old chain drains into what is queued and
-    /// the new one applies from the next chunk, heard about two seconds on. Each processor's `flush`
-    /// gets the `Item` whose frames follow. Call it again after a
-    /// change that alters a processor's `isActive` or output format; other parameters apply live.
-    /// After a failure it re-feeds from the heard frame instead, since nothing is playing.
+    /// Replaces the processor chain and re-feeds from the heard frame, as a seek does, so the new
+    /// chain is heard at once instead of after the up to 30 s already written. That costs a brief
+    /// rebuffer. Each processor's `flush` gets the `Item` whose frames follow. Call it again after a
+    /// change that alters a processor's `isActive` or output format.
     public func setProcessors(_ processors: [any AudioProcessor]) {
         queue.async { [self] in
             upstream.setProcessors(processors)
-            guard failed else { return }
-            failed = false
-            feeder.flush(from: feeder.heardPosition)
-            publishBufferedAhead()
+            refeedFromHeard()
         }
+    }
+
+    /// Re-feeds from the heard frame after an app changed a processor's own parameters (a gain, EQ
+    /// bands), which apply from the next chunk processed and so would otherwise wait out the audio
+    /// already written. Costs a brief rebuffer, so set a fade through `setVolume`, not here.
+    public func processorsChanged() {
+        queue.async { [self] in refeedFromHeard() }
     }
 
     private func callDiscontinuity() {
@@ -260,6 +263,15 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private func newID() -> Int {
         lastID += 1
         return lastID
+    }
+
+    // With nothing heard or failed there is nothing written to replace, and a flush would report buffering.
+    private func refeedFromHeard() {
+        let position = feeder.heardPosition
+        guard failed || position != nil else { return }
+        failed = false
+        feeder.flush(from: position)
+        publishBufferedAhead()
     }
 
     private func pump() {

@@ -390,9 +390,16 @@ public final class Player<Item: Hashable & Sendable> {
         }
     }
 
-    /// Each processor's `flush` gets the `Item` whose frames follow.
+    /// Each processor's `flush` gets the `Item` whose frames follow. Re-feeds from the heard frame,
+    /// so the change is heard at once, after a brief rebuffer.
     public func setProcessors(_ processors: [any AudioProcessor]) {
         transport.setProcessors(processors.map(keyedItems.keyed))
+    }
+
+    /// Call after changing a processor's own parameters (a gain, EQ bands) so they are heard at once,
+    /// after a brief rebuffer, not after the audio already written. Fade through `volume` instead.
+    public func processorsChanged() {
+        transport.processorsChanged()
     }
 
     // MARK: Transport events

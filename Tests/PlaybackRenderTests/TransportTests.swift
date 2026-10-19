@@ -414,7 +414,7 @@ final class TransportTests: XCTestCase {
         stride(from: Int64(0), through: 80, by: 2).filter { !skipped.contains($0) }.map { Heard(item: "a", frame: $0) }
     }
 
-    /// Plays `long` for a second, by when frames 0 to 23 are written (two seconds ahead), then calls `change`.
+    /// Plays `long` for 1.25 s, so frames 0 to 9 are heard, then calls `change`.
     private func playLongThenChange(processors: [any AudioProcessor], _ change: () -> Void) {
         transport.setProcessors(processors)
         transport.setCurrent(item: "a", source: long)
@@ -425,44 +425,71 @@ final class TransportTests: XCTestCase {
         run(for: 9.25)
     }
 
-    // #114, as media3 applies an `AudioProcessor`'s own parameters: live, never through the sink.
-    func testALiveParameterChangeIsHeardAfterWhatWasWrittenWithNoFlush() {
+    // Processors run at write time, so a change is heard only by re-feeding from the heard frame,
+    // as a seek does; otherwise it waits out up to 30 s written ahead.
+    func testALiveParameterChangeIsHeardFromTheHeardFrameOnAfterAReFeed() {
+        let boost = LiveGainProcessor()
+        playLongThenChange(processors: [boost]) {
+            boost.gain = 2
+            transport.processorsChanged()
+        }
+
+        XCTAssertEqual(heard, (0..<10).map(Float.init) + (10..<80).map { Float($0) * 2 })
+        XCTAssertEqual(output.flushes, [0, 1.25])
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing, .ended])
+        XCTAssertEqual(positions, positionsOfLong())
+    }
+
+    func testAParameterChangeWithoutProcessorsChangedIsHeardOnlyAfterWhatWasWritten() {
         let boost = LiveGainProcessor()
         playLongThenChange(processors: [boost]) { boost.gain = 2 }
 
-        XCTAssertEqual(heard, (0..<24).map(Float.init) + (24..<80).map { Float($0) * 2 })
         XCTAssertEqual(output.flushes, [0])
-        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
-        XCTAssertEqual(positions, positionsOfLong())
     }
 
-    // #114: a chain change drains the old chain into the queued audio, as media3 `DefaultAudioSink`
-    // drains its processors on a configuration change instead of flushing the `AudioTrack`.
-    func testAddingAProcessorMidPlaybackAppliesAfterWhatWasWrittenWithNoFlush() {
+    func testAddingAProcessorMidPlaybackIsHeardFromTheHeardFrameOn() {
         playLongThenChange(processors: []) { transport.setProcessors([GainProcessor()]) }
 
-        XCTAssertEqual(heard, (0..<24).map(Float.init) + (24..<80).map { Float($0) * 2 })
-        XCTAssertEqual(output.flushes, [0])
-        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        XCTAssertEqual(heard, (0..<10).map(Float.init) + (10..<80).map { Float($0) * 2 })
+        XCTAssertEqual(output.flushes, [0, 1.25])
+        XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing, .ended])
         XCTAssertEqual(positions, positionsOfLong())
     }
 
-    func testAddingADroppingProcessorMidPlaybackSkipsThePositionWithNoFlush() {
+    func testAddingADroppingProcessorMidPlaybackSkipsFramesFromTheHeardFrameOn() {
         playLongThenChange(processors: []) { transport.setProcessors([DropRangesProcessor([0..<8])]) }
 
-        XCTAssertEqual(heard, (0..<24).map(Float.init) + (32..<80).map(Float.init))
-        XCTAssertEqual(output.flushes, [0])
-        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
-        XCTAssertEqual(positions, positionsOfLong(skipping: 24..<32))
+        XCTAssertEqual(heard, (0..<10).map(Float.init) + (18..<80).map(Float.init))
+        XCTAssertEqual(output.flushes, [0, 1.25])
+        XCTAssertEqual(positions.last, Heard(item: "a", frame: 80))
     }
 
     func testRemovingAProcessorMidPlaybackKeepsTheAudioItHeldBack() {
         playLongThenChange(processors: [DelayProcessor(frames: 3)]) { transport.setProcessors([]) }
 
-        XCTAssertEqual(heard, (0..<80).map(Float.init))
+        XCTAssertEqual(heard.suffix(70), (10..<80).map(Float.init)[...])
+        XCTAssertEqual(output.flushes, [0, 1.25])
+        XCTAssertEqual(statuses.last, .ended)
+    }
+
+    func testProcessorChangesWithNothingPlayingFlushNothing() {
+        transport.setProcessors([GainProcessor()])
+        transport.processorsChanged()
+        pump()
+
+        XCTAssertEqual(output.flushes, [])
+        XCTAssertEqual(statuses, [])
+    }
+
+    func testRateChangesAreNotAReFeedBecauseTheOutputAppliesThem() {
+        transport.setCurrent(item: "a", source: long)
+        transport.play()
+        pump()
+        run(for: 1)
+        transport.setRate(2)
+        pump()
+
         XCTAssertEqual(output.flushes, [0])
-        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
-        XCTAssertEqual(positions, positionsOfLong())
     }
 
     // The pending chain is swapped in by the decode job that follows the seek, not lost with the
@@ -475,7 +502,7 @@ final class TransportTests: XCTestCase {
         }
 
         XCTAssertEqual(heard, (0..<8).map(Float.init) + (40..<80).map { Float($0) * 2 })
-        XCTAssertEqual(output.flushes, [0, 1])
+        XCTAssertEqual(output.flushes, [0, 1, 1])
         XCTAssertEqual(statuses.last, .ended)
         XCTAssertEqual(positions.last, Heard(item: "a", frame: 80))
     }
@@ -503,9 +530,9 @@ final class TransportTests: XCTestCase {
         run(for: 9.25)
 
         // Stereo sample f * 2 + c, averaged to f * 2 + 0.5.
-        XCTAssertEqual(heard, (0..<48).map(Float.init) + (24..<80).map { Float($0 * 2) + 0.5 })
+        XCTAssertEqual(heard, (0..<20).map(Float.init) + (10..<80).map { Float($0 * 2) + 0.5 })
         XCTAssertEqual(positions, positionsOfLong())
-        XCTAssertEqual(output.flushes, [0])
+        XCTAssertEqual(output.flushes, [0, 1.25])
         XCTAssertEqual(statuses.last, .ended)
     }
 

@@ -75,8 +75,9 @@ public enum AudioProcessingError: Error, Equatable {
 ///
 /// The transport calls every method on its own queue, so state the app also changes (a toggle, a
 /// gain, EQ bands) needs the processor's own lock; hence `Sendable`. Such a change applies live, as
-/// in media3, from the next chunk processed: that is heard after the audio already queued, about
-/// two seconds on. A change to `isActive` or the output format needs `Transport.setProcessors`.
+/// in media3, from the next chunk processed, which is heard after the audio already written, up to
+/// 30 s on: call `Transport.processorsChanged` to re-feed from the heard frame, after a brief
+/// rebuffer. A change to `isActive` or the output format needs `Transport.setProcessors`.
 ///
 /// `configure`, `flush` and `reset` run once per item, seek or chain change, so they may allocate
 /// (filter state, coefficient tables, a delay line). `process` and `queueInput` run per chunk and

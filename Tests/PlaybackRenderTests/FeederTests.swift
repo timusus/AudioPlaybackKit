@@ -934,4 +934,33 @@ final class FeederTests: XCTestCase {
         run(for: 1)
         XCTAssertEqual(heard, ramp(0, 0..<4) + ramp(0, 20..<24))
     }
+
+    // A near-empty output that reports full must not start play: the first start is shallow enough to reach.
+    func testAFirstStartWaitsForTheResumeDepthEvenWhenTheOutputReportsFull() {
+        makeFeeder([item(0, 40)], chunkFrames: 1)
+        output.capacity = 0.25
+        feeder.play()
+
+        XCTAssertEqual(output.rate, 0)
+        XCTAssertEqual(statuses, [.buffering])
+    }
+
+    func testAStartAfterASeekWaitsForTheResumeDepthEvenWhenTheOutputReportsFull() {
+        makeFeeder([item(0, 40)], chunkFrames: 1)
+        feeder.play()
+        run(for: 1)
+        output.capacity = 0.25
+        feeder.seek(to: SeekTarget(pos(0, 20)))
+
+        XCTAssertEqual(output.rate, 0)
+        XCTAssertEqual(statuses.last, .buffering)
+    }
+
+    func testAFirstStartAtTheResumeDepthDoesNotWaitForTheOutputToTakeMore() {
+        makeFeeder([item(0, 40)], chunkFrames: 1)
+        output.capacity = 0.5
+        feeder.play()
+
+        XCTAssertEqual(output.rate, 1)
+    }
 }
