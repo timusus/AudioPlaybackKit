@@ -53,8 +53,6 @@ run_phase() {
     if [[ -n "$failures" ]]; then
         while IFS= read -r line; do echo "verify: !! $line"; done <<<"$failures"
     fi
-    # Nameless failures (a requested test that matched nothing) are marked in the log by the phase itself.
-    grep -E '^verify: !\? ' "$log"
     echo "verify: -- $phase failed: see $log"
     tail -n 15 "$log" | sed 's/^/  | /' >&2
 }
@@ -62,8 +60,8 @@ run_phase() {
 # base, bisect and confirm runs name the phases that failed; an empty list means all.
 phase_wanted() { [[ -z "${LAND_PHASES:-}" || " $LAND_PHASES " == *" $1 "* ]]; }
 
-# Fails the confirm run unless every named test ran: a name that matches nothing only warns, so the others
-# would pass and clear a real failure.
+# Runs just the LAND_ONLY tests, or every test when a name matches no single test: swift only warns on a filter
+# that matches nothing, so the others would pass and clear a real failure.
 # shellcheck disable=SC2329 # called by name from run_phase
 run_confirm_tests() {
     local filters=() name escaped listed missing=0
@@ -73,11 +71,18 @@ run_confirm_tests() {
     fi
     # swift-testing prints display names, not ids, so the list is the only way to tell a name exists.
     listed="$(swift test list --skip-build 2>&1)" || { echo "$listed"; return 1; }
+    local ids
     for name in $LAND_ONLY; do
         if ! grep -qxF -- "$name" <<<"$listed"; then
-            echo "verify: !? $name matched no test"
-            missing=1
-            continue
+            # swift-testing failures are named by display name; map one to its id when exactly one test has it.
+            ids="$(grep -F -- "/$name" <<<"$listed" | awk -v n="/$name" 'substr($0, length($0) - length(n) + 1) == n')"
+            if [[ -z "$ids" || "$(wc -l <<<"$ids")" -ne 1 ]]; then
+                # A rerun that skipped this test could clear or misblame its failure, so run them all.
+                echo "cannot resolve $name to one test; running every test"
+                swift test --skip-build --parallel --num-workers 4 2>&1
+                return
+            fi
+            name="$ids"
         fi
         escaped="$(sed -E 's/[][\.*^$+?(){}|]/\\&/g' <<<"$name")"
         # A swift-testing id carries a source location after the `()`, so only XCTest ids can be end-anchored.
