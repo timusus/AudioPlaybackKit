@@ -53,6 +53,8 @@ run_phase() {
     if [[ -n "$failures" ]]; then
         while IFS= read -r line; do echo "verify: !! $line"; done <<<"$failures"
     fi
+    # Nameless failures (a requested test that matched nothing) are marked in the log by the phase itself.
+    grep -E '^verify: !\? ' "$log"
     echo "verify: -- $phase failed: see $log"
     tail -n 15 "$log" | sed 's/^/  | /' >&2
 }
@@ -64,28 +66,26 @@ phase_wanted() { [[ -z "${LAND_PHASES:-}" || " $LAND_PHASES " == *" $1 "* ]]; }
 # would pass and clear a real failure.
 # shellcheck disable=SC2329 # called by name from run_phase
 run_confirm_tests() {
-    local filters=() names=() name escaped
-    for name in $LAND_ONLY; do
-        names+=("$name")
-        escaped="$(sed -E 's/[][\.*^$+?(){}|]/\\&/g' <<<"$name")"
-        filters+=(--filter "^${escaped}\$")
-    done
-    if [[ "${#names[@]}" -eq 0 ]]; then
+    local filters=() name escaped listed missing=0
+    if [[ -z "${LAND_ONLY// /}" ]]; then
         echo "LAND_ONLY names no test"
         return 1
     fi
-    local out
-    out="$(swift test --skip-build --parallel --num-workers 4 "${filters[@]}" 2>&1)" || { echo "$out"; return 1; }
-    echo "$out"
-    # --parallel prints no totals, only `[n/m] Testing Module.Class/test` as each test starts.
-    local ran missing=0
-    ran="$(plain <(echo "$out") | sed -nE 's|^\[[0-9]+/[0-9]+\] Testing (.+)$|\1|p')"
-    for name in "${names[@]}"; do
-        if ! grep -qxF -- "$name" <<<"$ran"; then
-            echo "test did not run: $name"
+    # swift-testing prints display names, not ids, so the list is the only way to tell a name exists.
+    listed="$(swift test list --skip-build 2>&1)" || { echo "$listed"; return 1; }
+    for name in $LAND_ONLY; do
+        if ! grep -qxF -- "$name" <<<"$listed"; then
+            echo "verify: !? $name matched no test"
             missing=1
+            continue
         fi
+        escaped="$(sed -E 's/[][\.*^$+?(){}|]/\\&/g' <<<"$name")"
+        # A swift-testing id carries a source location after the `()`, so only XCTest ids can be end-anchored.
+        if [[ "$name" == *')' ]]; then filters+=(--filter "^${escaped}"); else filters+=(--filter "^${escaped}\$"); fi
     done
+    if [[ "${#filters[@]}" -gt 0 ]]; then
+        swift test --skip-build --parallel --num-workers 4 "${filters[@]}" 2>&1 || missing=1
+    fi
     return "$missing"
 }
 
@@ -106,7 +106,12 @@ if [[ "${LAND_MODE:-}" == confirm ]]; then
 else
     echo "verify: confirm"
     phase_wanted build && run_phase build compile_failures swift build --build-tests -j 5
-    phase_wanted test && run_phase test test_failures swift test --skip-build --parallel --num-workers 4
+    # base and bisect reruns (verify_failed_cmd) set LAND_ONLY without LAND_MODE and still need the build.
+    if [[ -n "${LAND_ONLY:-}" ]]; then
+        phase_wanted test && run_phase test test_failures run_confirm_tests
+    else
+        phase_wanted test && run_phase test test_failures swift test --skip-build --parallel --num-workers 4
+    fi
     phase_wanted devbuild && run_phase devbuild compile_failures build_device_suite
 fi
 
