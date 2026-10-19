@@ -54,7 +54,8 @@ final class TransportTests: XCTestCase {
     private let timer = ManualPumpTimer()
     private let executor = ManualExecutor()
     private let recorder = EventRecorder()
-    private lazy var transport = Transport<String>(output: output, timer: timer, executor: executor) { [recorder] in
+    private lazy var transport = Transport<String>(output: output, timer: timer, executor: executor,
+                                                   stretch: FakeStretchUnit.stretch()) { [recorder] in
         recorder.append($0)
     }
 
@@ -256,6 +257,30 @@ final class TransportTests: XCTestCase {
         run(for: 1)
         XCTAssertEqual(heard, [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 18, 20, 22])
         XCTAssertEqual(statuses.last, .ended)
+    }
+
+    // The real-output rate test's shape at its 48 kHz and 100 ms pump: the last position reported
+    // before `.ended` is the item's last frame, after a 0.5x tail.
+    func testRateChangesAt48kHzEndingAtHalfSpeedReportTheLastFrame() {
+        let ramp = FakeItemSource(format: PCMFormat(sampleRate: 48000, channelCount: 2), frames: 144_000, chunkFrames: 4800)
+        transport.setCurrent(item: "ramp", source: ramp)
+        transport.play()
+        pump()
+        var changes: [(frame: Int64, rate: Double)] = [(24000, 2), (60000, 1), (96000, 0.5)]
+        for _ in 0..<60 where statuses.last != .ended {
+            output.advance(by: 0.1)
+            pump()
+            let frame = recorder.events.compactMap { if case let .position(_, seconds, _, _) = $0 { seconds } else { nil } }.last
+            if let change = changes.first, (frame ?? 0) * 48000 >= Double(change.frame) {
+                changes.removeFirst()
+                transport.setRate(change.rate)
+            }
+        }
+
+        XCTAssertEqual(changes.count, 0)
+        XCTAssertEqual(statuses, [.buffering, .playing, .ended])
+        let seconds = recorder.events.compactMap { if case let .position(_, seconds, _, _) = $0 { seconds } else { nil } }
+        XCTAssertEqual(seconds.last, 3)
     }
 
     func testSeekWithinAnItemThenBackAcrossAJoinDecodeHadPassed() {

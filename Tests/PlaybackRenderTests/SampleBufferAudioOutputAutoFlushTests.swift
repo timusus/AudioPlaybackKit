@@ -34,26 +34,44 @@ final class SampleBufferAudioOutputAutoFlushTests: XCTestCase {
         transport.setCurrent(item: "ramp", source: RampSource())
         transport.play()
         wait(for: [playing], timeout: 5)
-        // 0.5 s at 1x, 0.75 s at 2x, 0.75 s at 1x, then the last second at 0.5x.
-        // Each rate is set when the test hears the frame, which under load is later than the frame
-        // asked for, so the expected wall time comes from the frames heard at each change.
-        var segments: [(from: Int64, rate: Double)] = [(0, 1)]
+        // Rates set at 1x, 2x, 1x and 0.5x when the test hears frames 24000, 60000 and 96000. Under
+        // load it hears them later than asked, so the expected wall time comes from the frames heard.
+        var changes: [(heard: Int64, rate: Double)] = []
         for (frame, rate) in [(Int64(24000), 2.0), (60000, 1), (96000, 0.5)] {
             wait(for: [log.expect { ($0.frame ?? 0) >= frame }], timeout: 5)
-            segments.append((log.positions.last ?? frame, rate))
+            changes.append((log.positions.last ?? frame, rate))
             transport.setRate(rate)
         }
         wait(for: [ended], timeout: 10)
 
         let wall = log.timing(from: .playing, to: .ended)
-        let boundaries = segments.map(\.from) + [RampSource.frames]
-        let expected = zip(segments, boundaries.dropFirst()).reduce(0.0) { $0 + Double($1.1 - $1.0.from) / 48000 / $1.0.rate }
+        let expected = Self.outputSeconds(toPlay: RampSource.frames, changes: changes)
         print("rate 1-2-1-0.5: \(output.summary()); playing to ended \(wall) s, expected \(expected) s")
         // Every rate took effect: the wall time follows the frames played at each rate.
         XCTAssertGreaterThan(wall, expected * 0.9)
         if RenderEventBounds.enabled { XCTAssertLessThan(wall, 5) }
         XCTAssertLessThan(wall, 9)
         assertContinuous()
+    }
+
+    /// Output seconds to play `frames` at 48 kHz when each rate applies half a second of output
+    /// (`resumeDepth`) after the frame heard when it was set: what is queued up to there plays as stretched.
+    private static func outputSeconds(toPlay frames: Int64, changes: [(heard: Int64, rate: Double)]) -> TimeInterval {
+        var pending = changes[...], scheduled: [(at: Int, rate: Double)] = []
+        var media = 0.0, rate = 1.0, out = 0
+        while media < Double(frames) {
+            if let change = pending.first, media >= Double(change.heard) {
+                scheduled.append((out + 24000, change.rate))
+                pending.removeFirst()
+            }
+            if let next = scheduled.first, out >= next.at {
+                rate = next.rate
+                scheduled.removeFirst()
+            }
+            media += rate
+            out += 1
+        }
+        return Double(out) / 48000
     }
 
     func testSwitchingOutputDeviceMidItemKeepsTheMediaTimelineContinuous() throws {
@@ -83,10 +101,11 @@ final class SampleBufferAudioOutputAutoFlushTests: XCTestCase {
         let clock = output.clockReadings.filter { $0 <= writtenEnd }
         XCTAssertEqual(clock, clock.sorted(), "the synchronizer clock went backwards")
         assertContinuous()
+        assertEnqueuedMediaFramesFollowOn()
     }
 
-    /// The item plays to its last frame, every restart after audio was written follows an auto-flush
-    /// and resumes at the media frame that was at the flush time, and positions never go back.
+    /// The item plays to its last frame with positions that never go back, output time has no hole
+    /// or overlap, and every restart after audio was written follows an auto-flush.
     private func assertContinuous(file: StaticString = #filePath, line: UInt = #line) {
         let runs = output.runs
         let positions = log.positions
@@ -95,18 +114,28 @@ final class SampleBufferAudioOutputAutoFlushTests: XCTestCase {
         }
         XCTAssertEqual(positions.last, RampSource.frames, file: file, line: line)
 
-        XCTAssertEqual(runs.last?.enqueues.last?.endFrame, RampSource.frames, file: file, line: line)
         for run in runs {
             for (previous, next) in zip(run.enqueues, run.enqueues.dropFirst()) {
                 XCTAssertEqual(next.time, previous.endTime, accuracy: 1 / 48000, "a hole or overlap in output time", file: file, line: line)
+            }
+        }
+        for next in runs.dropFirst() where next.autoFlushTime == nil {
+            XCTFail("a restart with no auto-flush before it", file: file, line: line)
+        }
+    }
+
+    /// The media frames the ramp names in each enqueue follow on, and a restart resumes at the frame
+    /// that was at the flush time. Only at 1x: a stretch rewrites the ramp, so its samples name no frame.
+    private func assertEnqueuedMediaFramesFollowOn(file: StaticString = #filePath, line: UInt = #line) {
+        let runs = output.runs
+        XCTAssertEqual(runs.last?.enqueues.last?.endFrame, RampSource.frames, file: file, line: line)
+        for run in runs {
+            for (previous, next) in zip(run.enqueues, run.enqueues.dropFirst()) {
                 XCTAssertEqual(next.firstFrame, previous.endFrame, "a gap or repeat in media frames", file: file, line: line)
             }
         }
         for (previous, next) in zip(runs, runs.dropFirst()) {
-            guard let flushTime = next.autoFlushTime else {
-                XCTFail("a restart with no auto-flush before it", file: file, line: line)
-                continue
-            }
+            guard let flushTime = next.autoFlushTime else { continue }
             let heard = previous.mediaFrame(at: flushTime)
             let resumed = next.enqueues[0].firstFrame
             print("auto-flush at \(flushTime): heard frame \(heard), resumed at \(resumed) (\(resumed - heard) frames)")
