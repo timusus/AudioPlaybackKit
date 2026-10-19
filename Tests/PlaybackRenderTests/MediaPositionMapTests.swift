@@ -246,4 +246,49 @@ final class MediaPositionMapTests: XCTestCase {
         XCTAssertEqual(map.playhead(currentTime: 10.5, outputLatency: 0), 10.5, "a clock that includes latency reports 0")
         XCTAssertEqual(map.playhead(currentTime: 10.125, outputLatency: 0.25), 10)
     }
+
+    // MARK: Stretched segments
+
+    func testAStretchedSegmentLastsItsOutputFramesAndMapsAtItsRatio() {
+        var map = MediaPositionMap()
+        map.append(tag(0, 0, 44100), format: mono, outputFrames: 29400)
+
+        XCTAssertEqual(map.writtenEnd, at(29400))
+        XCTAssertEqual(map.position(at: at(14700))?.mediaFrame, 22050)
+        XCTAssertEqual(map.position(at: at(29400))?.mediaFrame, 44100)
+    }
+
+    func testARatioChangeStartsASegmentAndTheSameRatioMerges() {
+        var map = MediaPositionMap()
+        map.append(tag(0, 0, 44100), format: mono)
+        map.append(tag(0, 44100, 44100), format: mono, outputFrames: 29400)
+        map.append(tag(0, 88200, 44100), format: mono, outputFrames: 29400)
+        _ = map.advance(to: at(44100))
+
+        XCTAssertEqual(map.position(at: at(44100 + 14700))?.mediaFrame, 66150)
+        XCTAssertEqual(map.position(at: at(44100 + 44100))?.mediaFrame, 110250)
+        XCTAssertEqual(map.writtenEnd, at(44100 + 58800))
+    }
+
+    func testAStretchedSegmentWithNoOutputYetAddsNoTime() {
+        var map = MediaPositionMap()
+        map.append(tag(0, 0, 44100), format: mono)
+        map.append(tag(1, 0, 300), format: mono, outputFrames: 0)
+        map.append(tag(1, 300, 44100), format: mono, outputFrames: 22050)
+
+        XCTAssertEqual(map.writtenEnd, at(66150))
+        XCTAssertEqual(map.advance(to: at(44100)), entered(0, 1))
+        XCTAssertEqual(map.position(at: at(44100 + 11025))?.mediaFrame, 22350)
+    }
+
+    func testTruncatingAStretchedSegmentKeepsWholeOutputFramesAndResumesAtTheirMediaFrame() throws {
+        var map = MediaPositionMap()
+        map.append(tag(0, 0, 88200), format: mono, outputFrames: 58800)
+
+        let cut = try XCTUnwrap(map.truncate(from: at(29400)))
+        XCTAssertEqual(cut.time, at(29400))
+        XCTAssertEqual(cut.resume, .init(item: 0, mediaFrame: 44100, sampleRate: 44100))
+        XCTAssertEqual(map.writtenEnd, at(29400))
+        XCTAssertEqual(map.position(at: at(29400))?.mediaFrame, 44100)
+    }
 }
