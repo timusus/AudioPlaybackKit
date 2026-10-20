@@ -222,7 +222,9 @@ build_slice() {
         --extra-ldflags="-target $TRIPLE -isysroot $SYSROOT" \
         "${CONFIGURE_FLAGS[@]}"
 
-    make -j"$(sysctl -n hw.ncpu)"
+    # CI runners have no `lease`; there the build runs unleased.
+    if command -v lease >/dev/null 2>&1; then LEASE=(lease --class build --); else LEASE=(); fi
+    ${LEASE[@]+"${LEASE[@]}"} make -j"$(sysctl -n hw.ncpu)"
     make install
     echo "$BUILD_STAMP" > "$PREFIX/lib/build.stamp"
 }
