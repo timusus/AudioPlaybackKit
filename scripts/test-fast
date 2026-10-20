@@ -32,8 +32,10 @@ mkdir -p .build
 log=.build/test-fast.log
 echo "test-fast: log $PWD/$log"
 
+# CI runners have no `lease`; there the build runs unleased.
+if command -v lease >/dev/null 2>&1; then LEASE=(lease --class build --); else LEASE=(); fi
 start=$SECONDS
-swift test --parallel --num-workers 4 ${args[@]+"${args[@]}"} ${passthrough[@]+"${passthrough[@]}"} >"$log" 2>&1
+${LEASE[@]+"${LEASE[@]}"} swift test --parallel --num-workers 4 ${args[@]+"${args[@]}"} ${passthrough[@]+"${passthrough[@]}"} >"$log" 2>&1
 status=$?
 
 plain=$(sed $'s/\x1b\\[[0-9;]*m//g' "$log")
