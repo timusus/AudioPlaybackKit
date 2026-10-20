@@ -79,7 +79,9 @@ else
     destination="$(sim destination)" || { echo "release.sh: sim destination failed; set IOS_SIM_UDID" >&2; exit 1; }
 fi
 echo "release.sh: PlaybackStreamingTests on $destination"
-xcodebuild test -scheme AudioPlaybackKit-Package -only-testing:PlaybackStreamingTests \
+# test-all leases itself; this simulator run is the only build step left here.
+if command -v lease >/dev/null 2>&1; then LEASE=(lease --class build --); else LEASE=(); fi
+${LEASE[@]+"${LEASE[@]}"} xcodebuild test -scheme AudioPlaybackKit-Package -only-testing:PlaybackStreamingTests \
     -destination "$destination" -parallel-testing-enabled NO -collect-test-diagnostics never -quiet
 
 # Built before tagging, so a tag never lacks its source (LGPL-2.1 section 6); a failed or
