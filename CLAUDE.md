@@ -67,3 +67,23 @@ is a minor bump at 0.x; so is any decoder change that alters PCM, and the releas
 - Conventional commits (`feat:`, `fix:`, `refactor:`, `build:`, `docs:`, `test:`). Work on a branch and
   open a PR; CI (`.github/workflows/ci.yml`) gates it. No AI attribution in commits or PRs.
 - Public API is the contract with two apps: `public` only when an app needs it, `Sendable`-friendly.
+
+## Code health (codehealth)
+
+- Before editing a file, run `codehealth here <files>`. It prints what those files already carry: open findings
+  by finding unit, the Start here entries naming the file, and its cycle, hidden-coupling group and layer.
+  Under 2 s once `build/codehealth/report.json` matches HEAD; the first run after a new commit rebuilds it.
+- A repo with `brief=on` in `.claude/codehealth.conf` may print up to five fact lines (`codehealth brief <file>`)
+  before your first edit of a file: what reaches it, what it changes with, its tests and times, open findings.
+  It prints nothing while the report is rebuilding.
+- Before planning work across several files, read **Start here** in `build/codehealth/report.md`.
+- Before you commit or land, run `codehealth gate --base origin/main`. Exit 0: nothing new at warning or above.
+  Exit 1: your change added a blocking finding. Exit 2: the tool failed, not your change.
+- A block states a fact about the diff and the principle it breaks. Whether and how to fix it is your call; a
+  `hint` is an optional suggestion. Rerun the gate after a change.
+  If the finding is wrong for this site, suppress it with a stated reason:
+  `// codehealth-ignore <rule>: <why this site is accepted>` on the line or the one above.
+  A bare ignore prints a warning and is itself a finding. Rule-wide choices go in `.claude/codehealth.conf`
+  (`disable=<rule>`), old debt in `codehealth baseline`.
+- Never work around the gate: no splitting a change to dodge a rule, no editing code just to silence one.
+- `build/codehealth/` is generated; don't commit it.
