@@ -73,6 +73,11 @@ public enum StartGateEndReason: Sendable {
 public struct StartGateEnd<Item: Hashable & Sendable>: Sendable {
     public let item: Item
     public let reason: StartGateEndReason
+
+    public init(item: Item, reason: StartGateEndReason) {
+        self.item = item
+        self.reason = reason
+    }
 }
 
 /// Discrete things the state cannot carry: each is sent once, in order, after the state that caused

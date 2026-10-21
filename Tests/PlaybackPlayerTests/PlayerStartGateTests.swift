@@ -1,5 +1,6 @@
 import Foundation
 import PlaybackRender
+@_spi(Testing) import PlaybackPlayerTestSupport
 import XCTest
 @_spi(Testing) @testable import PlaybackPlayer
 
@@ -186,6 +187,40 @@ final class PlayerStartGateTests: XCTestCase {
         rig.run(for: 1)
         await letGateTasksRun()
         player.skipToNext()
+        XCTAssertEqual(log.ends.map(\.item), ["a"])
+        XCTAssertEqual(log.ends.map(\.reason), [.superseded])
+    }
+
+    func testAPauseBeforeTheGateTaskFirstRunsNeverEntersTheGate() async {
+        let log = recordGateEnds()
+        player.setItems(["a"])
+        player.play()
+        player.pause()
+        await letGateTasksRun()
+        XCTAssertEqual(gates.entered, [])
+        XCTAssertEqual(log.ends.map(\.reason), [.intentWithdrawn])
+    }
+
+    func testATransportFailureOfTheGatedItemReportsItsGateSuperseded() async {
+        let log = recordGateEnds()
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 1)
+        await letGateTasksRun()
+        rig.deliver([.failed(item: 1, error: FakeItemError(item: "a"))])
+        XCTAssertEqual(player.state, .idle)
+        XCTAssertEqual(log.ends.map(\.item), ["a"])
+        XCTAssertEqual(log.ends.map(\.reason), [.superseded])
+    }
+
+    func testALoadWhoseSourceFailsToMakeReportsTheOldGateSuperseded() async {
+        let log = recordGateEnds()
+        rig.factory.failing = ["b"]
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 1)
+        await letGateTasksRun()
+        player.setItems(["b"])
         XCTAssertEqual(log.ends.map(\.item), ["a"])
         XCTAssertEqual(log.ends.map(\.reason), [.superseded])
     }

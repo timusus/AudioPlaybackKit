@@ -64,7 +64,7 @@ public final class Player<Item: Hashable & Sendable> {
     @ObservationIgnored public var startGate: (@Sendable (Item) async -> Void)?
 
     /// Called synchronously when a gate in flight is cancelled, before its task resumes, so the reason
-    /// is the one at cancel time even if a later `play()` is already queued.
+    /// is the one at cancel time even if a later `play()` is already queued. It must not re-enter the player synchronously.
     @ObservationIgnored public var startGateEnded: (@MainActor (StartGateEnd<Item>) -> Void)?
 
     private var intent = false {
@@ -484,6 +484,7 @@ public final class Player<Item: Hashable & Sendable> {
         guard gateTask == nil else { return }
         gateItem = item
         gateTask = Task { @MainActor [weak self] in
+            guard !Task.isCancelled else { return }
             await startGate(item)
             guard !Task.isCancelled, let self else { return }
             gateTask = nil
@@ -497,10 +498,11 @@ public final class Player<Item: Hashable & Sendable> {
     private func endGate(_ reason: StartGateEndReason) {
         guard let gateTask else { return }
         gateTask.cancel()
+        let item = gateItem
         self.gateTask = nil
-        gatePending = false
-        if let item = gateItem { startGateEnded?(StartGateEnd(item: item, reason: reason)) }
         gateItem = nil
+        gatePending = false
+        if let item { startGateEnded?(StartGateEnd(item: item, reason: reason)) }
     }
 
     private func deactivate() {
@@ -762,6 +764,7 @@ public final class Player<Item: Hashable & Sendable> {
         do {
             source = try makeSource(entry.item)
         } catch {
+            endGate(.superseded)
             unload(as: .idle)
             return reportFailure(at: index, PlaybackError(kind: .source, underlying: error))
         }
@@ -857,6 +860,7 @@ public final class Player<Item: Hashable & Sendable> {
     /// has nothing left to resume.
     private func reportFailure(at index: Int, _ error: PlaybackError) {
         self.error = error
+        endGate(.superseded)
         nothingToPlay(.idle)
         refreshState()
         send(.itemFailed(ref(index), error: error))
