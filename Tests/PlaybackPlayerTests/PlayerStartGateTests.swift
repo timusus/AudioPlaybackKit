@@ -124,6 +124,24 @@ final class PlayerStartGateTests: XCTestCase {
         XCTAssertNotEqual(rig.output.rate, 0)
     }
 
+    func testAJumpToTheArmedNextDuringTheGateStillPlays() async {
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 1)
+        await letGateTasksRun()
+        player.skipToNext()
+        rig.run(for: 1)
+        await letGateTasksRun()
+        XCTAssertEqual(player.currentIndex, 1)
+
+        gates.open("a")
+        gates.open("b")
+        await letGateTasksRun()
+        rig.run(for: 1)
+        XCTAssertNotEqual(rig.output.rate, 0)
+        XCTAssertGreaterThan(player.position, 0)
+    }
+
     func testNoGateStartsAtOnce() {
         player.startGate = nil
         player.setItems(["a"])

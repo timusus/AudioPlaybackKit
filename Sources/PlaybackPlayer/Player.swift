@@ -482,7 +482,7 @@ public final class Player<Item: Hashable & Sendable> {
             guard !Task.isCancelled, let self else { return }
             gateTask = nil
             gatePending = false
-            if intent, suppression == .unsuppressed, loadedKey == key, error == nil { transport.play() }
+            if intent, sessionActive, suppression == .unsuppressed, loadedKey == key, error == nil { transport.play() }
         }
     }
 
@@ -617,6 +617,9 @@ public final class Player<Item: Hashable & Sendable> {
         guard let armedKey, entries[index].id == armedEntryID, loadedKey != nil, error == nil else {
             return load(index, at: seconds)
         }
+        // A gate in flight belongs to the item being left; the new current is gated afresh.
+        let gated = gateTask != nil
+        endGate()
         seekTransport(item: armedKey, to: seconds)
         loadedKey = armedKey
         self.armedKey = nil
@@ -624,6 +627,10 @@ public final class Player<Item: Hashable & Sendable> {
         startTarget = nil
         movePosition(to: seconds)
         forgetSource()
+        if gated {
+            gatePending = true
+            if intent, suppression == .unsuppressed { sessionActive ? startTransport() : activate() }
+        }
         armNext()
     }
 
