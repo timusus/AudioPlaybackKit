@@ -1,0 +1,815 @@
+{
+  "version": 1,
+  "findings": [
+    {
+      "fingerprint": "8adf58ad7e817352b519f29560a86092787d9142",
+      "rule": "swift-not-swift6-mode",
+      "path": "Package.swift"
+    },
+    {
+      "fingerprint": "485c0c9372bdf65ab6afced28931fed32d6e31f4",
+      "rule": "comment-restates-code",
+      "path": "Sources/CStreamDecode/decoder.h"
+    },
+    {
+      "fingerprint": "f2af495f614ccb77f30c7168cb933a4566eb0bb3",
+      "rule": "comment-restates-code",
+      "path": "Sources/CStreamDecode/decoder.h"
+    },
+    {
+      "fingerprint": "025c7385c0fa6fc4754524b2cd546813352ca872",
+      "rule": "arch-hidden-coupling",
+      "path": "Sources/CStreamDecode/include/stream_decode.h"
+    },
+    {
+      "fingerprint": "ba385194807dc6b9e251774ee6060972b05ddaa1",
+      "rule": "comment-restates-code",
+      "path": "Sources/CStreamDecode/seek_aac.c"
+    },
+    {
+      "fingerprint": "b8daa3230a504b944f70acc95eea8ac4025b3385",
+      "rule": "size-file",
+      "path": "Sources/CStreamDecode/seek_mp3.c"
+    },
+    {
+      "fingerprint": "7ee40d4c3711db3f99e50f1bfb51f3f4c7a5cce2",
+      "rule": "size-file",
+      "path": "Sources/PlaybackDecode/FFmpegStreamDecoder.swift"
+    },
+    {
+      "fingerprint": "240076a7f841e7ebee5dbf8a1f342776e52fc43d",
+      "rule": "swift-bool-error-state",
+      "path": "Sources/PlaybackDecode/FFmpegStreamDecoder.swift"
+    },
+    {
+      "fingerprint": "a4bf6c9f02bcd71f1a607ee1134868450f9626af",
+      "rule": "size-file",
+      "path": "Sources/PlaybackPlayer/Player.swift"
+    },
+    {
+      "fingerprint": "26f8f66ae393fcb0eff5af2716eb7a9ba3940966",
+      "rule": "swift-bool-error-state",
+      "path": "Sources/PlaybackPlayer/Player.swift"
+    },
+    {
+      "fingerprint": "6374bacb1d724302a87f9aef088cee652c9d13f8",
+      "rule": "swift-iuo",
+      "path": "Sources/PlaybackPlayer/Player.swift"
+    },
+    {
+      "fingerprint": "0c5fe802643d71169ef8b7caf410dba2bd4eff8f",
+      "rule": "consistency-minority-mechanism",
+      "path": "Sources/PlaybackPlayer/SystemAudioSession.swift"
+    },
+    {
+      "fingerprint": "6301cfa5ab462f264cfad590772cb76525ab1c1c",
+      "rule": "swift-try-statement",
+      "path": "Sources/PlaybackPlayer/SystemAudioSession.swift"
+    },
+    {
+      "fingerprint": "5cdcd427145405356d5b6956c44616bec7ff9242",
+      "rule": "swift-bool-error-state",
+      "path": "Sources/PlaybackRender/AudioProcessingPipeline.swift"
+    },
+    {
+      "fingerprint": "176e61b6c16f6c089524d3c5488b6044ab8c496b",
+      "rule": "swift-try-discard",
+      "path": "Sources/PlaybackRender/AudioProcessingPipeline.swift"
+    },
+    {
+      "fingerprint": "e49e42144851d80fc8d33cb6abb72e696ecb0e8d",
+      "rule": "swift-bool-error-state",
+      "path": "Sources/PlaybackRender/Feeder.swift"
+    },
+    {
+      "fingerprint": "6749a8c36870c2bde6fd5f9b85f61fe50a2c96db",
+      "rule": "consistency-minority-mechanism",
+      "path": "Sources/PlaybackRender/SampleBufferAudioOutput.swift"
+    },
+    {
+      "fingerprint": "2b7de26d9796b530286d3226ee2bd7655ec5d681",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/SampleBufferAudioOutput.swift"
+    },
+    {
+      "fingerprint": "95d8e892e146b76a090baf39d98f977f5be7935f",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/SequencedUpstream.swift"
+    },
+    {
+      "fingerprint": "ac1b5b49a793a1559053cd3c1af45cd068dc24e0",
+      "rule": "consistency-minority-mechanism",
+      "path": "Sources/PlaybackRender/Sequencer.swift"
+    },
+    {
+      "fingerprint": "fc8bb23388e4766b42466bc521e2781fad125a32",
+      "rule": "swift-bool-error-state",
+      "path": "Sources/PlaybackRender/Sequencer.swift"
+    },
+    {
+      "fingerprint": "15655d68f79493f45b670ab875772d02d8677d3c",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/Sequencer.swift"
+    },
+    {
+      "fingerprint": "2bc06077213933c839cfbd66ac977221be761760",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/Sequencer.swift"
+    },
+    {
+      "fingerprint": "ca340e2eaea1d7b7542735e5c62761c9cb43b1e7",
+      "rule": "swift-fatal-error",
+      "path": "Sources/PlaybackRender/TimePitchUnit.swift"
+    },
+    {
+      "fingerprint": "566f554269d8185355c13e0a5969939765f3c42c",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/TimePitchUnit.swift"
+    },
+    {
+      "fingerprint": "68d7e1ee017431bc14c1e115a085542ac7500344",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/TimePitchUnit.swift"
+    },
+    {
+      "fingerprint": "abfd4b5529556342dd953c0b2952dcec5bc71cb7",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/TimePitchUnit.swift"
+    },
+    {
+      "fingerprint": "3ed82e94e53959e20f3268a8a728363d4d1a0276",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/TimeStretch.swift"
+    },
+    {
+      "fingerprint": "42bda99a44ff6cd395618cbe55025e14e6f87503",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/TimeStretch.swift"
+    },
+    {
+      "fingerprint": "5f96cf338c97bdd7e486b22397ffee27aa340eac",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/TimeStretch.swift"
+    },
+    {
+      "fingerprint": "9703aa35ce460c5d00388e5f00989954298c86f0",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/TimeStretch.swift"
+    },
+    {
+      "fingerprint": "be69af0cfab04d391356682c36c6157241d1c8f8",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/TimeStretch.swift"
+    },
+    {
+      "fingerprint": "c611db07f0782345d398053cd87d9ef7e7b657cf",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/TimeStretch.swift"
+    },
+    {
+      "fingerprint": "f5d8d8d0a7d987a32f8353041b9de22f7383fa84",
+      "rule": "consistency-minority-mechanism",
+      "path": "Sources/PlaybackRender/Transport.swift"
+    },
+    {
+      "fingerprint": "19538d3357857bb373e290ac76f2c438cf9d3ed0",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/Transport.swift"
+    },
+    {
+      "fingerprint": "b7dd80b79c240fae8cbde03575ae4401e6cdb4c0",
+      "rule": "swift-force-unwrap",
+      "path": "Sources/PlaybackRender/Transport.swift"
+    },
+    {
+      "fingerprint": "659c339395606aa2f51e8b1b25b8e311dbec36f4",
+      "rule": "swift-iuo",
+      "path": "Sources/PlaybackRender/Transport.swift"
+    },
+    {
+      "fingerprint": "b34eec6ba9401cd9436a76ad5d396e1729d4e493",
+      "rule": "swift-iuo",
+      "path": "Sources/PlaybackRender/Transport.swift"
+    },
+    {
+      "fingerprint": "38d719bb2d411bdc85dbd5e87b24051a56dc3721",
+      "rule": "size-file",
+      "path": "Sources/PlaybackStreaming/GrowingFileByteSource.swift"
+    },
+    {
+      "fingerprint": "647460a519174a099f1f60ced43777d7abccca87",
+      "rule": "arch-singleton-declared",
+      "path": "Sources/PlaybackStreaming/GrowingFileClock.swift"
+    },
+    {
+      "fingerprint": "a0cc001a2d5b3c2272cc93fddb0a4698e6a081a7",
+      "rule": "consistency-minority-mechanism",
+      "path": "Sources/PlaybackStreaming/GrowingFileClock.swift"
+    },
+    {
+      "fingerprint": "6282f2b9c0bfd9cfcd99db549eafe3f2e57a41d3",
+      "rule": "arch-cycle",
+      "path": "Sources/PlaybackStreaming/GrowingFileDownload.swift"
+    },
+    {
+      "fingerprint": "844debfc3349ca9863bbf71765737aa369433a40",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeConformanceTests/ChirpPrimingTests.swift"
+    },
+    {
+      "fingerprint": "ec3a7ca26e9810137f4638bd5a296641da17d87c",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeConformanceTests/ConformanceMatrix.swift"
+    },
+    {
+      "fingerprint": "31f1c075971687d4869e070c4aeef0bce3da78b7",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeConformanceTests/CorruptionFuzzTests.swift"
+    },
+    {
+      "fingerprint": "69a840eb2e160d47224c57c14e773e74fda600cf",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeConformanceTests/EndOfStreamSeekTests.swift"
+    },
+    {
+      "fingerprint": "6fdd8d251f8b371fb6b05b891e6b6929e2171805",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeConformanceTests/FLACSeekTests.swift"
+    },
+    {
+      "fingerprint": "6a086861db1070a566e4f7a2e23639b71e150ff0",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeConformanceTests/FragmentedPrimingTests.swift"
+    },
+    {
+      "fingerprint": "7a5995a2c75901405ad1cc53083196b91d541a30",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeConformanceTests/FragmentedPrimingTests.swift"
+    },
+    {
+      "fingerprint": "0ddf7d8319a9e5e8bc384daa5277bc132cee6be2",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeConformanceTests/HeaderlessCBRDurationTests.swift"
+    },
+    {
+      "fingerprint": "c354101b2e2a1f22c12fdaace55d8c6dd6bfd061",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeConformanceTests/InfoTagByteCountTests.swift"
+    },
+    {
+      "fingerprint": "52022a1b904766e59d773b8daf0631d549e251dd",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeConformanceTests/LargeMetadataTests.swift"
+    },
+    {
+      "fingerprint": "2829c34129b2cbea272f5b735d5a324434e174b7",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeConformanceTests/LeadingBytesTests.swift"
+    },
+    {
+      "fingerprint": "00b1d32329423fa18cfba09007b4f18c1e7b4b54",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeConformanceTests/MP3SeekTests.swift"
+    },
+    {
+      "fingerprint": "04b42800af700d17c90d2138e7f8e031e2d649a7",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeConformanceTests/WavPackSeekTests.swift"
+    },
+    {
+      "fingerprint": "feea6d843cf69952f8b7bc25ef4316c07e6a2ed0",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeTests/CorruptStreamTests.swift"
+    },
+    {
+      "fingerprint": "6d9c360095df09ece8747a574d0905e1fe396fc3",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeTests/ForwardOnlySourceTests.swift"
+    },
+    {
+      "fingerprint": "e3fa84480a0502e2f08e05cb1e5d89f26e4c4838",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeTests/LATMTests.swift"
+    },
+    {
+      "fingerprint": "267c22e1dcaebcacd4a691f699a59622969e0d89",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeTests/MusicFormatTests.swift"
+    },
+    {
+      "fingerprint": "004cd2f1e1ac054fd2650b92a12ac26b35fc31fa",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeTests/OutputFormatTests.swift"
+    },
+    {
+      "fingerprint": "f20f13dab4959214ced9a4f48c9d8b496c94643c",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeTests/ProbeSkipTests.swift"
+    },
+    {
+      "fingerprint": "1926c634206546c0111dd581cfb3f7308aca8bdb",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeTests/StreamDecodeErrorCategoryTests.swift"
+    },
+    {
+      "fingerprint": "323030b8a38b81a6d6a4cb5f51d51ce8409b8aa0",
+      "rule": "tests-swift-date-deadline-poll",
+      "path": "Tests/PlaybackDecodeTests/StreamDecodeTests+Lifecycle.swift"
+    },
+    {
+      "fingerprint": "d883a390e60cf3d8ad55735679c6672ff5d16f00",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeTests/StreamDecodeTests.swift"
+    },
+    {
+      "fingerprint": "b62c8d324fb80f8078301f073f2c472a4a48d308",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDecodeTests/UnknownDurationTests.swift"
+    },
+    {
+      "fingerprint": "95227f5c46bf9ea5361c4bfa61419990d6079a0d",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDeviceTests/AudibleTests.swift"
+    },
+    {
+      "fingerprint": "37c9e28df8b3081b90d2f2b8c0c243553e88890a",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackDeviceTests/DeviceRig.swift"
+    },
+    {
+      "fingerprint": "a6da5dc01f677d2b3fcfa8eecd9f2896a3dad416",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackDeviceTests/DeviceRig.swift"
+    },
+    {
+      "fingerprint": "b001dca5681185b529e7b08312752969160f06b1",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackDeviceTests/DeviceRig.swift"
+    },
+    {
+      "fingerprint": "c3c52b77d8d4bc143d153295013a15636093d119",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackDeviceTests/DeviceRig.swift"
+    },
+    {
+      "fingerprint": "d5f76a2c041099f8f046a9cc23998bf414c7dd8a",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackDeviceTests/DeviceRig.swift"
+    },
+    {
+      "fingerprint": "746e14a10303ee232d716c21603315879ff164bd",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDeviceTests/DeviceRig.swift"
+    },
+    {
+      "fingerprint": "82b9a34f5d7025511bde2a25347fe4842cb97d30",
+      "rule": "tests-swift-date-deadline-poll",
+      "path": "Tests/PlaybackDeviceTests/ElapsedTimeTests.swift"
+    },
+    {
+      "fingerprint": "7362311082995653b2f5991cd9ba195d9c3a16a3",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackDeviceTests/ElapsedTimeTests.swift"
+    },
+    {
+      "fingerprint": "f70f31ec7f44fc7a6b730020c935ebc227ca6eca",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDeviceTests/ElapsedTimeTests.swift"
+    },
+    {
+      "fingerprint": "215011566e1773c2545858138676bff3e8b19db9",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackDeviceTests/Interruptor/InterruptorApp.swift"
+    },
+    {
+      "fingerprint": "843fec6b595c1a3a5c57aa73b3fe2c3564e7431a",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackDeviceTests/Interruptor/InterruptorApp.swift"
+    },
+    {
+      "fingerprint": "dc9e6695195dfc2c4e6ecabf0e1ecba13a2988fc",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackDeviceTests/Interruptor/InterruptorApp.swift"
+    },
+    {
+      "fingerprint": "624bb8c7ef978ff3b9701daefc8e78ad74ddd9fe",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDeviceTests/RealCallTests.swift"
+    },
+    {
+      "fingerprint": "e40eeeadba04dbf2a66cb4b962443e42742b6093",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDeviceTests/RemoteCommandTests.swift"
+    },
+    {
+      "fingerprint": "b4fdfb1ea3935ad6d2a111e2afb3f64e137b9ce8",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackDeviceTests/SessionNotificationTests.swift"
+    },
+    {
+      "fingerprint": "e60bd8fa350ef91816f54aa1ac5339705127d2e9",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackNowPlayingTests/NowPlayingCommandTests.swift"
+    },
+    {
+      "fingerprint": "5b42bdd420293ff8c5481c1a90f8eb2a71f77e00",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackNowPlayingTests/NowPlayingInfoTests.swift"
+    },
+    {
+      "fingerprint": "e1ba66493c2ca69aa490626542fd6205d0be8a6d",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerExternalConsumerTests/CoordinatorTests.swift"
+    },
+    {
+      "fingerprint": "e2137967a4c94978fadc85322318e93f285f174f",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerExternalConsumerTests/NowPlayingTests.swift"
+    },
+    {
+      "fingerprint": "2c3f9573c671371af4f0205be787ea37b65b2cab",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerExternalConsumerTests/ScriptedItemTests.swift"
+    },
+    {
+      "fingerprint": "ec3a568046a30503502f5c2e021ed8b5a953ea0f",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/AudioSessionConfigurationTests.swift"
+    },
+    {
+      "fingerprint": "f3a335bc6634bf58448626b36d8ff5b473a6ae34",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerAdvanceTests.swift"
+    },
+    {
+      "fingerprint": "238e5d4e942203e96428bb1ff8834277d40ba44a",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerAudioFormatTests.swift"
+    },
+    {
+      "fingerprint": "32261f73b843fdd85f2ca920f8cf72dac9cafc25",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerBufferedAheadTests.swift"
+    },
+    {
+      "fingerprint": "b5e96312c2b38a0850dbb816d91b472cea263ff2",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerCoreTests.swift"
+    },
+    {
+      "fingerprint": "8b90095d2cc47c27d9f47e8de404df03d4821516",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerDiscontinuityTests.swift"
+    },
+    {
+      "fingerprint": "ab7a62983014687c7998b45a2e9bee9774f86987",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerEditTests.swift"
+    },
+    {
+      "fingerprint": "4331f9b00be1ab9e6b818df59c0b5b4332e32236",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerErrorCategoryTests.swift"
+    },
+    {
+      "fingerprint": "7edee20fb3f1a3f239503982eb7cd0c887ca3f0b",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerErrorTests.swift"
+    },
+    {
+      "fingerprint": "cec94766fe7601a895cf1b5b078269b49b656d2b",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerEventItemTests.swift"
+    },
+    {
+      "fingerprint": "fcdaf6644e493891fa83253f1d915adec753c57e",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerModelBasedTests.swift"
+    },
+    {
+      "fingerprint": "d0f7479d74171fc0e26c424656e55d129885d4bf",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerPrepareTests.swift"
+    },
+    {
+      "fingerprint": "0db96ac3b532a32d3960dbb57efb72d4d50f050b",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerSeekabilityTests.swift"
+    },
+    {
+      "fingerprint": "bb02f4bebb22fd6de64e811264ffb573b7ace37f",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerSessionTests.swift"
+    },
+    {
+      "fingerprint": "543609f46d05eee16699a1b55ed489c41fabfed5",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerSourceReleaseTests.swift"
+    },
+    {
+      "fingerprint": "b343f92d95bb280de306ad494e010d4aaac7e6c5",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerTelemetryEventTests.swift"
+    },
+    {
+      "fingerprint": "22f13dcc4fce9dc08a00dba21b035f7fa5910e73",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackPlayerTests/PlayerTransportEventTests.swift"
+    },
+    {
+      "fingerprint": "ba4fac6bd7185473d345590a854e189b8f282b19",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/AudioProcessingPipelineTests.swift"
+    },
+    {
+      "fingerprint": "eebbdc5346f926471764e81c1c0bee2038224fea",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/ExternalConsumerTests.swift"
+    },
+    {
+      "fingerprint": "c4bf23fe1bb9b6502a377888d8c15ed33abc6c48",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/FFmpegItemSourceTests.swift"
+    },
+    {
+      "fingerprint": "2bc74a6fe0f628d1e596aeb3f204dcf9db403c42",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/FakeAudioOutputTests.swift"
+    },
+    {
+      "fingerprint": "cc7080d8783fc88fccea57349181d583da374d58",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/FeederRateTests.swift"
+    },
+    {
+      "fingerprint": "cb8adcc220043b3113e39254f66bb88def68ded7",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/FeederTests.swift"
+    },
+    {
+      "fingerprint": "79b17fd42ee2b0b2cc0e9d1573ced6c1cf8c0463",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/MediaPositionMapTests.swift"
+    },
+    {
+      "fingerprint": "90deb9d06ffdb2b5369b82416a2b8b7137da5fd0",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/MediaPositionMapTruncateTests.swift"
+    },
+    {
+      "fingerprint": "faf37efd49251347615bf49136fa2ae1ded3225a",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/PlaybackDumpTests.swift"
+    },
+    {
+      "fingerprint": "7a752bd3d9400ee3ee0f828baa707ae5829d7836",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/SampleBufferAudioOutputAutoFlushTests.swift"
+    },
+    {
+      "fingerprint": "99ebbd2d6f130dc08c8d614f991ebcb988f8b6e1",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/SampleBufferAudioOutputIntegrationTests.swift"
+    },
+    {
+      "fingerprint": "3a188e3501c6f9ed0845cd7a5311d2fcf5e8c1fa",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackRenderTests/SampleBufferAudioOutputPartialFlushTests.swift"
+    },
+    {
+      "fingerprint": "09b9d585a2f734866c5f49d62073ef4b1d6f7106",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/SampleBufferAudioOutputPartialFlushTests.swift"
+    },
+    {
+      "fingerprint": "85b552ed3d49fca5f771df4f958b13bf0fd9f11f",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/SampleBufferAudioOutputRebuildTests.swift"
+    },
+    {
+      "fingerprint": "44a07833f8fb85ca2233c52015c50617f72cefd2",
+      "rule": "tests-swift-date-deadline-poll",
+      "path": "Tests/PlaybackRenderTests/SampleBufferAudioOutputRequestTests.swift"
+    },
+    {
+      "fingerprint": "46e9df04d691dbc1b4a00e505e75baa01193565d",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackRenderTests/SampleBufferAudioOutputRequestTests.swift"
+    },
+    {
+      "fingerprint": "5fbd9e2510d94bf9198878f79dede662adc1590b",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackRenderTests/SampleBufferAudioOutputRequestTests.swift"
+    },
+    {
+      "fingerprint": "b886b7b64b3e669c81b0ddc314e72184a7d1485d",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackRenderTests/SampleBufferAudioOutputRequestTests.swift"
+    },
+    {
+      "fingerprint": "e95451a1d9dc1e8cf4f0bd607951fa1f7608dcca",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/SampleBufferAudioOutputRequestTests.swift"
+    },
+    {
+      "fingerprint": "64a5dc5d9c51bcc4c0836416d0c643261719c01b",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/SampleBufferAudioOutputTests.swift"
+    },
+    {
+      "fingerprint": "9b9d6d008df661e0d6107e62fb2265a6c5c3916a",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/SequencerGaplessTests.swift"
+    },
+    {
+      "fingerprint": "0fc1884c2a12762d75c2e7b3a6fd840adb121e13",
+      "rule": "tests-swift-date-deadline-poll",
+      "path": "Tests/PlaybackRenderTests/SequencerInterruptTests.swift"
+    },
+    {
+      "fingerprint": "7cb8f67f0196310bd1507704d9a3f4ae7849e5f7",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackRenderTests/SequencerInterruptTests.swift"
+    },
+    {
+      "fingerprint": "bfc86a185da060557588cd0dbd39d8e662d4edb3",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/SequencerInterruptTests.swift"
+    },
+    {
+      "fingerprint": "f8b1665aaac21efffd1d9c95c08cb4ed79f044c1",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/SequencerTests.swift"
+    },
+    {
+      "fingerprint": "c67a19d1851ef8721b6c3b2f33ed35e229d88969",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/TimeStretchTests.swift"
+    },
+    {
+      "fingerprint": "94601dcaaee8798f155abedc17f5140ad03e9713",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/TransportFailureTests.swift"
+    },
+    {
+      "fingerprint": "fa812a03a95444f597c3d9d9f80c997c5ef98527",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/TransportFormatChangeTests.swift"
+    },
+    {
+      "fingerprint": "1afb6a360a159ef8f6979194d9befd4a01b64013",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/TransportJoinTests.swift"
+    },
+    {
+      "fingerprint": "a44461675e1da7a27da3df2edb7aa66d299ad07a",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/TransportReFeedTests.swift"
+    },
+    {
+      "fingerprint": "aec7ccd63be6412cf438ebc52cc0b71c8c63d42d",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/TransportSecondsTests.swift"
+    },
+    {
+      "fingerprint": "097874a676a671adb42846df5f0963732725d656",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/TransportStreamMetadataTests.swift"
+    },
+    {
+      "fingerprint": "88752893049bee8c4ec43195eab62e4c95e773c9",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackRenderTests/TransportTests.swift"
+    },
+    {
+      "fingerprint": "063bac4a3561571a6beaa728fc81becb00b6c7e0",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackStreamingTests/ByteRangeSetTests.swift"
+    },
+    {
+      "fingerprint": "5e6a5c1fe93313d4063b92ff5010a6c11947fab7",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackStreamingTests/GrowingFileByteSourceTests.swift"
+    },
+    {
+      "fingerprint": "f29032d2a6364b7c0003add9018f3172b69c782a",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackStreamingTests/GrowingFileClientCertificateTests.swift"
+    },
+    {
+      "fingerprint": "793b3f40683866e22e57cbd92afe64b9999b2345",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackStreamingTests/GrowingFileConnectionPolicyTests.swift"
+    },
+    {
+      "fingerprint": "33351567c33b7bc0c269e08b6e51a34634d02dbd",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackStreamingTests/GrowingFileContractCase.swift"
+    },
+    {
+      "fingerprint": "14512fa877c7980f4f7a7a450d67a8c39dbc7704",
+      "rule": "tests-swift-date-deadline-poll",
+      "path": "Tests/PlaybackStreamingTests/GrowingFileContractTests.swift"
+    },
+    {
+      "fingerprint": "a153576f094fd62ce9c196232125a30960830a1d",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackStreamingTests/GrowingFileContractTests.swift"
+    },
+    {
+      "fingerprint": "2f5ae71e5d1865e6bb5d4c1e6f573eb48da4dbdd",
+      "rule": "tests-swift-date-deadline-poll",
+      "path": "Tests/PlaybackStreamingTests/GrowingFileDecodeTests.swift"
+    },
+    {
+      "fingerprint": "9383fc7547bc6c6be9e4d3556ea5e000c7f3e420",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackStreamingTests/GrowingFileDecodeTests.swift"
+    },
+    {
+      "fingerprint": "c49f21c42a1b0907620de5815bdc337b944c691b",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackStreamingTests/GrowingFileDecodeTests.swift"
+    },
+    {
+      "fingerprint": "851342025da2ec355e2ce3a929bc5d3cf4287d08",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackStreamingTests/GrowingFileDownloadReadRuleTests.swift"
+    },
+    {
+      "fingerprint": "efc629b71e585e205e17c3634cbb43f0a43491bb",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackStreamingTests/GrowingFileStoreTests.swift"
+    },
+    {
+      "fingerprint": "fe7ee0cb02b7aac6925f4a5a07eadd0e029b015a",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackStreamingTests/LoopbackFaultKnobTests.swift"
+    },
+    {
+      "fingerprint": "53a5e9a8308545bdd41b449044f00b597849b4c8",
+      "rule": "tests-swift-date-deadline-poll",
+      "path": "Tests/PlaybackStreamingTests/ManualGrowingFileClock.swift"
+    },
+    {
+      "fingerprint": "7d3a6a432534cb3632e7ffa7e57cdfb4d8d2568c",
+      "rule": "tests-swift-sleep",
+      "path": "Tests/PlaybackStreamingTests/ManualGrowingFileClock.swift"
+    },
+    {
+      "fingerprint": "cc3734243670d30c229389377c228a38e3e2c054",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/PlaybackStreamingTests/StreamingChaosTests.swift"
+    },
+    {
+      "fingerprint": "54aa82768cdbfd5ec154a79ec24f9669a8527234",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/RecipesTests/AudioProcessorRecipe.swift"
+    },
+    {
+      "fingerprint": "7cbb76ed918c8754b15fca73857e5d3150f21edd",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/RecipesTests/AudioProcessorRecipe.swift"
+    },
+    {
+      "fingerprint": "ba75a07576439c5979bdfce4fe8198946910e1ad",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/RecipesTests/GaplessQueueRecipe.swift"
+    },
+    {
+      "fingerprint": "05b07db5edded90c8cbc97c30fcc5513cabd9a45",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/RecipesTests/HandleErrorsRecipe.swift"
+    },
+    {
+      "fingerprint": "b9a65f8a62ce8e778f1c89e5f61e771dc359b57b",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/RecipesTests/NowPlayingRecipe.swift"
+    },
+    {
+      "fingerprint": "f8f8694bc16840be938bb5b360a2a3ac6c771bd4",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/RecipesTests/PlayAFileRecipe.swift"
+    },
+    {
+      "fingerprint": "4f49a34794a35b126ee1b8c929c835c1fc45f0f1",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/RecipesTests/SeekAndProgressRecipe.swift"
+    },
+    {
+      "fingerprint": "a5cf9db08291c6f694e1ee2601c71d9b02689a04",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/RecipesTests/SeekAndProgressRecipe.swift"
+    },
+    {
+      "fingerprint": "4a38a373fa985493c04efd00522c47d5cdf43f0f",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/RecipesTests/StreamAURLRecipe.swift"
+    },
+    {
+      "fingerprint": "3a0fa6576f38e055be6cc025199eded83b9b8a1a",
+      "rule": "tests-swift-xctest-unit",
+      "path": "Tests/RecipesTests/TestAppCodeRecipe.swift"
+    }
+  ]
+}
