@@ -22,6 +22,11 @@ final class PlayerStartGateTests: XCTestCase {
         }
     }
 
+    @MainActor
+    private final class GateEndLog {
+        var ends: [StartGateEnd<String>] = []
+    }
+
     private var rig: PlayerRig!
     private var gates: Gates!
     private var player: Player<String> { rig.player }
@@ -140,6 +145,62 @@ final class PlayerStartGateTests: XCTestCase {
         rig.run(for: 1)
         XCTAssertNotEqual(rig.output.rate, 0)
         XCTAssertGreaterThan(player.position, 0)
+    }
+
+    private func recordGateEnds() -> GateEndLog {
+        let log = GateEndLog()
+        player.startGateEnded = { log.ends.append($0) }
+        return log
+    }
+
+    func testAPauseThenPlayQueuedBeforeTheGateTaskResumesReportsTheWithdrawalAtCancelTime() async {
+        let log = recordGateEnds()
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 1)
+        await letGateTasksRun()
+        player.pause()
+        player.play()
+        XCTAssertEqual(log.ends.map(\.item), ["a"], "reported before the cancelled task resumes")
+        XCTAssertEqual(log.ends.map(\.reason), [.intentWithdrawn])
+        gates.open("a")
+        await letGateTasksRun()
+        XCTAssertEqual(log.ends.count, 1)
+    }
+
+    func testAReplacedItemReportsItsGateSuperseded() async {
+        let log = recordGateEnds()
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 1)
+        await letGateTasksRun()
+        player.setItems(["b"])
+        XCTAssertEqual(log.ends.map(\.item), ["a"])
+        XCTAssertEqual(log.ends.map(\.reason), [.superseded])
+    }
+
+    func testAJumpToTheArmedNextReportsTheLeftItemSuperseded() async {
+        let log = recordGateEnds()
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 1)
+        await letGateTasksRun()
+        player.skipToNext()
+        XCTAssertEqual(log.ends.map(\.item), ["a"])
+        XCTAssertEqual(log.ends.map(\.reason), [.superseded])
+    }
+
+    func testAGateThatReturnsReportsNoEnd() async {
+        let log = recordGateEnds()
+        player.setItems(["a"])
+        player.play()
+        rig.run(for: 1)
+        await letGateTasksRun()
+        gates.open("a")
+        await letGateTasksRun()
+        rig.run(for: 1)
+        XCTAssertNotEqual(rig.output.rate, 0)
+        XCTAssertTrue(log.ends.isEmpty)
     }
 
     func testNoGateStartsAtOnce() {

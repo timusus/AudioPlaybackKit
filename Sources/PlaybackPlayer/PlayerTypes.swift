@@ -61,6 +61,20 @@ public enum PlayWhenReadyChangeReason: Sendable {
     case routeLost, interruptionEnded, endOfItem
 }
 
+/// Why a `startGate` was cancelled, read at the moment of cancellation rather than when its task resumes.
+public enum StartGateEndReason: Sendable {
+    /// A pause or stop: play is no longer intended for the gated item.
+    case intentWithdrawn
+    /// A load or jump replaced the gated item; the new current is gated afresh.
+    case superseded
+}
+
+/// A cancelled start gate, tied to the item it was holding.
+public struct StartGateEnd<Item: Hashable & Sendable>: Sendable {
+    public let item: Item
+    public let reason: StartGateEndReason
+}
+
 /// Discrete things the state cannot carry: each is sent once, in order, after the state that caused
 /// it has been written.
 public enum PlayerEvent<Item: Hashable & Sendable>: Sendable {

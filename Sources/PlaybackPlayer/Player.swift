@@ -63,10 +63,14 @@ public final class Player<Item: Hashable & Sendable> {
     /// and the item then starts only on the next `play()`. Resumes, seeks and gapless joins are not gated.
     @ObservationIgnored public var startGate: (@Sendable (Item) async -> Void)?
 
+    /// Called synchronously when a gate in flight is cancelled, before its task resumes, so the reason
+    /// is the one at cancel time even if a later `play()` is already queued.
+    @ObservationIgnored public var startGateEnded: (@MainActor (StartGateEnd<Item>) -> Void)?
+
     private var intent = false {
         didSet {
             updateRebuffering()
-            if !intent { endGate() }
+            if !intent { endGate(.intentWithdrawn) }
         }
     }
     private var storedRate: Double = 1
@@ -125,6 +129,7 @@ public final class Player<Item: Hashable & Sendable> {
     /// The loaded item has not started yet, so its first play waits on `startGate`.
     @ObservationIgnored private var gatePending = false
     @ObservationIgnored private var gateTask: Task<Void, Never>?
+    @ObservationIgnored private var gateItem: Item?
 
     public convenience init(
         makeSource: @escaping ItemSourceFactory<Item>,
@@ -477,21 +482,25 @@ public final class Player<Item: Hashable & Sendable> {
             return transport.play()
         }
         guard gateTask == nil else { return }
+        gateItem = item
         gateTask = Task { @MainActor [weak self] in
             await startGate(item)
             guard !Task.isCancelled, let self else { return }
             gateTask = nil
+            gateItem = nil
             gatePending = false
             if intent, sessionActive, suppression == .unsuppressed, loadedKey == key, error == nil { transport.play() }
         }
     }
 
     /// Cancelled with the intent, a stop or a new load, so a finished gate never starts a stale item.
-    private func endGate() {
+    private func endGate(_ reason: StartGateEndReason) {
         guard let gateTask else { return }
         gateTask.cancel()
         self.gateTask = nil
         gatePending = false
+        if let item = gateItem { startGateEnded?(StartGateEnd(item: item, reason: reason)) }
+        gateItem = nil
     }
 
     private func deactivate() {
@@ -619,7 +628,7 @@ public final class Player<Item: Hashable & Sendable> {
         }
         // A gate in flight belongs to the item being left; the new current is gated afresh.
         let gated = gateTask != nil
-        endGate()
+        endGate(.superseded)
         seekTransport(item: armedKey, to: seconds)
         loadedKey = armedKey
         self.armedKey = nil
@@ -767,7 +776,7 @@ public final class Player<Item: Hashable & Sendable> {
         refreshState()
         // During an interruption a seek or skip is applied paused. Otherwise the intent takes the
         // session it lacks, as after a play with nothing to play.
-        endGate()
+        endGate(.superseded)
         gatePending = true
         if intent, suppression == .unsuppressed { sessionActive ? startTransport() : activate() }
         armNext()
@@ -775,7 +784,7 @@ public final class Player<Item: Hashable & Sendable> {
 
     /// Stops the transport and forgets what it held, keeping the list and position.
     private func unload(as state: PlaybackState) {
-        endGate()
+        endGate(.intentWithdrawn)
         transport.stop()
         keyedEntries = [:]
         keyedItems.forget(below: lastKey + 1)
