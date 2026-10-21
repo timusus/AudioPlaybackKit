@@ -58,8 +58,16 @@ public final class Player<Item: Hashable & Sendable> {
     /// Each event as it is sent, before `events` yields it: a test sees it without awaiting the stream.
     @_spi(Testing) @ObservationIgnored public var onEvent: ((PlayerEvent<Item>) -> Void)?
 
+    /// Awaited before a loaded item first plays: the item is prepared and paused meanwhile, and the
+    /// transport starts when this returns. A pause, stop or load that replaces the item ends the wait
+    /// and the item then starts only on the next `play()`. Resumes, seeks and gapless joins are not gated.
+    @ObservationIgnored public var startGate: (@Sendable (Item) async -> Void)?
+
     private var intent = false {
-        didSet { updateRebuffering() }
+        didSet {
+            updateRebuffering()
+            if !intent { endGate() }
+        }
     }
     private var storedRate: Double = 1
     private var storedVolume: Float = 1
@@ -114,6 +122,9 @@ public final class Player<Item: Hashable & Sendable> {
     /// The activation awaiting its answer; a stop or interruption since makes the answer stale.
     @ObservationIgnored private var pendingActivation: Int?
     @ObservationIgnored private var lastActivation = 0
+    /// The loaded item has not started yet, so its first play waits on `startGate`.
+    @ObservationIgnored private var gatePending = false
+    @ObservationIgnored private var gateTask: Task<Void, Never>?
 
     public convenience init(
         makeSource: @escaping ItemSourceFactory<Item>,
@@ -277,7 +288,7 @@ public final class Player<Item: Hashable & Sendable> {
             }
             // A load that failed left nothing to play, so the session stays inactive.
             guard error == nil else { return }
-            if sessionActive { transport.play() } else { activate() }
+            if sessionActive { startTransport() } else { activate() }
         }
     }
 
@@ -455,8 +466,32 @@ public final class Player<Item: Hashable & Sendable> {
             }
             sessionActive = true
             suppression = .unsuppressed
-            if intent, loadedKey != nil, error == nil { transport.play() }
+            if intent, loadedKey != nil, error == nil { startTransport() }
         }
+    }
+
+    /// `transport.play()`, after `startGate` if the loaded item has not started yet.
+    private func startTransport() {
+        guard gatePending, let startGate, let item = currentItem, let key = loadedKey else {
+            gatePending = false
+            return transport.play()
+        }
+        guard gateTask == nil else { return }
+        gateTask = Task { @MainActor [weak self] in
+            await startGate(item)
+            guard !Task.isCancelled, let self else { return }
+            gateTask = nil
+            gatePending = false
+            if intent, suppression == .unsuppressed, loadedKey == key, error == nil { transport.play() }
+        }
+    }
+
+    /// Cancelled with the intent, a stop or a new load, so a finished gate never starts a stale item.
+    private func endGate() {
+        guard let gateTask else { return }
+        gateTask.cancel()
+        self.gateTask = nil
+        gatePending = false
     }
 
     private func deactivate() {
@@ -725,12 +760,15 @@ public final class Player<Item: Hashable & Sendable> {
         refreshState()
         // During an interruption a seek or skip is applied paused. Otherwise the intent takes the
         // session it lacks, as after a play with nothing to play.
-        if intent, suppression == .unsuppressed { sessionActive ? transport.play() : activate() }
+        endGate()
+        gatePending = true
+        if intent, suppression == .unsuppressed { sessionActive ? startTransport() : activate() }
         armNext()
     }
 
     /// Stops the transport and forgets what it held, keeping the list and position.
     private func unload(as state: PlaybackState) {
+        endGate()
         transport.stop()
         keyedEntries = [:]
         keyedItems.forget(below: lastKey + 1)
