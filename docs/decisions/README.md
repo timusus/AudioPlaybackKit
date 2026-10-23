@@ -36,5 +36,6 @@ and is kept as history. The overview is in [architecture](../architecture.md).
 | [0028](0028-first-audio-and-buffering-events.md) | `firstAudioRendered` after each load, seek or transition, and a `bufferingStarted`/`bufferingEnded` pair per rebuffer while playing, both from the transport's buffering status. | Accepted (2026-10-13) |
 | [0029](0029-structured-errors.md) | Every failure carries a media3-style `PlaybackErrorCategory` from the byte source through the decoder to `PlaybackError`; a reader's own failure wins over the C status. | Accepted (2026-10-13) |
 | [0030](0030-speed-is-a-time-stretch-before-enqueue.md) | Speed is an AUNewTimePitch time-stretch before enqueue, re-fed like an effect change; the output stays at rate 1 and the map records output frames per segment. | Accepted (2026-10-20) |
+| [0031](0031-position-is-read-on-demand.md) | Position is computed on read from a published snapshot; periodic and boundary observers replace the 100 ms cadence. | Accepted (2026-10-23) |
 
 These decisions were first made in the Shuttle Podcasts app and moved here with the code.
