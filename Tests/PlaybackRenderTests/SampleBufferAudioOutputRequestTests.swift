@@ -20,8 +20,26 @@ final class SampleBufferAudioOutputRequestTests: XCTestCase {
         func wait() -> Bool { semaphore.wait(timeout: .now() + 5) == .success }
     }
 
-    private func makeOutput() -> (SampleBufferAudioOutput, Ready) {
-        let output = SampleBufferAudioOutput()
+    /// Holds each ready-for-more block until the test delivers it, as often as the test likes.
+    private final class CuedRenderer: AVSampleBufferAudioRenderer, @unchecked Sendable {
+        private let lock = NSLock()
+        private var blocks: [(queue: DispatchQueue, block: @Sendable () -> Void)] = []
+
+        var requests: Int { lock.withLock { blocks.count } }
+
+        override func requestMediaDataWhenReady(on queue: DispatchQueue, using block: @escaping @Sendable () -> Void) {
+            lock.withLock { blocks.append((queue, block)) }
+        }
+
+        /// Runs request `index`'s block on its queue and returns once it has.
+        func deliver(_ index: Int) {
+            let request = lock.withLock { blocks[index] }
+            request.queue.sync(execute: request.block)
+        }
+    }
+
+    private func makeOutput(_ renderer: AVSampleBufferAudioRenderer? = nil) -> (SampleBufferAudioOutput, Ready) {
+        let output = renderer.map { renderer in SampleBufferAudioOutput(newRenderer: { renderer }) } ?? SampleBufferAudioOutput()
         let ready = Ready()
         output.setEventHandler { ready.handle($0) }
         return (output, ready)
@@ -41,14 +59,34 @@ final class SampleBufferAudioOutputRequestTests: XCTestCase {
     }
 
     func testArmingTwiceBeforeItFiresSendsOneEvent() {
-        let (output, ready) = makeOutput()
+        let renderer = CuedRenderer()
+        let (output, ready) = makeOutput(renderer)
 
         output.requestMediaDataWhenReady()
         output.requestMediaDataWhenReady()
-        XCTAssertTrue(ready.wait())
-        Thread.sleep(forTimeInterval: 0.2)
+        XCTAssertEqual(renderer.requests, 1)
+        // Apple does not promise that stopping inside the block cancels a delivery already queued.
+        renderer.deliver(0)
+        renderer.deliver(0)
 
         XCTAssertEqual(ready.count, 1)
+        XCTAssertFalse(output.isRequestingMediaData)
+    }
+
+    func testALateRepeatOfAFiredRequestDoesNotAnswerTheNextOne() {
+        let renderer = CuedRenderer()
+        let (output, ready) = makeOutput(renderer)
+        output.requestMediaDataWhenReady()
+        renderer.deliver(0)
+
+        output.requestMediaDataWhenReady()
+        renderer.deliver(0)
+        XCTAssertEqual(ready.count, 1)
+        XCTAssertTrue(output.isRequestingMediaData)
+
+        renderer.deliver(1)
+        XCTAssertEqual(ready.count, 2)
+        XCTAssertFalse(output.isRequestingMediaData)
     }
 
     func testARequestStillWorksAfterAFlush() {

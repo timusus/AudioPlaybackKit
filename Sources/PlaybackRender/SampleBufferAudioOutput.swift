@@ -21,15 +21,20 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     private var handler: (@Sendable (AudioOutputEvent) -> Void)?
     // Under `lock`: the current renderer has a ready-for-more request armed.
     private var requesting = false
+    // Under `lock`: numbers each arm, so a block repeated from an earlier arm cannot answer a later one.
+    private var arm = 0
     // Under `lock`: the lowest sample rate ever enqueued, for the partial flush's rounding margin.
     private var lowestSampleRate = 48000.0
     private let readyQueue = DispatchQueue(label: "SampleBufferAudioOutput.ready")
+    private let newRenderer: @Sendable () -> AVSampleBufferAudioRenderer
     #if os(iOS)
     private var resetObserver: (any NSObjectProtocol)?
     #endif
 
-    init() {
-        (_renderer, _synchronizer) = settings.makeRenderer()
+    /// `newRenderer` lets a test stand in a renderer that delivers its ready-for-more block on cue.
+    init(newRenderer: @escaping @Sendable () -> AVSampleBufferAudioRenderer = { AVSampleBufferAudioRenderer() }) {
+        self.newRenderer = newRenderer
+        (_renderer, _synchronizer) = settings.makeRenderer(newRenderer())
         observers = observe(_renderer)
         #if os(iOS)
         // The audio objects must be recreated after a reset (AVAudioSession docs).
@@ -122,27 +127,32 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     var isRequestingMediaData: Bool { lock.withLock { requesting } }
 
     func requestMediaDataWhenReady() {
-        let renderer: AVSampleBufferAudioRenderer? = lock.withLock {
+        let request: (renderer: AVSampleBufferAudioRenderer, arm: Int)? = lock.withLock {
             guard !requesting else { return nil }
             requesting = true
-            return _renderer
+            arm += 1
+            return (_renderer, arm)
         }
-        guard let renderer else { return }
+        guard let (renderer, arm) = request else { return }
         // Replaces any block still held from an earlier arm, so only one is ever live.
         renderer.stopRequestingMediaData()
         // The renderer calls the block for as long as it stays ready; one call is all the feeder needs.
+        // Stopping inside it need not cancel a call already queued, so only the first call of the live arm sends.
         renderer.requestMediaDataWhenReady(on: readyQueue) { [weak self, weak renderer] in
             guard let self, let renderer else { return }
             renderer.stopRequestingMediaData()
-            lock.withLock { if renderer === self._renderer { self.requesting = false } }
-            send(.readyForMoreMediaData, from: renderer)
+            lock.withLock {
+                guard renderer === self._renderer, self.requesting, arm == self.arm else { return }
+                self.requesting = false
+                self.send(.readyForMoreMediaData, from: renderer)
+            }
         }
     }
 
     /// A fresh renderer on a fresh synchronizer: Apple does not say whether a synchronizer survives
     /// a media-services reset, and a new one costs little.
     func rebuild() throws {
-        let (renderer, synchronizer) = lock.withLock { settings }.makeRenderer()
+        let (renderer, synchronizer) = lock.withLock { settings }.makeRenderer(newRenderer())
         if renderer.status == .failed { throw renderer.error ?? AudioOutputError.rendererFailed }
         let observers = observe(renderer)
         let old = lock.withLock {
@@ -226,8 +236,7 @@ private struct RendererSettings {
     var deviceUniqueID: String?
     #endif
 
-    func makeRenderer() -> (AVSampleBufferAudioRenderer, AVSampleBufferRenderSynchronizer) {
-        let renderer = AVSampleBufferAudioRenderer()
+    func makeRenderer(_ renderer: AVSampleBufferAudioRenderer) -> (AVSampleBufferAudioRenderer, AVSampleBufferRenderSynchronizer) {
         renderer.volume = volume
         #if os(macOS)
         // Nil is the system default already, and setting it raises.
