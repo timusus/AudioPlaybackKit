@@ -8,6 +8,7 @@ struct HostApp: App {
             Text("Playback device tests")
                 // A backgrounded host cannot activate a non-mixable session (`!int`), so the phone must not auto-lock mid-run.
                 .onAppear { UIApplication.shared.isIdleTimerDisabled = true }
+                .task { if EnergyScenario.isRequested { await EnergyScenario.run() } }
         }
     }
 }

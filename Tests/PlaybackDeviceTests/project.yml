@@ -20,6 +20,16 @@ targets:
     platform: iOS
     sources:
       - Host
+      # The energy scenario (PLAYBACK_ENERGY=1) plays this file; see scripts/device-energy.sh.
+      - path: Fixtures/cbr_info_64k.mp3
+        buildPhase: resources
+    dependencies:
+      - package: AudioPlaybackKit
+        product: PlaybackPlayer
+      - package: AudioPlaybackKit
+        product: PlaybackRender
+      - package: AudioPlaybackKit
+        product: PlaybackDecode
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.simplecityapps.playbackdevicetests
