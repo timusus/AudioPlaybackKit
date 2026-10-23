@@ -126,6 +126,9 @@ jobs:
       - name: Test PlaybackStreamingTests on the simulator
         env:
           UDID: ${{ steps.simulator.outputs.udid }}
+          # Under xcodebuild the test host mirrors os_log to stderr synchronously; when the runner
+          # drains that pipe slowly, Network.framework blocks mid-log and a listener misses `.ready`.
+          TEST_RUNNER_OS_ACTIVITY_MODE: disable
         run: |
           set -o pipefail
           mkdir -p .build
