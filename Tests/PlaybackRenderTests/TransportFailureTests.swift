@@ -44,9 +44,17 @@ final class TransportFailureTests: XCTestCase {
     private let timer = ManualPumpTimer()
     private let executor = ManualExecutor()
     private let recorder = EventRecorder()
-    private lazy var transport = Transport<String>(output: output, timer: timer, executor: executor) { [recorder] in
-        recorder.append($0)
-    }
+    private lazy var transport: Transport<String> = {
+        let transport = Transport<String>(output: output, timer: timer, executor: executor) { [recorder] in
+            recorder.append($0)
+        }
+        sampled = transport
+        return transport
+    }()
+
+    /// The transport `pump()` reads position from. A test with its own sets it, so the read never builds the
+    /// fixture as a second transport on the shared timer.
+    private weak var sampled: Transport<String>?
 
     /// Three seconds, samples 0 to 23.
     private lazy var a = FakeItemSource(format: PCMFormat(sampleRate: 8, channelCount: 1), frames: 24, chunkFrames: 2)
@@ -58,7 +66,7 @@ final class TransportFailureTests: XCTestCase {
         timer.fire()
         // A dropped next item's flush is queued from inside the pump; wait for it, or it races the test's reads.
         timer.sync()
-        guard let position = transport.position else { return }
+        guard let position = sampled?.position else { return }
         let sample = "\(position.item) \(position.seconds)"
         if sample != positions.last { positions.append(sample) }
     }
@@ -154,6 +162,7 @@ final class TransportFailureTests: XCTestCase {
             recorder.append(event)
             if case .failed = event { output.advanceAfterNextRead(by: 0.5) }
         }
+        sampled = transport
         transport.setCurrent(item: "a", source: a)
         transport.setNext(item: "b", source: FailingSource(chunks: 6, base: 1000))
         transport.play()

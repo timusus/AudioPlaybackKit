@@ -54,10 +54,18 @@ final class TransportTests: XCTestCase {
     private let timer = ManualPumpTimer()
     private let executor = ManualExecutor()
     private let recorder = EventRecorder()
-    private lazy var transport = Transport<String>(output: output, timer: timer, executor: executor,
-                                                   stretch: FakeStretchUnit.stretch()) { [recorder] in
-        recorder.append($0)
-    }
+    private lazy var transport: Transport<String> = {
+        let transport = Transport<String>(output: output, timer: timer, executor: executor,
+                                          stretch: FakeStretchUnit.stretch()) { [recorder] in
+            recorder.append($0)
+        }
+        sampled = transport
+        return transport
+    }()
+
+    /// The transport `pump()` reads position from. A test with its own sets it, so the read never builds the
+    /// fixture as a second transport on the shared timer; weak, so dropping that transport still frees it.
+    private weak var sampled: Transport<String>?
 
     /// Three seconds, samples 0 to 23.
     private lazy var a = FakeItemSource(format: mono, frames: 24, chunkFrames: 2)
@@ -72,7 +80,7 @@ final class TransportTests: XCTestCase {
         timer.sync()
         executor.runUntilIdle()
         timer.fire()
-        guard let position = transport.position else { return }
+        guard let position = sampled?.position else { return }
         let heard = Heard(item: position.item, frame: Int64(position.seconds * 8))
         if heard != positions.last { positions.append(heard) }
     }
@@ -865,6 +873,7 @@ final class TransportTests: XCTestCase {
 
     func testDroppingTheTransportStopsTheOutput() {
         var transport: Transport<String>? = Transport(output: output, timer: timer, executor: executor) { _ in }
+        sampled = transport
         transport?.setCurrent(item: "a", source: long)
         transport?.play()
         pump()
