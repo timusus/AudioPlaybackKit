@@ -107,6 +107,20 @@ final class TransportSchedulingTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 0.03, accuracy: 1e-9)
     }
 
+    func testAFrozenClockArmsTheCadenceInsteadOfSpinning() {
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        advance(by: 0)
+        XCTAssertEqual(statuses.last, .playing)
+        let armed = timer.armCount
+
+        // A starved renderer's clock stops at rate 1 until its stall event comes.
+        timer.advance(by: 1, clock: { _ in }, settle: executor.runUntilIdle)
+
+        XCTAssertLessThanOrEqual(timer.armCount - armed, 11)
+        XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 0.1, accuracy: 1e-9)
+    }
+
     func testTheHeardBoundaryIsDueBeforeTheNextPositionReport() {
         transport.setCurrent(item: "a", source: a)
         transport.setNext(item: "b", source: b)

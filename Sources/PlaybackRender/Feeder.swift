@@ -67,6 +67,8 @@ final class Feeder {
     private var stretch: TimeStretch
     private var playWhenReady = false
     private var outputRunning = false
+    /// The clock the last pump finished at, past any restart it made.
+    private var pumpedAt = -TimeInterval.infinity
     private var upstreamEnded = false
     /// The current buffering began as an underrun, so it waits for `rebufferDepth`, not `resumeDepth`.
     private var afterUnderrun = false
@@ -299,6 +301,7 @@ final class Feeder {
             }
         }
 
+        pumpedAt = output.currentTime()
         report()
     }
 
@@ -317,9 +320,13 @@ final class Feeder {
         let clock = output.currentTime(), latency = output.outputLatency
         // A clock within 1 % of an interval short of a multiple is at it, so float noise never arms ~0.
         var due = ((clock / pumpInterval + 0.01).rounded(.down) + 1) * pumpInterval
-        due = min(due, map.writtenEnd + (upstreamEnded ? latency : 0))
-        if let boundary = map.nextHeardBoundary(after: playhead()) { due = min(due, boundary + latency) }
-        if map.writtenEnd - clock >= Self.maxDepth { due = min(due, map.writtenEnd - Self.maxDepth + resumeDepth) }
+        // Work due by the last pump's clock was that pump's: arming it again would spin while the clock is frozen.
+        func consider(_ deadline: TimeInterval) {
+            if deadline > pumpedAt { due = min(due, deadline) }
+        }
+        consider(map.writtenEnd + (upstreamEnded ? latency : 0))
+        if let boundary = map.nextHeardBoundary(after: playhead()) { consider(boundary + latency) }
+        if map.writtenEnd - clock >= Self.maxDepth { consider(map.writtenEnd - Self.maxDepth + resumeDepth) }
         return due
     }
 
