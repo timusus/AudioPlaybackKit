@@ -15,8 +15,8 @@ and nothing else:
   `AVSampleBufferAudioRenderer`, joins items gaplessly, maps the synchronizer's clock back to the frame
   heard, and recovers a failed renderer once ([ADR-0018](decisions/0018-render-layer.md)).
 - **`PlaybackPlayer`**: `Player` keeps the item list and play intent, arms the next item, owns the
-  `AVAudioSession`, and publishes state and position as `@Observable` properties plus one event stream
-  ([ADR-0019](decisions/0019-player.md)). It drives `Transport` only through its public API.
+  `AVAudioSession`, and publishes state as `@Observable` properties plus one event stream; position is
+  read on demand, with time observers ([ADR-0019](decisions/0019-player.md), [ADR-0031](decisions/0031-position-is-read-on-demand.md)). It drives `Transport` only through its public API.
 - **`PlaybackNowPlaying`**: `NowPlayingSession` publishes a `Player` to Now Playing and routes the remote
   commands back to it ([ADR-0020](decisions/0020-now-playing-drives-a-protocol.md)).
 

@@ -28,7 +28,7 @@ The references are media3's `Player` (`playWhenReady` and `playbackState` kept a
 `setPauseAtEndOfMediaItems`, `handleAudioBecomingNoisy`, `MediaSession` as a separate module) and
 AVFoundation's `AVPlayer` (`timeControlStatus` with `reasonForWaitingToPlay`, periodic time observers,
 `AVQueuePlayer`, `actionAtItemEnd`). From AVPlayer we keep the idea that waiting has a reason and that
-the position is pushed to the UI on a cadence; we reject KVO on `AVPlayerItem.status`, the lack of a
+the UI subscribes to periodic and boundary time observers (ADR-0031); we reject KVO on `AVPlayerItem.status`, the lack of a
 `playWhenReady` (an interruption leaves `rate` at 0 and nothing says why), `CMTime`, and
 `AVQueuePlayer`'s forward-only queue that cannot go back. From media3 we keep the state model, the item
 list, the one listener, pause-at-end and the separate session module; we reject a `Timeline` of windows
@@ -170,7 +170,7 @@ public final class Player<Item: Hashable & Sendable> {
     var hasNext: Bool { get }; var hasPrevious: Bool { get }   // internal; availableCommands reports them
 
     // Position, in seconds of the current item's media time.
-    public private(set) var position: TimeInterval   // what is heard; updated every 100 ms while it changes
+    public var position: TimeInterval { get }        // what is heard; read from the output clock (ADR-0031)
     public private(set) var duration: TimeInterval?  // nil until probed, or for a live stream
     public var isSeekable: Bool { get }              // ADR-0022
     public var isLive: Bool { get }                  // unseekable with no duration
@@ -180,6 +180,8 @@ public final class Player<Item: Hashable & Sendable> {
     public func seek(to position: TimeInterval)
     public func seek(to position: TimeInterval, itemAt index: Int)
     public func seek(by delta: TimeInterval)         // clamps to 0...duration, never advances
+    public func addPeriodicObserver(interval:using:) -> TimeObserverToken   // ADR-0031
+    public func addBoundaryObserver(times:using:) -> TimeObserverToken
 
     // Rate and volume.
     public var rate: Double { get set }              // 0.25...4, pitch kept; never 0
@@ -229,11 +231,11 @@ state that caused them has been written, so a handler reading `player.currentInd
 
 **Position.** `TimeInterval`, not `CMTime`: both apps store and display seconds or milliseconds, the
 decoder's sample-accurate seek takes seconds (`seek(toSeconds:)`), and `CMTime` buys a timescale we
-never need because frames at the item's rate stay inside `Transport`. `position` is written when a
-`TransportEvent.position` arrives, which is once a pump (100 ms) while it changes; a view that wants
-2 Hz samples it. Within an item it never goes back except on a seek, so a position saver can take
+never need because frames at the item's rate stay inside `Transport`. `position` is computed from the
+output clock on each read (ADR-0031), so observation sees only its jumps; a view that wants 2 Hz adds
+`addPeriodicObserver(interval: 0.5)` and reads it on each fire. Within an item it never goes back except on a seek, so a position saver can take
 deltas as listening time. `discontinuityCount` is media3's `onPositionDiscontinuity` as an observed
-property: it changes on every seek, skip, load, transition and repeat, and never on a pump. It changes
+property: it changes on every seek, skip, load, transition and repeat, and never on playback. It changes
 with the call, as media3 masks the seek target in at once, not when the seek lands: the call has
 already written the target to `position`, so a reader such as Now Playing gets the jump and the new
 position together, and the landing plays on from there.
@@ -481,7 +483,7 @@ become:
 
 | # | Title | Scope | Size | Depends on |
 |---|---|---|---|---|
-| 1 | Transport in seconds | `Transport.setCurrent(startSeconds:)` and `seek(item:toSeconds:)` (converted after open, frames kept inside); a failed next item is reported and dropped without pausing the current. Duration has landed (#115): `ItemSource.frameCount` in frames, carried by `TransportEvent.position(…, duration:)`. Useful alone: an app on `Transport` stops storing frames | S | #115 (landed) |
+| 1 | Transport in seconds | `Transport.setCurrent(startSeconds:)` and `seek(item:toSeconds:)` (converted after open, frames kept inside); a failed next item is reported and dropped without pausing the current. Duration has landed (#115): `ItemSource.frameCount` in frames, carried by `TransportEvent.durationChanged` (ADR-0031). Useful alone: an app on `Transport` stops storing frames | S | #115 (landed) |
 | 2 | `Player` core | product, item list and edits, state and `playWhenReady`, position and duration, seek within and across items, rate, volume, processors, `events`, `@Observable`; `FakeItemFactory`; the core and edit tests | M | 1, #116 |
 | 3 | Advance, repeat, pause at end | pre-arm and `setNext` handoff, `.crossed` to `itemTransition`, `repeatMode`, `pauseAtEndOfItem`, `.ended`, per-item failure rules; the advance and error tests | M | 2 |
 | 4 | Audio session | `AudioSessionControlling`, `SystemAudioSession`, `AudioSessionConfiguration`, activation, interruptions, route changes, media-services reset interplay; `FakeAudioSession`; the session tests | M | 2 |
@@ -538,8 +540,8 @@ format needs `setProcessors` called again.
   already generic.
 - **No auto-resume after a media-services reset.** It lands paused with `recoveredPaused`, as ADR-0018
   says; revisit only if users report it.
-- **Position is published on every pump.** `@Observable` redraws only the views that read `position`,
-  and a saver samples at its own rate.
+- **Position is read on demand** (ADR-0031, superseding "published on every pump"). A view or saver
+  adds a periodic or boundary observer at its own rate, so playing with none wakes for nobody.
 - **The product is `PlaybackNowPlaying`.** It names the Apple API it wraps, and "session" already means
   `AVAudioSession` here.
 - **A pre-armed next item that fails no longer pauses the current one** (slice 1). `Transport` pauses on

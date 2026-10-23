@@ -44,7 +44,8 @@ The 100 ms cadence and `TransportEvent.position` are gone.
 
 While playing with no observers, the pump wakes only for:
 
-- the refill, every ~29.5 s at the 30 s cap;
+- the refill, every `resumeDepth` (0.5 s) while the 30 s cap is written, or the renderer's ready event
+  when it holds less;
 - item and format boundaries;
 - the end of what is written;
 - decode and output wakes.

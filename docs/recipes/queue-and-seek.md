@@ -33,7 +33,8 @@ rig.player.replaceItems([Track(id: 1), Track(id: 3)], currentIndex: 0)
 
 ## Seeking and progress
 
-`position`, `duration`, `state` and `isSeekable` are observable on the main actor; bind a slider to them.
+`duration`, `state` and `isSeekable` are observable on the main actor. `position` is read from the clock,
+so a slider reads it from `addPeriodicObserver(interval:using:)` (see `docs/usage.md`).
 `seek(to:)` and `seek(by:)` act on the current item and clamp to it; `seek(to:itemAt:)` crosses items.
 
 ```swift

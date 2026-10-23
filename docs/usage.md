@@ -254,7 +254,8 @@ import PlaybackRender
 
 let transport = Transport<Track.ID> { event in          // called on the transport's queue
     switch event {
-    case .position(let id, let seconds, let duration, let isSeekable): break   // media time of `id`; duration nil when unknown
+    case .landed(let id, let seconds): break            // a setCurrent or seek's first audio is written at `seconds` of `id`
+    case .durationChanged(let id, let duration, let isSeekable): break   // duration nil when unknown
     case .crossed(let id, let format): break            // `id` is now heard, decoded at `format`; advance your queue
     case .formatChanged(let id, let format): break      // `id` is now heard in another decoded format
     case .status(let status): break                     // .paused, .buffering, .playing, .ended
@@ -274,8 +275,12 @@ transport.setVolume(0.5)         // 0...1, applied at once
 
 Every method returns at once and runs in call order on the transport's queue. `Item` is any
 `Hashable & Sendable` name for a queue entry. Positions are seconds of the item's media time; a start or
-seek lands on the nearest frame, so a stored resume point seeks back to the frame it was reported at. Use
-the `position` events for the UI and for `MPNowPlayingInfoCenter`; their `duration` is the item's length
+seek lands on the nearest frame, so a stored resume point seeks back to the frame it was reported at.
+`transport.position` is computed from the output clock on each read, on the caller's thread; it is nil
+while a `setCurrent` or `seek` is queued and never goes back within an item. For a UI or
+`MPNowPlayingInfoCenter`, read it from `addPeriodicObserver(interval:using:)`; for an action at a time,
+use `addBoundaryObserver(times:using:)`. Keep the returned token: cancelling or releasing it removes the
+observer. `.durationChanged`'s `duration` is the item's length
 in seconds as FFmpeg probed it, nil for a live stream or a body of unknown length, and `isSeekable` is
 the source's `ItemSource.isSeekable`. `.ended` is not final: a
 `transport.setNext(item:source:)` made after it plays that item on from the end, without a flush. (`Player`
@@ -413,14 +418,20 @@ player.prepare()                                  // from idle: load the current
 ```swift
 struct NowPlayingBar: View {
     let player: Player<Episode>
+    @State private var position: TimeInterval = 0
+    @State private var ticks: TimeObserverToken?
     var body: some View {
         HStack {
             Button(player.playWhenReady ? "Pause" : "Play") { player.playWhenReady.toggle() }
             if player.state == .buffering { ProgressView() }
             if player.suppression == .interruption { Text("Paused by another app") }
-            Slider(value: Binding(get: { player.position }, set: { player.seek(to: $0) }),
+            Slider(value: Binding(get: { position }, set: { player.seek(to: $0) }),
                    in: 0...(player.duration ?? 1)).disabled(!player.isSeekable)
         }
+        // A jump redraws through discontinuityCount; playing on, through the 2 Hz observer.
+        .onChange(of: player.discontinuityCount, initial: true) { position = player.position }
+        .onAppear { ticks = player.addPeriodicObserver(interval: 0.5) { position = player.position } }
+        .onDisappear { ticks = nil }
     }
 }
 ```
@@ -430,8 +441,11 @@ struct NowPlayingBar: View {
   describes the item before), `.ready` or `.ended` (the last item finished; `play()` restarts at 0).
   `isPlaying` is `state == .ready && playWhenReady && suppression == .unsuppressed`. Show a play button from
   `playWhenReady`, not from `isPlaying`, or the button flickers while buffering.
-- **`position`** is what is heard, in seconds of the current item's media time, written on every pump
-  while it changes. `duration` is nil until the item opens and whenever the source does not know it.
+- **`position`** is what is heard, in seconds of the current item's media time, computed from the output
+  clock on each read (ADR-0031). Observation sees only its jumps, through `discontinuityCount`; to follow
+  it playing on, read it from `addPeriodicObserver(interval:using:)`, and act at a time with
+  `addBoundaryObserver(times:using:)`. Both call back on the main actor and stop when their token is
+  cancelled or released. `duration` is nil until the item opens and whenever the source does not know it.
   `isSeekable` is the source's, known once it opens; a server transcode seeks with no `duration`.
   `isLive` is an opened item that neither seeks nor has a duration (ADR-0022).
 - **`audioFormat`** (media3 `getAudioFormat()`) is the current item's sample rate and channel count as
@@ -446,9 +460,11 @@ struct NowPlayingBar: View {
   deltas only while it is unchanged. It may move more than once for one call.
 
 ```swift
+var saver: TimeObserverToken?
 func watch() {
+    saver = player.addPeriodicObserver(interval: 5) { save(player.position) }
     withObservationTracking {
-        _ = (player.state, player.position, player.discontinuityCount)
+        _ = (player.state, player.discontinuityCount)
     } onChange: {
         Task { @MainActor in
             save(player.position)
