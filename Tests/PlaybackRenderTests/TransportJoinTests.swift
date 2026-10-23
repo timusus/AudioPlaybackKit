@@ -236,8 +236,9 @@ final class TransportJoinTests: XCTestCase {
         XCTAssertEqual(positions, positionsOfAThenB)
         XCTAssertEqual(crossed, ["a", "b"])
         XCTAssertEqual(statuses, [.buffering, .playing, .ended])
-        // The frames held at the end of the last item are heard before it ends.
-        XCTAssertEqual(try XCTUnwrap(samples.last).afterEnded, false)
+        // The frames held at the end of the last item are heard before it ends: the pump that reaches b's
+        // end sends `.ended`, so only the sample read after it, at that end, follows `.ended`.
+        XCTAssertEqual(samples.filter(\.afterEnded).map(\.heard), [Heard(item: "b", frame: 16)])
     }
 
     // A format change drains the chain before the flush that reconfigures it, so a's held tail is
