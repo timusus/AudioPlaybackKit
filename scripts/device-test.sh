@@ -63,17 +63,7 @@ check_unlocked() {
 }
 check_unlocked
 
-# Each Apple certificate's OU is its team. More than one team: the Simplecity one, else ask.
-team="${DEVELOPMENT_TEAM:-}"
-if [ -z "$team" ]; then
-  security find-certificate -a -c "Apple D" -p | awk -v dir="$scratch" '/BEGIN/ { n++ } { print > (dir "/cert" n ".pem") }'
-  teams="$(for pem in "$scratch"/cert*.pem; do
-    openssl x509 -noout -subject -in "$pem" | sed -n 's/.*OU *= *\([A-Z0-9]*\), *O *= *\([^,]*\).*/\1 \2/p'
-  done | sort -u)"
-  team="$(echo "$teams" | awk '/Simplecity/ { print $1; exit }')"
-  [ -n "$team" ] || [ "$(echo "$teams" | wc -l)" -ne 1 ] || team="$(echo "$teams" | awk '{ print $1 }')"
-  [ -n "$team" ] || fail "cannot pick a team from the keychain; set DEVELOPMENT_TEAM. Found: $teams"
-fi
+team="$(scripts/lib/device-team.sh)" || fail "no signing team"
 
 build=(-project "$project" -scheme PlaybackDeviceTests -derivedDataPath "$derived" -destination "id=$udid"
   -allowProvisioningUpdates -allowProvisioningDeviceRegistration "DEVELOPMENT_TEAM=$team")
