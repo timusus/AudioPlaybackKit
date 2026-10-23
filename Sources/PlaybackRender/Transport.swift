@@ -45,9 +45,10 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     case recovered
 }
 
-/// Gap between pumps. The feeder's 0.5 s `resumeDepth` is output time at any speed, so even a pump
-/// the OS coalesces to twice this never starves the output.
+/// The temporary position cadence: the gap between `.position` reports while playing, until position
+/// becomes pull-based. No other work is polled at it.
 let pumpInterval: TimeInterval = 0.1
+
 
 /// The one thing an app drives (ADR-0018): a current item, optionally a next item joined
 /// gaplessly at each item's own format, a processor chain, and play, pause, speed and seek.
@@ -89,8 +90,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private var failed = false
     private var takenDiscontinuities = 0
 
-    /// Seconds of the media decoded and queued past what is heard, as of the last pump (every
-    /// `pumpInterval`); any thread. While decode keeps up, as much as the output
+    /// Seconds of the media decoded and queued past what is heard, as of the last pump; any thread. While decode keeps up, as much as the output
     /// takes, at most 30 s; less near the end of what is set.
     /// 0 from the return of a `setCurrent` or `seek`, and after any flush, until a pump refills it.
     public var bufferedAhead: TimeInterval {
@@ -139,7 +139,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
             self?.fail(item: item, error)
         }
         feeder = Feeder(output: output, upstream: upstream, wake: { timer.wake() }, stretch: stretch) { [weak self] in self?.handle($0) }
-        timer.start(interval: pumpInterval, queue: queue) { [weak self] in self?.pump() }
+        timer.start(queue: queue) { [weak self] in self?.pump() }
     }
 
     /// Dropping the transport stops playback as `stop()` does, without the `.ended` event.
@@ -152,7 +152,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// Stops playback and forgets every item: decode is interrupted, the output flushed and held, and
     /// `.ended` reported. A `setCurrent` starts again.
     public func stop() {
-        queue.async { [self] in
+        run { [self] in
             ids = [:]
             failed = false
             Self.tearDown(upstream, feeder)
@@ -170,7 +170,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     public func setCurrent(item: Item, source: any ItemSource, startSeconds: TimeInterval = 0) {
         precondition(startSeconds >= 0 && startSeconds.isFinite)
         callDiscontinuity()
-        queue.async { [self] in
+        run { [self] in
             takenDiscontinuities += 1
             let id = newID()
             ids = [id: item]
@@ -185,7 +185,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// open). Near the end it joins gaplessly, and after `.ended` it plays on from where the output
     /// stopped. Ignored before a `setCurrent`.
     public func setNext(item: Item, source: any ItemSource) {
-        queue.async { [self] in
+        run { [self] in
             guard !ids.isEmpty else { return }
             clearUnheardNext()
             let id = newID()
@@ -196,25 +196,25 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
 
     /// Removes the next item unless it is heard already.
     public func clearNext() {
-        queue.async { [self] in clearUnheardNext() }
+        run { [self] in clearUnheardNext() }
     }
 
     public func play() {
-        queue.async { [self] in
+        run { [self] in
             guard !failed else { return }
             feeder.play()
         }
     }
 
     public func pause() {
-        queue.async { [self] in feeder.pause() }
+        run { [self] in feeder.pause() }
     }
 
     /// Speed, with pitch kept: a time-stretch before enqueue, re-fed gaplessly like a processor change
     /// (ADR-0030). Audio already queued within half a second plays at the old speed. Use `pause()` to stop.
     public func setRate(_ rate: Double) {
         precondition(rate > 0, "pause() stops playback")
-        queue.async { [self] in feeder.setRate(rate) }
+        run { [self] in feeder.setRate(rate) }
     }
 
     /// Plays on from `seconds` into `item`, which must be the item heard now or one set after it. A
@@ -222,7 +222,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     public func seek(item: Item, toSeconds seconds: TimeInterval) {
         precondition(seconds >= 0 && seconds.isFinite)
         callDiscontinuity()
-        queue.async { [self] in
+        run { [self] in
             takenDiscontinuities += 1
             let id = ids.filter { $0.value == item }.keys.min()
             onEvent(.sought(item: item, seconds: seconds, applied: id != nil))
@@ -246,7 +246,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// re-fed, and after a failure it replays from the heard frame. Each processor's `flush` gets the `Item` whose
     /// frames follow. Call it again after a change that alters a processor's `isActive` or output format.
     public func setProcessors(_ processors: [any AudioProcessor]) {
-        queue.async { [self] in
+        run { [self] in
             upstream.setProcessors(processors)
             refeedFromHeard()
         }
@@ -258,7 +258,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// the parameters are read when the next chunk is processed. Set a fade through `setVolume`, not
     /// here. Does nothing after a failure, which only a seek, `setCurrent` or `setProcessors` clears.
     public func processorsChanged() {
-        queue.async { [self] in
+        run { [self] in
             guard !failed else { return }
             refeedFromHeard()
         }
@@ -291,9 +291,24 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         publishBufferedAhead()
     }
 
+    /// Every call runs here, so the timer is re-armed for whatever it changed.
+    private func run(_ body: @escaping () -> Void) {
+        queue.async { [self] in
+            body()
+            schedule()
+        }
+    }
+
     private func pump() {
         feeder.pump()
         publishBufferedAhead()
+        schedule()
+    }
+
+    /// Arms the one-shot timer for the feeder's next clock-driven work, or nothing. The output plays
+    /// at rate 1 (ADR-0030), so output seconds are wall seconds.
+    private func schedule() {
+        timer.arm(after: feeder.nextDeadline().map { $0 - output.currentTime() })
     }
 
     /// After every pump and flush. Skipped while a `setCurrent` or `seek` is queued, as `report` is:
@@ -372,7 +387,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         guard let current = feeder.heardPosition?.item, id > current else { return halt() }
         // Deferred: this runs inside the feeder's fill, which a flush would re-enter. By then a call
         // may have dropped `id`, or the clock reached it and it fails as the heard item.
-        queue.async { [self] in
+        run { [self] in
             guard ids[id] != nil, !dropUnheard(id) else { return }
             halt()
         }

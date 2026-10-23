@@ -171,6 +171,19 @@ struct MediaPositionMap: Sendable {
         return entered
     }
 
+    /// The playhead at which `advance` next returns something: the first written segment past
+    /// `playhead` whose item or format differs from the one before it. Nil when none is written yet.
+    func nextHeardBoundary(after playhead: TimeInterval) -> TimeInterval? {
+        guard let index = segmentIndex(at: playhead) else { return nil }
+        for next in segments.indices.dropFirst(index + 1) {
+            let (before, segment) = (segments[next - 1], segments[next])
+            if segment.tag.item != before.tag.item || segment.format != before.format {
+                return segment.start - 0.5 / segment.sampleRate
+            }
+        }
+        return nil
+    }
+
     // A segment counts from half a frame before its start, the nearest frame, so clock rounding
     // never reports a join a frame late.
     private func segmentIndex(at playhead: TimeInterval) -> Int? {

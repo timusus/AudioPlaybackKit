@@ -11,10 +11,12 @@ public final class ManualPumpTimer: @unchecked Sendable {
     private var tick: (@Sendable () -> Void)?
     private var suspended = false
     private var _wakes = 0
+    private var _armedDelay: TimeInterval?
+    private var _armCount = 0
 
     public init() {}
 
-    public func start(interval: TimeInterval, queue: DispatchQueue, tick: @escaping @Sendable () -> Void) {
+    public func start(queue: DispatchQueue, tick: @escaping @Sendable () -> Void) {
         lock.withLock {
             self.queue = queue
             self.tick = tick
@@ -35,6 +37,19 @@ public final class ManualPumpTimer: @unchecked Sendable {
 
     /// Wakes are only counted: a test fires the pump they ask for itself.
     public var wakes: Int { lock.withLock { _wakes } }
+
+    /// The delay the transport last asked for, nil when it asked for none: nothing is due on the clock.
+    public var armedDelay: TimeInterval? { lock.withLock { _armedDelay } }
+
+    /// How many deadlines the transport has armed; a pump that finds nothing due does not count.
+    public var armCount: Int { lock.withLock { _armCount } }
+
+    public func arm(after delay: TimeInterval?) {
+        lock.withLock {
+            _armedDelay = delay
+            if delay != nil { _armCount += 1 }
+        }
+    }
 
     public func wake() {
         lock.withLock { _wakes += 1 }

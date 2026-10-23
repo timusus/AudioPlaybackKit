@@ -232,8 +232,7 @@ final class Feeder {
 
     // MARK: Tick
 
-    /// All the feeder's work; the caller calls it on its queue from a timer and on `wake`, often
-    /// enough that `resumeDepth` outlasts the gap between calls.
+    /// All the feeder's work; the caller calls it on its queue at `nextDeadline` and on `wake`.
     func pump() {
         let pending = inbox.drain()
         if pending.reset || pending.failure != nil {
@@ -301,6 +300,25 @@ final class Feeder {
         }
 
         report()
+    }
+
+    /// The output-clock time the next pump is due for work only the clock brings, or nil while the
+    /// clock is not running. Everything else the pump waits on (decode landing, the output becoming
+    /// ready, a flush completing, a stall or failure) calls `wake`, and a stopped clock only moves
+    /// through a call that pumps. The earliest of:
+    /// - the underrun, or at the end of the stream the last frame heard, at `writtenEnd`;
+    /// - the next item or format reaching the playhead;
+    /// - the refill once the 30 s cap has drained by `resumeDepth` (the output's ready event never comes
+    ///   when it took everything);
+    /// - the next position report, one `pumpInterval` on (the temporary position cadence).
+    func nextDeadline() -> TimeInterval? {
+        guard outputRunning else { return nil }
+        let clock = output.currentTime(), latency = output.outputLatency
+        var due = clock + pumpInterval
+        due = min(due, map.writtenEnd + (upstreamEnded ? latency : 0))
+        if let boundary = map.nextHeardBoundary(after: playhead()) { due = min(due, boundary + latency) }
+        if map.writtenEnd - clock >= Self.maxDepth { due = min(due, map.writtenEnd - Self.maxDepth + resumeDepth) }
+        return due
     }
 
     // MARK: Private

@@ -88,6 +88,10 @@ next audio), and `processorsChanged()` does nothing while failed. A fade goes th
 
 A failed renderer is terminal. This happens through its `status`, a failed enqueue, or an iOS media-services reset. The feeder then rebuilds the output and restarts from the heard position through the one restart path. The rebuild makes a fresh renderer and synchronizer with the same volume and device. Recovery always lands paused, so the user chooses to play on (owner decision). As media3's `pendingRecoverableRendererError` does, it retries once: a second failure before `.playing`, or a rebuild that throws, surfaces as `.failed` with no further rebuild. A media-services reset is a separate event that always rebuilds, since it can follow the failure it caused.
 
+### Pump scheduling
+
+The pump is scheduled by deadline, not polled. After each pump the transport asks the feeder for the next work due on the output clock and arms a one-shot timer for it, the way media3 schedules its playback loop (`ExoPlayerImplInternal.scheduleNextWork`). A call, a decode result or the renderer's ready event pumps at once through `wake`, so paused, idle and ended arm nothing. The clock-driven work is the end of what is written (an underrun, or the end of the last item), the next heard boundary from the position map, the refill once the 30 s cap has drained by `resumeDepth`, and the next position report. That report keeps a 100 ms cadence only until position becomes pull-based. The timer is strict: macOS coalesces a default one-shot by up to 150 ms and each re-arm compounds it, so the cadence fell to 4 Hz and `.ended` came late.
+
 ## Alternatives rejected
 
 - `AVAudioEngine`, which is what the apps run today: its clock is nil while paused and leaves output latency to us. Speed needs a time-pitch unit whose buffering the clock cannot see. It is not named for AirPlay 2 enhanced buffering.
