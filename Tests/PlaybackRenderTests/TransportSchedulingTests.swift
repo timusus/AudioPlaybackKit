@@ -198,6 +198,29 @@ final class TransportSchedulingTests: XCTestCase {
         XCTAssertEqual(fired.values.count, 2)
     }
 
+    // The removal is queued behind a call entry that would fire the observer; the entry must not call it.
+    func testACancelledObserverIsNotCalledByAnEntryAlreadyQueued() {
+        output.capacity = 60
+        let periodic = Recorded<TimeInterval>()
+        let boundary = Recorded<TimeInterval>()
+        transport.setCurrent(item: "a", source: long)
+        transport.play()
+        advance(by: 0)
+        let tokens = [
+            transport.addPeriodicObserver(interval: 0.25) { periodic.append(0) },
+            transport.addBoundaryObserver(times: [0.25]) { _, time in boundary.append(time) },
+        ]
+        timer.sync()
+
+        output.advance(by: 0.5)
+        transport.clearNext()
+        tokens.forEach { $0.cancel() }
+        timer.sync()
+
+        XCTAssertEqual(periodic.values, [])
+        XCTAssertEqual(boundary.values, [])
+    }
+
     func testAPeriodicObserverDoesNotFireWhilePaused() {
         let fired = Recorded<TimeInterval>()
         transport.setCurrent(item: "a", source: a)

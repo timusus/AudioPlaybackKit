@@ -1,9 +1,12 @@
 import Foundation
 
-/// Removes its observer on `cancel()` or when released; cancelling twice does nothing.
+/// Removes its observer on `cancel()` or when released; cancelling twice does nothing. Removal itself
+/// is queued, but a callback checks `isCancelled` right before it runs, so none starts after
+/// `cancel()` returns; one already running may finish. A caller that hops threads checks it again there.
 public final class TimeObserverToken: @unchecked Sendable {
     private let lock = NSLock()
     private var remove: (@Sendable () -> Void)?
+    private var cancelled = false
 
     init(remove: @escaping @Sendable () -> Void) {
         self.remove = remove
@@ -11,8 +14,11 @@ public final class TimeObserverToken: @unchecked Sendable {
 
     deinit { cancel() }
 
+    public var isCancelled: Bool { lock.withLock { cancelled } }
+
     public func cancel() {
         let remove = lock.withLock { () -> (@Sendable () -> Void)? in
+            cancelled = true
             defer { self.remove = nil }
             return self.remove
         }

@@ -64,8 +64,6 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     /// The player's `TimeObserverToken` for one tick of its clock after a write while playing: the tick
     /// is when a play is heard, which Observation never sees. Releasing it removes the observer.
     private var heardCheck: AnyObject?
-    /// Tells one heard check from another, so a tick queued before a newer write is ignored.
-    private var heardChecks = 0
 
     /// What was last written, and when. Position is compared only with where the system has
     /// extrapolated it to: a jump moves the player's `discontinuityCount`.
@@ -275,12 +273,10 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     // The output's clock may start after the play was written; the next tick of it rereads the position,
     // which rewrites only on drift, and a rewrite checks once more.
     private func checkWhenHeard(playing: Bool) {
-        heardChecks += 1
         heardCheck = nil
         guard playing else { return }
-        let id = heardChecks
         heardCheck = player.addPeriodicObserver(interval: 0.5) { [weak self] in
-            guard let self, !released, heardChecks == id else { return }
+            guard let self, !released else { return }
             heardCheck = nil
             refresh()
         }

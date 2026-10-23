@@ -66,6 +66,24 @@ final class PlayerPositionTests: XCTestCase {
         XCTAssertEqual(calls, 4)
     }
 
+    // The fire is already on its way to the main actor when the app cancels.
+    func testAFireQueuedForTheMainActorIsNotDeliveredOnceCancelled() async {
+        playing()
+        var calls = 0
+        var crossed = 0
+        let tokens = [
+            player.addPeriodicObserver(interval: 0.5) { calls += 1 },
+            player.addBoundaryObserver(times: [3]) { _, _ in crossed += 1 },
+        ]
+
+        rig.run(for: 2)
+        tokens.forEach { $0.cancel() }
+        await drainMainActor()
+
+        XCTAssertEqual(calls, 0)
+        XCTAssertEqual(crossed, 0)
+    }
+
     func testAPeriodicObserverIsSilentWhilePaused() async {
         playing()
         var calls = 0

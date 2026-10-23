@@ -135,7 +135,11 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         using callback: @escaping @Sendable () -> Void
     ) -> TimeObserverToken {
         precondition(interval > 0 && interval.isFinite)
-        return addObserver { $0.addPeriodic(key: $1, interval: interval, callback) }
+        return addObserver { observers, key, token in
+            observers.addPeriodic(key: key, interval: interval) { [weak token] in
+                if token?.isCancelled == false { callback() }
+            }
+        }
     }
 
     /// Calls `callback` on the transport's queue with the heard item and the time when playback
@@ -145,19 +149,27 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         times: [TimeInterval],
         using callback: @escaping @Sendable (Item, TimeInterval) -> Void
     ) -> TimeObserverToken {
-        addObserver { $0.addBoundary(key: $1, times: times, callback) }
+        addObserver { observers, key, token in
+            observers.addBoundary(key: key, times: times) { [weak token] item, time in
+                if token?.isCancelled == false { callback(item, time) }
+            }
+        }
     }
 
     // The key is taken on the caller's thread, so a cancel queued behind the add always removes it.
-    private func addObserver(_ add: @escaping (inout TimeObservers<Item>, Int) -> Void) -> TimeObserverToken {
+    // The stored callbacks hold the token weakly: a released token cancels, and a cancelled one fires nothing.
+    private func addObserver(
+        _ add: @escaping (inout TimeObservers<Item>, Int, TimeObserverToken) -> Void
+    ) -> TimeObserverToken {
         let key = discontinuityLock.withLock {
             lastObserverKey += 1
             return lastObserverKey
         }
-        run { [self] in add(&observers, key) }
-        return TimeObserverToken { [weak self] in
+        let token = TimeObserverToken { [weak self] in
             self?.run { [weak self] in self?.observers.remove(key) }
         }
+        run { [self] in add(&observers, key, token) }
+        return token
     }
 
     /// Plays through the device's audio output (`AVSampleBufferAudioRenderer`). The transport never
