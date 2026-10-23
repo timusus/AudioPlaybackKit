@@ -433,9 +433,10 @@ public final class Player<Item: Hashable & Sendable> {
                 // An applied call restarted from a new place, so what was heard before it is moot; a
                 // restart buffers, and reports a status after only if that changed.
                 // An ignored seek changed nothing, so everything before it stands (a crossing above all).
+                // A duration is state the transport sends once per item, so it survives the drop.
                 if applied {
                     transportStatus = .buffering
-                    held = []
+                    held = held.filter { if case .durationChanged = $0 { true } else { false } }
                 }
                 if unansweredCalls == 0 {
                     let replay = held

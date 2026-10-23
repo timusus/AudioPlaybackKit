@@ -144,6 +144,22 @@ final class PlayerSeekabilityTests: XCTestCase {
         XCTAssertEqual(PlayerRig.kinds(events).suffix(2), [.seekLanded, .seekAdjusted])
     }
 
+    // The transport sends an item's duration once; two seeks answered in the same drain must not eat it.
+    func testADurationSentBeforeTwoSeeksAreAnsweredIsKept() {
+        player.setItems(["a"])
+        player.play()
+        rig.settle()
+        rig.timer.sync()
+        rig.executor.runUntilIdle()
+        rig.timer.fire()
+        player.seek(to: 2)
+        player.seek(to: 3)
+        rig.settle()
+
+        XCTAssertEqual(player.duration, 10)
+        XCTAssertTrue(player.isSeekable)
+    }
+
     func testSeekabilityIsForgottenWhenTheNextItemIsLoaded() {
         rig.factory.live = ["a"]
         playing()
