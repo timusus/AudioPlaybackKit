@@ -63,6 +63,20 @@ extension GrowingFileByteSourceTests {
         XCTAssertGreaterThan(server.requestedRanges.count, 1, "it retried")
     }
 
+    func testDrivingThroughRetriesThatEachAnswerInsideTheTimeoutIsNotAHang() throws {
+        let server = try startServer(body: makeBody(64 * 1024))
+        server.contentLengthLie = 1000
+        // Four attempts, each answered within the timeout, together outlast it.
+        server.delayForEveryRange = 1
+        let clock = ManualGrowingFileClock()
+        let source = makeSource(server.url, clock: clock)
+
+        let pending = readAsync(source, Int.max)
+        XCTAssertTrue(clock.drive(source, timeout: 3) { pending.finished(within: 0) }, "the read hung")
+        guard case .failed? = readerError(pending.result) else { return XCTFail("\(pending.result)") }
+        XCTAssertEqual(server.requestedRanges.count, 4)
+    }
+
     func testNoNetworkForAMomentIsRetriedAndForLongerThanTheWindowFailsTheRead() throws {
         let body = makeBody(32 * 1024)
         let server = try startServer(body: body)

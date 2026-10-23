@@ -45,17 +45,23 @@ final class ManualGrowingFileClock: GrowingFileClock, @unchecked Sendable {
     }
 
     /// Steps the clock `step` at a time, letting the real network answer between steps, until
-    /// `condition` holds or `timeout` real seconds pass. It steps only while `source` owes the
-    /// network nothing, so a loaded machine's slow loopback is never taken for a response timeout;
-    /// nil steps regardless, for a link the test has made silent on purpose.
+    /// `condition` holds or `timeout` real seconds pass without the network answering. It steps
+    /// only while `source` owes the network nothing, so a loaded machine's slow loopback is never
+    /// taken for a response timeout; nil steps regardless, for a link the test has made silent on purpose.
     func drive(
         _ source: GrowingFileByteSource?, step: TimeInterval = 0.5, timeout: TimeInterval = 20,
         until condition: () -> Bool
     ) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
+        var deadline = Date().addingTimeInterval(timeout)
+        var awaited = false
         while Date() < deadline {
             if condition() { return true }
-            if source?.awaitsNetworkForTest != true { advance(by: step) }
+            let awaits = source?.awaitsNetworkForTest == true
+            // Each answer restarts the timeout: a run of retries on a stalled CI process can
+            // outlast it in total while every one of them answers.
+            if awaited, !awaits { deadline = Date().addingTimeInterval(timeout) }
+            awaited = awaits
+            if !awaits { advance(by: step) }
             // Kept: the loopback server answers on its own thread and raises no signal.
             Thread.sleep(forTimeInterval: 0.005)
         }
