@@ -15,6 +15,7 @@ import Foundation
 }
 
 final class DispatchPumpTimer: PumpTimer, @unchecked Sendable {
+    private static let maxLeeway: TimeInterval = 0.02
     private var source: (any DispatchSourceTimer)?
     private var queue: DispatchQueue?
     private var tick: (@Sendable () -> Void)?
@@ -22,9 +23,7 @@ final class DispatchPumpTimer: PumpTimer, @unchecked Sendable {
     func start(queue: DispatchQueue, tick: @escaping @Sendable () -> Void) {
         self.queue = queue
         self.tick = tick
-        // Strict: a coalesced one-shot fires up to 150 ms late and every re-arm compounds it, which
-        // stretched the 10 Hz position cadence to 4 Hz and delayed the end of the item.
-        let source = DispatchSource.makeTimerSource(flags: .strict, queue: queue)
+        let source = DispatchSource.makeTimerSource(queue: queue)
         source.schedule(deadline: .distantFuture)
         source.setEventHandler(handler: tick)
         source.resume()
@@ -33,7 +32,10 @@ final class DispatchPumpTimer: PumpTimer, @unchecked Sendable {
 
     func arm(after delay: TimeInterval?) {
         if let delay {
-            source?.schedule(deadline: .now() + max(delay, 0))
+            // A small explicit leeway in place of the default (up to 150 ms on macOS) lets the OS batch wakeups;
+            // deadlines sit on the output clock, so a late tick delays only itself, never the ones after it.
+            let leeway = min(max(delay, 0) * 0.1, Self.maxLeeway)
+            source?.schedule(deadline: .now() + max(delay, 0), leeway: .nanoseconds(Int(leeway * 1e9)))
         } else {
             source?.schedule(deadline: .distantFuture)
         }

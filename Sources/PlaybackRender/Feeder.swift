@@ -310,11 +310,13 @@ final class Feeder {
     /// - the next item or format reaching the playhead;
     /// - the refill once the 30 s cap has drained by `resumeDepth` (the output's ready event never comes
     ///   when it took everything);
-    /// - the next position report, one `pumpInterval` on (the temporary position cadence).
+    /// - the next position report, at the next multiple of `pumpInterval` on the clock (the temporary
+    ///   position cadence), so a late pump never pushes the reports after it later.
     func nextDeadline() -> TimeInterval? {
         guard outputRunning else { return nil }
         let clock = output.currentTime(), latency = output.outputLatency
-        var due = clock + pumpInterval
+        // A clock within 1 % of an interval short of a multiple is at it, so float noise never arms ~0.
+        var due = ((clock / pumpInterval + 0.01).rounded(.down) + 1) * pumpInterval
         due = min(due, map.writtenEnd + (upstreamEnded ? latency : 0))
         if let boundary = map.nextHeardBoundary(after: playhead()) { due = min(due, boundary + latency) }
         if map.writtenEnd - clock >= Self.maxDepth { due = min(due, map.writtenEnd - Self.maxDepth + resumeDepth) }

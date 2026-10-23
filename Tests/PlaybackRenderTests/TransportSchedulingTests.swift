@@ -95,6 +95,18 @@ final class TransportSchedulingTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 0.1, accuracy: 1e-9)
     }
 
+    func testThePositionCadenceKeepsToTheClockWhenAPumpIsLate() {
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        advance(by: 0)
+
+        // The tick armed for 0.1 s lands 70 ms late; the next report is still due at 0.2 s.
+        output.advance(by: 0.17)
+        timer.fire()
+
+        XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 0.03, accuracy: 1e-9)
+    }
+
     func testTheHeardBoundaryIsDueBeforeTheNextPositionReport() {
         transport.setCurrent(item: "a", source: a)
         transport.setNext(item: "b", source: b)
