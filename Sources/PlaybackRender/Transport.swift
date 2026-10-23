@@ -98,6 +98,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private var takenDiscontinuities = 0
     /// A `setCurrent` or seek was taken and its first position not yet sent as `.landed`.
     private var landingPending = false
+    private var droppedLanding: MediaPositionMap.Position?
     private var sentDuration: (id: Int, duration: TimeInterval?, isSeekable: Bool)?
     private var observers = TimeObservers<Item>()
 
@@ -251,6 +252,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
             ids = [id: item]
             failed = false
             landingPending = true
+            droppedLanding = nil
             onEvent(.sought(item: item, seconds: startSeconds, applied: true))
             upstream.setCurrent(item: id, source: source, startSeconds: startSeconds)
             feeder.seek(to: SeekTarget(item: id, offset: .seconds(startSeconds)))
@@ -302,9 +304,16 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
             takenDiscontinuities += 1
             let id = ids.filter { $0.value == item }.keys.min()
             onEvent(.sought(item: item, seconds: seconds, applied: id != nil))
-            guard let id else { return }
+            guard let id else {
+                if let dropped = droppedLanding {
+                    droppedLanding = nil
+                    report(dropped)
+                }
+                return
+            }
             failed = false
             landingPending = true
+            droppedLanding = nil
             feeder.seek(to: SeekTarget(item: id, offset: .seconds(seconds)))
         }
     }
@@ -414,8 +423,13 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// The first position of a taken call is its landing. One computed while a `setCurrent` or `seek`
     /// is still queued is dropped: its caller has moved past it.
     private func report(_ position: MediaPositionMap.Position) {
-        guard landingPending, discontinuityLock.withLock({ calledDiscontinuities }) == takenDiscontinuities,
-              let item = ids[position.item] else { return }
+        guard landingPending else { return }
+        // The feeder reports a position once, so a seek ignored behind it must report it again.
+        guard discontinuityLock.withLock({ calledDiscontinuities }) == takenDiscontinuities else {
+            droppedLanding = position
+            return
+        }
+        guard let item = ids[position.item] else { return }
         landingPending = false
         sendDurationIfChanged(of: position.item)
         onEvent(.landed(item: item, seconds: position.seconds))

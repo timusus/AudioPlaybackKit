@@ -152,6 +152,20 @@ final class TransportSchedulingTests: XCTestCase {
         XCTAssertEqual(transport.position?.seconds, 2)
     }
 
+    // Paused, the clock never moves, so the landing a pump reported while a later call was queued is the only one.
+    func testALandingDroppedBehindAnIgnoredSeekIsStillReportedWhilePaused() {
+        transport.setCurrent(item: "a", source: a)
+        timer.sync()
+        executor.runUntilIdle()
+
+        let release = timer.fireHeld()
+        transport.seek(item: "gone", toSeconds: 1)
+        release()
+        advance(by: 1)
+
+        XCTAssertEqual(recorder.events.filter { if case .landed("a", 0) = $0 { true } else { false } }.count, 1)
+    }
+
     func testThePositionNeverGoesBackWhenTheLatencyGrows() throws {
         transport.setCurrent(item: "a", source: a)
         transport.play()
