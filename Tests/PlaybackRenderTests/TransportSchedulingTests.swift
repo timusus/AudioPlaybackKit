@@ -230,6 +230,30 @@ final class TransportSchedulingTests: XCTestCase {
         token.cancel()
     }
 
+    // A call entry runs schedule() without a pump, so the heard position it sees can step back with the latency.
+    func testABoundaryDoesNotFireTwiceWhenTheHeardPositionStepsBackAcrossIt() {
+        output.capacity = 60
+        let fired = Recorded<TimeInterval>()
+        transport.setCurrent(item: "a", source: long)
+        transport.play()
+        advance(by: 0)
+        let token = transport.addBoundaryObserver(times: [1.25]) { _, time in fired.append(time) }
+        advance(by: 1)
+        // The clock moves on with no pump, and a call entry hears the boundary crossed.
+        output.advance(by: 0.5)
+        transport.clearNext()
+        timer.sync()
+        XCTAssertEqual(fired.values, [1.25])
+
+        output.outputLatency = 1
+        transport.clearNext()
+        timer.sync()
+        advance(by: 2)
+
+        XCTAssertEqual(fired.values, [1.25])
+        token.cancel()
+    }
+
     func testASeekLandingPastABoundaryDoesNotFireIt() {
         output.capacity = 60
         let fired = Recorded<TimeInterval>()

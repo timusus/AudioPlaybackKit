@@ -84,12 +84,16 @@ struct TimeObservers<Item> {
         for key in boundaries.keys.sorted() {
             guard var observer = boundaries[key] else { continue }
             // A load, seek or crossing landing past a time does not fire it: only playing across does.
+            // The heard position steps back on a re-anchor or a latency change; `last` only moves forward
+            // within one item and call, so a time crossed once is not crossed again.
+            var seen = heard.seconds
             if let last = observer.last, last.id == heard.id, last.epoch == heard.epoch {
                 for time in observer.times where time > last.seconds && time <= heard.seconds {
                     observer.callback(heard.item, time)
                 }
+                seen = max(seen, last.seconds)
             }
-            observer.last = (heard.id, heard.epoch, heard.seconds)
+            observer.last = (heard.id, heard.epoch, seen)
             boundaries[key] = observer
             if clock != nil, let next = observer.times.first(where: { $0 > heard.seconds }),
                let due = heardTime(heard.id, next) {
