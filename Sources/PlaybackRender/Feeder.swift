@@ -67,7 +67,7 @@ final class Feeder {
     private var stretch: TimeStretch
     private var playWhenReady = false
     private var outputRunning = false
-    /// The clock the last pump finished at, past any restart it made.
+    /// The clock the last pump's underrun/end check judged at, or the clock after a restart that left it behind.
     private var pumpedAt = -TimeInterval.infinity
     private var upstreamEnded = false
     /// The current buffering began as an underrun, so it waits for `rebufferDepth`, not `resumeDepth`.
@@ -273,7 +273,9 @@ final class Feeder {
         // Pause before refilling: audio stamped behind a running clock never plays, and the clock is
         // past the written end one output latency before it is heard, so judge by the clock. At the end
         // of the stream nothing more is written and the hold would report `.ended` early: wait for the playhead.
-        if outputRunning, (upstreamEnded ? playhead() : output.currentTime()) >= map.writtenEnd {
+        let checkedAt = output.currentTime()
+        let checkedPlayhead = map.playhead(currentTime: checkedAt, outputLatency: output.outputLatency)
+        if outputRunning, (upstreamEnded ? checkedPlayhead : checkedAt) >= map.writtenEnd {
             holdForUnderrun()
             // The end of the stream is no rebuffer: a next item after it starts like a first one.
             if !upstreamEnded {
@@ -301,7 +303,8 @@ final class Feeder {
             }
         }
 
-        pumpedAt = output.currentTime()
+        // The check ran before `fill`, so a deadline the clock crossed during it was not judged: it stays armed.
+        pumpedAt = min(checkedAt, output.currentTime())
         report()
     }
 
@@ -320,7 +323,7 @@ final class Feeder {
         let clock = output.currentTime(), latency = output.outputLatency
         // A clock within 1 % of an interval short of a multiple is at it, so float noise never arms ~0.
         var due = ((clock / pumpInterval + 0.01).rounded(.down) + 1) * pumpInterval
-        // Work due by the last pump's clock was that pump's: arming it again would spin while the clock is frozen.
+        // Work due by the clock the last pump's check saw was handled: arming it again would spin while the clock is frozen.
         func consider(_ deadline: TimeInterval) {
             if deadline > pumpedAt { due = min(due, deadline) }
         }

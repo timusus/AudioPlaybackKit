@@ -168,4 +168,37 @@ final class TransportSchedulingTests: XCTestCase {
         XCTAssertEqual(output.rate, 0)
         XCTAssertNil(timer.armedDelay, "waiting on decode is woken by it, not by the clock")
     }
+
+    // The clock crosses the written end inside the pump's fill, which supplies nothing: that pump
+    // never judged the crossing, so the next one (no cadence tick between) must still hold.
+    func testAnUnderrunTheClockCrossesDuringFillIsHeldByTheNextPumpAtOnce() throws {
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        timer.sync()
+        while !statuses.contains(.playing), executor.runNext() { timer.advance(by: 0, clock: output.advance(by:)) }
+        let writtenEnd = try XCTUnwrap(output.enqueues.last).time + 0.25
+        output.advance(by: writtenEnd - 0.05 - output.currentTime())
+
+        output.advanceAfterNextRead(by: 0.1)
+        timer.fire()
+        timer.advance(by: 0, clock: output.advance(by:))
+
+        XCTAssertEqual(statuses.last, .buffering)
+        XCTAssertEqual(output.rate, 0)
+    }
+
+    func testTheEndOfTheStreamTheClockCrossesDuringFillIsHeldByTheNextPumpAtOnce() {
+        output.outputLatency = 0.1
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        advance(by: 3.05)
+        XCTAssertEqual(statuses.last, .playing)
+
+        output.advanceAfterNextRead(by: 0.1)
+        timer.fire()
+        timer.advance(by: 0, clock: output.advance(by:))
+
+        XCTAssertEqual(statuses.last, .ended)
+        XCTAssertEqual(output.rate, 0, "held at the end, not left running past it")
+    }
 }
