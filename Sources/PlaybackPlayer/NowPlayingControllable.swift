@@ -1,4 +1,5 @@
 import Foundation
+import PlaybackRender
 
 /// media3 `Player.Commands`: what a controller may ask of a player right now. A command left out is
 /// greyed out on the lock screen, and a press of it that races the change is refused.
@@ -71,6 +72,9 @@ public protocol NowPlayingControllable<Item>: AnyObject {
     func seekToPrevious()
     func seek(to position: TimeInterval)
     func seek(by delta: TimeInterval)
+    /// As `Player.addPeriodicObserver`: the session asks for one tick to learn when a play is heard,
+    /// since `position` moves with the clock and Observation never sees it.
+    func addPeriodicObserver(interval: TimeInterval, using callback: @escaping @MainActor @Sendable () -> Void) -> TimeObserverToken
 }
 
 /// A wrapper that forwards every requirement to `player`, so it declares only what its policy
@@ -102,6 +106,12 @@ extension ForwardingNowPlayingControllable {
     public func seekToPrevious() { player.seekToPrevious() }
     public func seek(to position: TimeInterval) { player.seek(to: position) }
     public func seek(by delta: TimeInterval) { player.seek(by: delta) }
+    public func addPeriodicObserver(
+        interval: TimeInterval,
+        using callback: @escaping @MainActor @Sendable () -> Void
+    ) -> TimeObserverToken {
+        player.addPeriodicObserver(interval: interval, using: callback)
+    }
 }
 
 extension Player: NowPlayingControllable {

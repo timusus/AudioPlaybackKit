@@ -134,6 +134,8 @@ final class NowPlayingRig {
     /// runs on its own queue, so a session reading before this would race it.
     func settle() async {
         base.settle()
+        // The player's observer ticks hop to the main actor; a hop queued after them runs after them.
+        await Task { @MainActor in }.value
         await session.settle()
     }
 
