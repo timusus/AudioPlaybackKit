@@ -74,20 +74,29 @@ public final class ManualPumpTimer: @unchecked Sendable {
                 return (woken, _armedDelay)
             }
             if !wasWoken {
+                let reach = min(left, Self.clockStep)
                 // Within float noise: a deadline the sum of the steps lands on is due.
-                guard let delay, delay <= left + 1e-9 else { break }
-                let step = max(delay, 0)
-                clock(step)
-                left -= step
+                if let delay, delay <= reach + 1e-9 {
+                    let step = max(delay, 0)
+                    clock(step)
+                    left -= step
+                } else {
+                    guard reach > 0 else { break }
+                    // A real clock moves on smoothly, so a wake the output sends as it plays lands then, not at the next deadline.
+                    clock(reach)
+                    left -= reach
+                    lock.withLock { _armedDelay = _armedDelay.map { $0 - reach } }
+                    continue
+                }
             }
             pumps += 1
             precondition(pumps < 100_000, "the pump re-arms without time passing")
             fire()
         }
-        guard left > 0 else { return }
-        clock(left)
-        lock.withLock { _armedDelay = _armedDelay.map { $0 - left } }
     }
+
+    /// A power of two, so steps sum exactly.
+    private static let clockStep: TimeInterval = 1.0 / 64
 
     /// Runs one pump and returns once it has finished.
     public func fire() {

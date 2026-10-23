@@ -86,28 +86,33 @@ final class TransportSchedulingTests: XCTestCase {
         XCTAssertNil(timer.armedDelay)
     }
 
-    func testPlayingWithTheOutputFullArmsOnlyThePositionCadence() {
+    /// A minute.
+    private lazy var long = FakeItemSource(format: mono, frames: 480, chunkFrames: 2)
+
+    func testPlayingWithTheOutputFullArmsOnlyTheWrittenEnd() {
         transport.setCurrent(item: "a", source: a)
         transport.play()
         advance(by: 0)
 
-        // Two seconds are queued of three, the output takes no more, and the end is 2 s off.
-        XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 0.1, accuracy: 1e-9)
+        // Two seconds are queued of three and the output takes no more: nothing is due before the end.
+        XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 2, accuracy: 1e-9)
     }
 
-    func testThePositionCadenceKeepsToTheClockWhenAPumpIsLate() {
-        transport.setCurrent(item: "a", source: a)
+    func testPlayingSteadilyWithNoObserversArmsOnlyTheRefill() {
+        output.capacity = 60
+        transport.setCurrent(item: "a", source: long)
         transport.play()
         advance(by: 0)
+        XCTAssertEqual(statuses.last, .playing)
 
-        // The tick armed for 0.1 s lands 70 ms late; the next report is still due at 0.2 s.
-        output.advance(by: 0.17)
-        timer.fire()
-
-        XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 0.03, accuracy: 1e-9)
+        // The 30 s cap is written; the next pump is the refill once `resumeDepth` has played.
+        XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 0.5, accuracy: 1e-9)
+        let armed = timer.armCount
+        advance(by: 5)
+        XCTAssertEqual(timer.armCount - armed, 10, "one wakeup per refill and none between")
     }
 
-    func testAFrozenClockArmsTheCadenceInsteadOfSpinning() {
+    func testAFrozenClockArmsTheWrittenEndInsteadOfSpinning() {
         transport.setCurrent(item: "a", source: a)
         transport.play()
         advance(by: 0)
@@ -115,13 +120,133 @@ final class TransportSchedulingTests: XCTestCase {
         let armed = timer.armCount
 
         // A starved renderer's clock stops at rate 1 until its stall event comes.
-        timer.advance(by: 1, clock: { _ in }, settle: executor.runUntilIdle)
+        timer.advance(by: 5, clock: { _ in }, settle: executor.runUntilIdle)
 
-        XCTAssertLessThanOrEqual(timer.armCount - armed, 11)
-        XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 0.1, accuracy: 1e-9)
+        // One wakeup each time the written end falls due by the timer, at 2 s and 4 s, not a spin.
+        XCTAssertEqual(timer.armCount - armed, 2)
+        XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 1, accuracy: 1e-9)
     }
 
-    func testTheHeardBoundaryIsDueBeforeTheNextPositionReport() {
+    func testThePositionIsReadFromTheClockWithNoPump() throws {
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        advance(by: 0)
+
+        output.advance(by: 0.6)
+
+        let position = try XCTUnwrap(transport.position)
+        XCTAssertEqual(position.item, "a")
+        XCTAssertEqual(position.seconds, 0.625, accuracy: 1e-9, "the nearest of the 8 Hz frames")
+    }
+
+    func testThePositionIsNilWhileASeekIsQueued() {
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        advance(by: 1)
+        XCTAssertNotNil(transport.position)
+
+        transport.seek(item: "a", toSeconds: 2)
+
+        XCTAssertNil(transport.position)
+        advance(by: 0)
+        XCTAssertEqual(transport.position?.seconds, 2)
+    }
+
+    func testThePositionNeverGoesBackWhenTheLatencyGrows() throws {
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        advance(by: 1)
+        let before = try XCTUnwrap(transport.position).seconds
+
+        output.outputLatency = 0.5
+
+        XCTAssertEqual(try XCTUnwrap(transport.position).seconds, before)
+    }
+
+    func testAPeriodicObserverFiresOnMultiplesOfItsIntervalAndStopsArmingOnceRemoved() {
+        output.capacity = 60
+        let fired = Recorded<TimeInterval>()
+        transport.setCurrent(item: "a", source: long)
+        transport.play()
+        advance(by: 0)
+        let token = transport.addPeriodicObserver(interval: 0.25) { [output] in fired.append(output.currentTime()) }
+        timer.sync()
+
+        advance(by: 1)
+        XCTAssertEqual(fired.values, [0.25, 0.5, 0.75, 1.0])
+
+        token.cancel()
+        timer.sync()
+        XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 0.5, accuracy: 1e-9, "the refill alone")
+        advance(by: 2)
+        XCTAssertEqual(fired.values.count, 4)
+    }
+
+    func testAPeriodicObserverIsRemovedWhenItsTokenIsReleased() {
+        output.capacity = 60
+        let fired = Recorded<TimeInterval>()
+        transport.setCurrent(item: "a", source: long)
+        transport.play()
+        advance(by: 0)
+        var token: TimeObserverToken? = transport.addPeriodicObserver(interval: 0.25) { fired.append(0) }
+        advance(by: 0.5)
+        XCTAssertEqual(fired.values.count, 2)
+        _ = token
+        token = nil
+
+        advance(by: 2)
+        XCTAssertEqual(fired.values.count, 2)
+    }
+
+    func testAPeriodicObserverDoesNotFireWhilePaused() {
+        let fired = Recorded<TimeInterval>()
+        transport.setCurrent(item: "a", source: a)
+        let token = transport.addPeriodicObserver(interval: 0.25) { fired.append(0) }
+        advance(by: 5)
+
+        XCTAssertEqual(fired.values, [])
+        XCTAssertNil(timer.armedDelay)
+        token.cancel()
+    }
+
+    func testABoundaryFiresOnceWhenPlaybackCrossesIt() {
+        output.capacity = 60
+        let fired = Recorded<TimeInterval>()
+        let items = Recorded<String>()
+        transport.setCurrent(item: "a", source: long)
+        transport.play()
+        advance(by: 0)
+        let token = transport.addBoundaryObserver(times: [1.25]) { [output] item, time in
+            items.append(item)
+            fired.append(time)
+            fired.append(output.currentTime())
+        }
+        timer.sync()
+
+        advance(by: 5)
+
+        XCTAssertEqual(items.values, ["a"])
+        XCTAssertEqual(fired.values, [1.25, 1.25], "fired at the time, not at a later refill")
+        token.cancel()
+    }
+
+    func testASeekLandingPastABoundaryDoesNotFireIt() {
+        output.capacity = 60
+        let fired = Recorded<TimeInterval>()
+        transport.setCurrent(item: "a", source: long)
+        transport.play()
+        advance(by: 0)
+        let token = transport.addBoundaryObserver(times: [1.25]) { _, time in fired.append(time) }
+        advance(by: 0.5)
+
+        transport.seek(item: "a", toSeconds: 2)
+        advance(by: 1)
+
+        XCTAssertEqual(fired.values, [])
+        token.cancel()
+    }
+
+    func testTheHeardBoundaryIsDueBeforeTheWrittenEnd() {
         transport.setCurrent(item: "a", source: a)
         transport.setNext(item: "b", source: b)
         transport.play()
@@ -131,7 +256,7 @@ final class TransportSchedulingTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 0.0375, accuracy: 1e-9)
     }
 
-    func testTheEndOfWhatIsWrittenIsDueBeforeTheNextPositionReport() {
+    func testTheEndOfWhatIsWrittenIsDue() {
         transport.setCurrent(item: "a", source: a)
         transport.play()
         advance(by: 2.95)
@@ -170,7 +295,7 @@ final class TransportSchedulingTests: XCTestCase {
     }
 
     // The clock crosses the written end inside the pump's fill, which supplies nothing: that pump
-    // never judged the crossing, so the next one (no cadence tick between) must still hold.
+    // never judged the crossing, so the next one (nothing else due between) must still hold.
     func testAnUnderrunTheClockCrossesDuringFillIsHeldByTheNextPumpAtOnce() throws {
         transport.setCurrent(item: "a", source: a)
         transport.play()
@@ -200,5 +325,17 @@ final class TransportSchedulingTests: XCTestCase {
 
         XCTAssertEqual(statuses.last, .ended)
         XCTAssertEqual(output.rate, 0, "held at the end, not left running past it")
+    }
+}
+
+/// What an observer was called with, from the transport queue.
+private final class Recorded<Value: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _values: [Value] = []
+
+    var values: [Value] { lock.withLock { _values } }
+
+    func append(_ value: Value) {
+        lock.withLock { _values.append(value) }
     }
 }

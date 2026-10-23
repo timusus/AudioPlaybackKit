@@ -171,6 +171,21 @@ struct MediaPositionMap: Sendable {
         return entered
     }
 
+    /// The first playhead at which `position(at:)` reaches `seconds` into `item`, nil unless that is
+    /// written. Rounded up to a whole output frame, so the position there is never short of it.
+    func playhead(reaching seconds: TimeInterval, of item: Int) -> TimeInterval? {
+        for segment in segments where segment.tag.item == item {
+            let frame = Int64((seconds * segment.sampleRate - 1e-9).rounded(.up))
+            let offset = frame - segment.tag.mediaStartFrame
+            guard offset < segment.tag.frameCount else { continue }
+            // A frame a processor dropped is passed where the next written one starts.
+            guard offset > 0 else { return segment.start }
+            let output = (offset * segment.outputFrames + segment.tag.frameCount - 1) / segment.tag.frameCount
+            return segment.start + Double(output) / segment.sampleRate
+        }
+        return nil
+    }
+
     /// The playhead at which `advance` next returns something: the first written segment past
     /// `playhead` whose item or format differs from the one before it. Nil when none is written yet.
     func nextHeardBoundary(after playhead: TimeInterval) -> TimeInterval? {
@@ -188,5 +203,21 @@ struct MediaPositionMap: Sendable {
     // never reports a join a frame late.
     private func segmentIndex(at playhead: TimeInterval) -> Int? {
         segments.lastIndex { playhead >= $0.start - 0.5 / $0.sampleRate } ?? segments.indices.first
+    }
+}
+
+/// A copy of what the feeder maps the clock through, read on any thread between pumps (ADR-0031).
+struct PositionSnapshot: Sendable {
+    var map: MediaPositionMap
+    /// The position before audio of this epoch is written.
+    var restart: MediaPositionMap.Position?
+    /// The feeder's last reported position: within its item a read never goes behind it.
+    var floor: MediaPositionMap.Position?
+
+    func position(currentTime: TimeInterval, outputLatency: TimeInterval) -> MediaPositionMap.Position? {
+        let playhead = map.playhead(currentTime: currentTime, outputLatency: outputLatency)
+        guard let position = map.position(at: playhead) ?? restart else { return floor }
+        if let floor, floor.item == position.item, floor.seconds > position.seconds { return floor }
+        return position
     }
 }

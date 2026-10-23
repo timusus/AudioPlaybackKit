@@ -12,17 +12,24 @@ final class SampleBufferAudioOutputAutoFlushTests: XCTestCase {
     private var renderer: SampleBufferAudioOutput!
     private var output: RecordingOutput!
     private var transport: Transport<String>!
+    private var sampling: TimeObserverToken?
 
     override func setUpWithError() throws {
         try XCTSkipUnless(defaultOutputDevice() != nil, "no audio output device")
         renderer = SampleBufferAudioOutput()
         output = RecordingOutput(renderer)
-        transport = Transport<String>(output: output, timer: DispatchPumpTimer(), executor: SerialQueueExecutor()) { [log] in
+        let transport = Transport<String>(output: output, timer: DispatchPumpTimer(), executor: SerialQueueExecutor()) { [log] in
             log.append($0)
         }
+        // Sampled as a UI would read it; weak, as the transport holds its observers.
+        sampling = transport.addPeriodicObserver(interval: 0.05) { [log, weak transport] in
+            log.sample(transport?.position)
+        }
+        self.transport = transport
     }
 
     override func tearDown() {
+        sampling = nil
         transport = nil
         output = nil
         renderer = nil
@@ -43,6 +50,7 @@ final class SampleBufferAudioOutputAutoFlushTests: XCTestCase {
             transport.setRate(rate)
         }
         wait(for: [ended], timeout: 10)
+        log.sample(transport.position)
 
         let wall = log.timing(from: .playing, to: .ended)
         let expected = Self.outputSeconds(toPlay: RampSource.frames, changes: changes)
@@ -84,6 +92,7 @@ final class SampleBufferAudioOutputAutoFlushTests: XCTestCase {
         wait(for: [playing, log.expect { ($0.frame ?? 0) >= 24000 }], timeout: 5, enforceOrder: true)
         renderer.audioOutputDeviceUniqueID = target
         wait(for: [ended], timeout: 10)
+        log.sample(transport.position)
 
         let wall = log.timing(from: .playing, to: .ended)
         print("device switch to \(target): \(output.summary()); outputConfigurationDidChange fired \(configurationChanges.count) times; playing to ended \(wall) s")
@@ -291,14 +300,19 @@ private final class RecordingOutput: AudioOutput, @unchecked Sendable {
     }
 }
 
-/// Transport events with expectations fulfilled by the first matching one, recorded or to come.
+/// Transport events and position reads with expectations fulfilled by the first matching one,
+/// recorded or to come.
 private final class EventLog: @unchecked Sendable {
     struct Entry {
-        var event: TransportEvent<String>
+        var event: TransportEvent<String>?
+        var read: TimeInterval?
         var at: TimeInterval
 
         var status: TransportStatus? { if case let .status(status) = event { status } else { nil } }
-        var frame: Int64? { if case let .position(_, seconds, _, _) = event { Int64((seconds * 48000).rounded()) } else { nil } }
+        var frame: Int64? {
+            if case let .landed(_, seconds) = event { return Int64((seconds * 48000).rounded()) }
+            return read.map { Int64(($0 * 48000).rounded()) }
+        }
     }
 
     private let lock = NSLock()
@@ -307,7 +321,15 @@ private final class EventLog: @unchecked Sendable {
     private var pending: [(match: (Entry) -> Bool, expectation: XCTestExpectation)] = []
 
     func append(_ event: TransportEvent<String>) {
-        let entry = Entry(event: event, at: Date().timeIntervalSince(start))
+        record(Entry(event: event, at: Date().timeIntervalSince(start)))
+    }
+
+    func sample(_ position: TransportPosition<String>?) {
+        guard let position else { return }
+        record(Entry(read: position.seconds, at: Date().timeIntervalSince(start)))
+    }
+
+    private func record(_ entry: Entry) {
         let met = lock.withLock {
             entries.append(entry)
             let met = pending.filter { $0.match(entry) }.map(\.expectation)

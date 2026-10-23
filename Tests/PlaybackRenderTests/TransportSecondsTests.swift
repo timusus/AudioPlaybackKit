@@ -20,10 +20,18 @@ final class TransportSecondsTests: XCTestCase {
             timer.fire()
         }
 
-        var positions: [(item: String, seconds: TimeInterval, duration: TimeInterval?)] {
+        /// Where each setCurrent or seek landed.
+        var positions: [(item: String, seconds: TimeInterval)] {
             recorder.events.compactMap {
-                guard case let .position(item, seconds, duration, _) = $0 else { return nil }
-                return (item, seconds, duration)
+                guard case let .landed(item, seconds) = $0 else { return nil }
+                return (item, seconds)
+            }
+        }
+
+        var durations: [TimeInterval?] {
+            recorder.events.compactMap {
+                guard case let .durationChanged(_, duration, _) = $0 else { return nil }
+                return Optional(duration)
             }
         }
 
@@ -46,7 +54,8 @@ final class TransportSecondsTests: XCTestCase {
 
             XCTAssertEqual(rig.firstSampleWritten(), frame, "\(rate)")
             XCTAssertEqual(rig.positions.map(\.seconds), [Double(frame) / rate], "\(rate)")
-            XCTAssertEqual(rig.positions.map(\.duration), [2], "\(rate)")
+            XCTAssertEqual(rig.durations, [2], "\(rate)")
+            XCTAssertEqual(rig.transport.position?.seconds, Double(frame) / rate, "\(rate)")
         }
     }
 
@@ -57,7 +66,7 @@ final class TransportSecondsTests: XCTestCase {
             rig.transport.setCurrent(item: "a", source: source(rate: rate, frames: Int64(rate) * 2), startSeconds: 12345 / rate)
             rig.pump()
             XCTAssertEqual(rig.firstSampleWritten(), 12345, "\(rate)")
-            let reported = try XCTUnwrap(rig.positions.last?.seconds)
+            let reported = try XCTUnwrap(rig.transport.position?.seconds)
 
             rig.transport.seek(item: "a", toSeconds: 1)
             rig.pump()
@@ -90,7 +99,7 @@ final class TransportSecondsTests: XCTestCase {
         XCTAssertEqual(rig.firstSampleWritten(), 1_024_000)
         XCTAssertEqual(rig.positions.map(\.item), ["b"])
         XCTAssertEqual(rig.positions.map(\.seconds), [0.5])
-        XCTAssertEqual(rig.positions.map(\.duration), [2])
+        XCTAssertEqual(rig.durations, [2])
     }
 
     // A caller tells a position from before its seek from the seek's first audio by the `.sought`
@@ -113,14 +122,14 @@ final class TransportSecondsTests: XCTestCase {
         let events = rig.recorder.events.compactMap { event -> String? in
             switch event {
             case let .sought(item, seconds, applied): "sought \(item) \(seconds)\(applied ? "" : " ignored")"
-            case let .position(item, seconds, _, _): "position \(item) \(seconds)"
-            case .crossed, .formatChanged, .status, .failed, .recovered: nil
+            case let .landed(item, seconds): "landed \(item) \(seconds)"
+            case .durationChanged, .crossed, .formatChanged, .status, .failed, .recovered: nil
             }
         }
         XCTAssertEqual(events, [
-            "sought a 0.0", "position a 0.0", "position a 1.0",
-            "sought a 5.0", "position a 5.0",
-            "sought b 2.0", "position b 2.0",
+            "sought a 0.0", "landed a 0.0",
+            "sought a 5.0", "landed a 5.0",
+            "sought b 2.0", "landed b 2.0",
             "sought a 1.0 ignored",
         ], "a seek to an item passed is ignored but still answered")
     }

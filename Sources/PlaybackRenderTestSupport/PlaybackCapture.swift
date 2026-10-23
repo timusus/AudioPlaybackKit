@@ -58,8 +58,10 @@ public final class PlaybackCaptureRecorder<Item: Hashable & Sendable>: @unchecke
 
     private static func describe(_ event: TransportEvent<Item>) -> String {
         switch event {
-        case let .position(item, seconds, duration, isSeekable):
-            "position \(item) \(seconds) duration=\(duration.map { "\($0)" } ?? "nil") seekable=\(isSeekable)"
+        case let .landed(item, seconds):
+            "landed \(item) \(seconds)"
+        case let .durationChanged(item, duration, isSeekable):
+            "durationChanged \(item) \(duration.map { "\($0)" } ?? "nil") seekable=\(isSeekable)"
         case let .crossed(item, format):
             "crossed \(item) \(format.sampleRate)Hz x\(format.channelCount)"
         case let .formatChanged(item, format):

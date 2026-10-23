@@ -67,6 +67,7 @@ public struct PCMFormat: Hashable, Sendable {
     func setRate(_ rate: Double, at time: TimeInterval?)
     /// Gain on what is heard now, 0...1: it acts on audio already queued, unlike a processor.
     func setVolume(_ volume: Float)
+    /// Any thread, as `outputLatency`: the transport reads position on its caller's.
     func currentTime() -> TimeInterval
     var outputLatency: TimeInterval { get }
     /// Whether the output wants more audio now. The output decides how far ahead of its clock it

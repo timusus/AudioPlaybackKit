@@ -13,13 +13,13 @@ public enum TransportStatus: Equatable, Sendable {
 
 /// What a `Transport` reports, in the order it happened.
 public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
-    /// What is heard now, in seconds of `item`'s media time. Sent when it changes, at most once a
-    /// pump; frames a processor dropped are skipped when they would have played. Within an item it
-    /// never goes back except on a `seek` or `setCurrent`, so position deltas are listening time.
-    /// None computed before a `seek` or `setCurrent` is sent once that call has returned.
-    /// `duration` is the item's length as its source probed it, for the progress bar and Now
-    /// Playing; nil when unknown. `isSeekable` is the source's `ItemSource.isSeekable`.
-    case position(item: Item, seconds: TimeInterval, duration: TimeInterval?, isSeekable: Bool)
+    /// The first position of the last `setCurrent` or `seek` taken, once its first audio is written,
+    /// in seconds of `item`'s media time: where it landed, which may differ from the seconds asked.
+    case landed(item: Item, seconds: TimeInterval)
+    /// The heard item's length as its source probed it, for the progress bar and Now Playing (nil
+    /// when unknown), and its `ItemSource.isSeekable`. Sent when either differs from what was last
+    /// sent: before `.landed`, after `.crossed`, or when the source learns it.
+    case durationChanged(item: Item, duration: TimeInterval?, isSeekable: Bool)
     /// `item` is now the one at the playhead: the gapless join reached the speaker, or the first
     /// item's audio was written there, playing or paused. `format` is the decoded format its first
     /// audio heard was in, the one the processors run at for it.
@@ -31,7 +31,7 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     case formatChanged(item: Item, format: PCMFormat)
     case status(TransportStatus)
     /// A `setCurrent` or `seek` was taken, in call order, before anything it caused: events before it
-    /// predate the call, and the next `.position` for `item` is the call's first audio. Every call is
+    /// predate the call, and the call's first audio is the next `.landed`. Every call is
     /// answered, so a caller can count its calls. `applied` is false for a seek ignored because `item`
     /// has passed: it changed nothing, so what came before it still stands.
     case sought(item: Item, seconds: TimeInterval, applied: Bool)
@@ -45,10 +45,12 @@ public enum TransportEvent<Item: Hashable & Sendable>: Sendable {
     case recovered
 }
 
-/// The temporary position cadence: the gap between `.position` reports while playing, until position
-/// becomes pull-based. No other work is polled at it.
-let pumpInterval: TimeInterval = 0.1
-
+/// What is heard, read from `Transport.position`.
+public struct TransportPosition<Item: Hashable & Sendable>: Equatable, Sendable {
+    public var item: Item
+    /// Seconds of `item`'s media time; frames a processor dropped are skipped when they would have played.
+    public var seconds: TimeInterval
+}
 
 /// The one thing an app drives (ADR-0018): a current item, optionally a next item joined
 /// gaplessly at each item's own format, a processor chain, and play, pause, speed and seek.
@@ -65,7 +67,8 @@ let pumpInterval: TimeInterval = 0.1
 /// (ADR-0009) and a reported position seeks back to the frame it came from.
 ///
 /// `@unchecked Sendable`: mutable state is confined to its serial `queue`, except the discontinuity
-/// count and last buffered-ahead value, which `discontinuityLock` guards for the caller's threads.
+/// count, last buffered-ahead value and position snapshot, which `discontinuityLock` guards for the
+/// caller's threads.
 public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private let queue = DispatchQueue(label: "PlaybackRender.Transport", qos: .userInitiated)
     private let output: any AudioOutput
@@ -81,6 +84,10 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// Under `discontinuityLock`: a call zeroes it on the caller's thread, and a pump that predates
     /// the call cannot write the buffer it discards back.
     private var lastBufferedAhead: TimeInterval = 0
+    /// Under `discontinuityLock`: the feeder's map as of the last queue entry, and the last read.
+    private var published: (snapshot: PositionSnapshot, ids: [Int: Item], epoch: Int)?
+    private var lastRead: (id: Int, epoch: Int, seconds: TimeInterval)?
+    private var lastObserverKey = 0
 
     // Confined to `queue`.
     private var lastID = 0
@@ -89,12 +96,68 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private var ids: [Int: Item] = [:]
     private var failed = false
     private var takenDiscontinuities = 0
+    /// A `setCurrent` or seek was taken and its first position not yet sent as `.landed`.
+    private var landingPending = false
+    private var sentDuration: (id: Int, duration: TimeInterval?, isSeekable: Bool)?
+    private var observers = TimeObservers<Item>()
 
     /// Seconds of the media decoded and queued past what is heard, as of the last pump; any thread. While decode keeps up, as much as the output
     /// takes, at most 30 s; less near the end of what is set.
     /// 0 from the return of a `setCurrent` or `seek`, and after any flush, until a pump refills it.
     public var bufferedAhead: TimeInterval {
         discontinuityLock.withLock { lastBufferedAhead }
+    }
+
+    /// What is heard now, computed from the output clock on the caller's thread with no hop to the
+    /// queue (ADR-0031). Nil from the return of a `setCurrent` or `seek` until the queue takes it, and
+    /// while nothing is set. Within an item and one call it never goes back, so deltas are listening time.
+    public var position: TransportPosition<Item>? {
+        discontinuityLock.withLock {
+            guard let published, published.epoch == calledDiscontinuities,
+                  let position = published.snapshot.position(
+                      currentTime: output.currentTime(), outputLatency: output.outputLatency),
+                  let item = published.ids[position.item] else { return nil }
+            var seconds = position.seconds
+            // The clock steps back on a re-anchor or a latency change; the snapshot's floor is only as new as its pump.
+            if let lastRead, lastRead.id == position.item, lastRead.epoch == published.epoch {
+                seconds = max(seconds, lastRead.seconds)
+            }
+            lastRead = (position.item, published.epoch, seconds)
+            return TransportPosition(item: item, seconds: seconds)
+        }
+    }
+
+    /// Calls `callback` on the transport's queue every `interval` of output time while the clock runs,
+    /// on multiples of it. The output plays at rate 1 (ADR-0030), so at any speed it is wall time.
+    /// It arms a wakeup only while registered: the transport polls nothing for itself.
+    public func addPeriodicObserver(
+        interval: TimeInterval,
+        using callback: @escaping @Sendable () -> Void
+    ) -> TimeObserverToken {
+        precondition(interval > 0 && interval.isFinite)
+        return addObserver { $0.addPeriodic(key: $1, interval: interval, callback) }
+    }
+
+    /// Calls `callback` on the transport's queue with the heard item and the time when playback
+    /// crosses one of `times` (seconds of the heard item's media time). A load, seek or crossing that
+    /// lands past a time does not fire it, as media3 `PlayerMessage.setPosition` on a later position.
+    public func addBoundaryObserver(
+        times: [TimeInterval],
+        using callback: @escaping @Sendable (Item, TimeInterval) -> Void
+    ) -> TimeObserverToken {
+        addObserver { $0.addBoundary(key: $1, times: times, callback) }
+    }
+
+    // The key is taken on the caller's thread, so a cancel queued behind the add always removes it.
+    private func addObserver(_ add: @escaping (inout TimeObservers<Item>, Int) -> Void) -> TimeObserverToken {
+        let key = discontinuityLock.withLock {
+            lastObserverKey += 1
+            return lastObserverKey
+        }
+        run { [self] in add(&observers, key) }
+        return TimeObserverToken { [weak self] in
+            self?.run { [weak self] in self?.observers.remove(key) }
+        }
     }
 
     /// Plays through the device's audio output (`AVSampleBufferAudioRenderer`). The transport never
@@ -175,6 +238,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
             let id = newID()
             ids = [id: item]
             failed = false
+            landingPending = true
             onEvent(.sought(item: item, seconds: startSeconds, applied: true))
             upstream.setCurrent(item: id, source: source, startSeconds: startSeconds)
             feeder.seek(to: SeekTarget(item: id, offset: .seconds(startSeconds)))
@@ -228,6 +292,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
             onEvent(.sought(item: item, seconds: seconds, applied: id != nil))
             guard let id else { return }
             failed = false
+            landingPending = true
             feeder.seek(to: SeekTarget(item: id, offset: .seconds(seconds)))
         }
     }
@@ -305,10 +370,24 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         schedule()
     }
 
-    /// Arms the one-shot timer for the feeder's next clock-driven work, or nothing. The output plays
-    /// at rate 1 (ADR-0030), so output seconds are wall seconds.
+    /// After every queue entry: publishes what a read maps the clock through, fires the observers due
+    /// and arms the one-shot timer for the next clock-driven work, or nothing. The output plays at
+    /// rate 1 (ADR-0030), so output seconds are wall seconds.
     private func schedule() {
-        timer.arm(after: feeder.nextDeadline().map { $0 - output.currentTime() })
+        let snapshot = feeder.positionSnapshot
+        let current = discontinuityLock.withLock {
+            published = (snapshot, ids, takenDiscontinuities)
+            return calledDiscontinuities == takenDiscontinuities
+        }
+        if current, let floor = snapshot.floor { sendDurationIfChanged(of: floor.item) }
+        let clock = feeder.isClockRunning ? output.currentTime() : nil
+        var heard: TimeObservers<Item>.Heard?
+        if current, let position = snapshot.position(currentTime: output.currentTime(), outputLatency: output.outputLatency),
+           let item = ids[position.item] {
+            heard = .init(id: position.item, item: item, seconds: position.seconds, epoch: takenDiscontinuities)
+        }
+        let deadlines = observers.fire(clock: clock, heard: heard) { feeder.heardTime(of: $0, atSeconds: $1) }
+        timer.arm(after: feeder.nextDeadline(also: deadlines).map { $0 - output.currentTime() })
     }
 
     /// After every pump and flush. Skipped while a `setCurrent` or `seek` is queued, as `report` is:
@@ -320,13 +399,22 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         }
     }
 
-    /// One computed while a `setCurrent` or `seek` is still queued is dropped: its caller has moved past it.
+    /// The first position of a taken call is its landing. One computed while a `setCurrent` or `seek`
+    /// is still queued is dropped: its caller has moved past it.
     private func report(_ position: MediaPositionMap.Position) {
-        guard discontinuityLock.withLock({ calledDiscontinuities }) == takenDiscontinuities,
+        guard landingPending, discontinuityLock.withLock({ calledDiscontinuities }) == takenDiscontinuities,
               let item = ids[position.item] else { return }
-        let duration = sequencer.duration(of: position.item)
-        let isSeekable = sequencer.isSeekable(position.item)
-        onEvent(.position(item: item, seconds: position.seconds, duration: duration, isSeekable: isSeekable))
+        landingPending = false
+        sendDurationIfChanged(of: position.item)
+        onEvent(.landed(item: item, seconds: position.seconds))
+    }
+
+    private func sendDurationIfChanged(of id: Int) {
+        guard let item = ids[id] else { return }
+        let duration = sequencer.duration(of: id), isSeekable = sequencer.isSeekable(id)
+        if let sent = sentDuration, sent.id == id, sent.duration == duration, sent.isSeekable == isSeekable { return }
+        sentDuration = (id, duration, isSeekable)
+        onEvent(.durationChanged(item: item, duration: duration, isSeekable: isSeekable))
     }
 
     /// Once decode has passed into the next its audio may be queued, so it is dropped and the output

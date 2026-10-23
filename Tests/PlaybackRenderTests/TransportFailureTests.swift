@@ -58,6 +58,9 @@ final class TransportFailureTests: XCTestCase {
         timer.fire()
         // A dropped next item's flush is queued from inside the pump; wait for it, or it races the test's reads.
         timer.sync()
+        guard let position = transport.position else { return }
+        let sample = "\(position.item) \(position.seconds)"
+        if sample != positions.last { positions.append(sample) }
     }
 
     private func run(for seconds: TimeInterval) {
@@ -78,12 +81,8 @@ final class TransportFailureTests: XCTestCase {
         recorder.events.compactMap { if case let .status(status) = $0 { status } else { nil } }
     }
 
-    private var positions: [String] {
-        recorder.events.compactMap {
-            guard case let .position(item, seconds, _, _) = $0 else { return nil }
-            return "\(item) \(seconds)"
-        }
-    }
+    /// `transport.position` after each pump where it moved.
+    private var positions: [String] = []
 
     private var failedItems: [String?] {
         recorder.events.compactMap { if case let .failed(item, _) = $0 { item } else { nil } }

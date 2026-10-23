@@ -64,11 +64,17 @@ final class TransportTests: XCTestCase {
     /// Two seconds, samples 1000 to 1015.
     private lazy var b = FakeItemSource(format: mono, frames: 16, chunkFrames: 2, base: 1000)
 
+    /// `transport.position` after each pump where it moved, as a UI polling it sees.
+    private var positions: [Heard] = []
+
     /// Runs the calls made, then the decode jobs they queued, then one pump, with the clock still.
     private func pump() {
         timer.sync()
         executor.runUntilIdle()
         timer.fire()
+        guard let position = transport.position else { return }
+        let heard = Heard(item: position.item, frame: Int64(position.seconds * 8))
+        if heard != positions.last { positions.append(heard) }
     }
 
     /// Plays on in quarter-second steps, decoding and pumping after each.
@@ -99,13 +105,6 @@ final class TransportTests: XCTestCase {
 
     private var statuses: [TransportStatus] {
         recorder.events.compactMap { if case let .status(status) = $0 { status } else { nil } }
-    }
-
-    private var positions: [Heard] {
-        recorder.events.compactMap {
-            guard case let .position(item, seconds, _, _) = $0 else { return nil }
-            return Heard(item: item, frame: Int64(seconds * 8))
-        }
     }
 
     private var failedErrors: [any Error] {
@@ -270,7 +269,7 @@ final class TransportTests: XCTestCase {
         for _ in 0..<60 where statuses.last != .ended {
             output.advance(by: 0.1)
             pump()
-            let frame = recorder.events.compactMap { if case let .position(_, seconds, _, _) = $0 { seconds } else { nil } }.last
+            let frame = transport.position?.seconds
             if let change = changes.first, (frame ?? 0) * 48000 >= Double(change.frame) {
                 changes.removeFirst()
                 transport.setRate(change.rate)
@@ -279,8 +278,7 @@ final class TransportTests: XCTestCase {
 
         XCTAssertEqual(changes.count, 0)
         XCTAssertEqual(statuses, [.buffering, .playing, .ended])
-        let seconds = recorder.events.compactMap { if case let .position(_, seconds, _, _) = $0 { seconds } else { nil } }
-        XCTAssertEqual(seconds.last, 3)
+        XCTAssertEqual(transport.position?.seconds, 3)
     }
 
     func testSeekWithinAnItemThenBackAcrossAJoinDecodeHadPassed() {
@@ -316,7 +314,7 @@ final class TransportTests: XCTestCase {
     }
 
     // #127: a tick queued before the seek ran after `seek()` returned and sent the pre-seek position.
-    func testNoPositionFromBeforeASeekArrivesAfterTheSeekReturns() {
+    func testNoPositionFromBeforeASeekIsReadAfterTheSeekReturns() {
         transport.setCurrent(item: "a", source: a)
         transport.play()
         pump()
@@ -325,16 +323,14 @@ final class TransportTests: XCTestCase {
 
         let release = timer.fireHeld()
         transport.seek(item: "a", toSeconds: 2)
-        let returned = recorder.events.count
+        XCTAssertNil(transport.position, "the seek is queued")
+        let returned = positions.count
         release()
+        XCTAssertNil(transport.position, "the tick queued first ran, the seek is still queued")
         pump()
         run(for: 0.25)
 
-        let after = recorder.events[returned...].compactMap { event -> Heard? in
-            guard case let .position(item, seconds, _, _) = event else { return nil }
-            return Heard(item: item, frame: Int64(seconds * 8))
-        }
-        XCTAssertEqual(after, [Heard(item: "a", frame: 16), Heard(item: "a", frame: 18)])
+        XCTAssertEqual(Array(positions[returned...]), [Heard(item: "a", frame: 16), Heard(item: "a", frame: 18)])
     }
 
     func testASeekToAnItemAlreadyPassedIsIgnored() {
@@ -408,7 +404,7 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(statuses.last, .ended)
     }
 
-    func testEachPositionCarriesItsSourcesDurationAndSeekability() {
+    func testEachItemReportsItsSourcesDurationAndSeekability() {
         a.seekable = false
         b.frameCount = nil
         b.seekable = true
@@ -419,17 +415,17 @@ final class TransportTests: XCTestCase {
         run(for: 6)
 
         let durations = recorder.events.compactMap { event -> String? in
-            guard case let .position(item, _, duration, isSeekable) = event else { return nil }
+            guard case let .durationChanged(item, duration, isSeekable) = event else { return nil }
             return "\(item) \(duration.map { "\($0)" } ?? "nil") \(isSeekable)"
         }
-        XCTAssertEqual(Set(durations), ["a 3.0 false", "b nil true"])
+        XCTAssertEqual(durations, ["a 3.0 false", "b nil true"])
     }
 
     func testAStartIsReportedOnceItsFirstAudioGivesTheFrame() {
         transport.setCurrent(item: "a", source: a, startSeconds: 0.5)
         timer.sync()
         timer.fire()
-        XCTAssertEqual(positions, [])
+        XCTAssertNil(transport.position)
 
         pump()
         XCTAssertEqual(positions, [Heard(item: "a", frame: 4)])

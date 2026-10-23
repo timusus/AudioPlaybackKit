@@ -31,9 +31,12 @@ public final class Player<Item: Hashable & Sendable> {
     /// The failure that ended the current item; nil while playback is healthy.
     public private(set) var error: PlaybackError?
 
-    /// What is heard, in seconds of the current item's media time, written on every pump while it
-    /// changes. Within an item it goes back only on a seek, so a saver may count deltas as listening.
-    public private(set) var position: TimeInterval = 0
+    /// What is heard, in seconds of the current item's media time, computed from the output clock on
+    /// each read (ADR-0031): observing it sees only jumps, so a UI polls it or adds a periodic
+    /// observer. Within an item it goes back only on a seek, so a saver may count deltas as listening.
+    public var position: TimeInterval { readPosition() }
+    /// Where `position` stands while the transport's clock does not say: a jump not yet heard, or nothing loaded.
+    private var storedPosition: TimeInterval = 0
     /// Changes whenever `position` jumps rather than plays on: a seek, skip, load, item transition or
     /// repeat, as media3's `onPositionDiscontinuity`. It changes with the call, alongside the new
     /// `position`, so a reader never pairs it with the old one. Compare it; it may move more than once.
@@ -80,7 +83,7 @@ public final class Player<Item: Hashable & Sendable> {
     @ObservationIgnored private let makeSource: ItemSourceFactory<Item>
     @ObservationIgnored private let session: any AudioSessionControlling
     @ObservationIgnored private let inbox = TransportInbox()
-    @ObservationIgnored private var transport: Transport<Int>!
+    @ObservationIgnored private(set) var transport: Transport<Int>!
     @ObservationIgnored private var entries: [Entry] = [] {
         didSet { items = entries.map(\.item) }
     }
@@ -104,6 +107,9 @@ public final class Player<Item: Hashable & Sendable> {
     @ObservationIgnored private var held: [TransportEvent<Int>] = []
     /// A seek within the current item whose audio has not been heard yet.
     @ObservationIgnored private var seekTarget: TimeInterval?
+    /// The loaded item's audio has landed since the last jump, so `position` reads the transport.
+    @ObservationIgnored private var followsTransport = false
+    @ObservationIgnored private var lastRead: (discontinuity: Int, seconds: TimeInterval)?
     /// Where a load asked its item to start, until the item is heard: a source that cannot seek
     /// lands elsewhere, which is an adjustment but no `seekLanded`.
     @ObservationIgnored private var startTarget: TimeInterval?
@@ -562,31 +568,32 @@ public final class Player<Item: Hashable & Sendable> {
 
     private func apply(_ event: TransportEvent<Int>) {
         switch event {
-        case let .position(key, seconds, duration, isSeekable):
+        case let .landed(key, seconds):
             guard key == loadedKey, let current = currentIndex else { return }
-            position = seconds
-            self.duration = duration
-            seekable = isSeekable
+            storedPosition = seconds
+            followsTransport = true
             if let target = seekTarget ?? startTarget {
                 if seekTarget != nil { send(.seekLanded(ref(current), position: seconds)) }
                 seekTarget = nil
                 startTarget = nil
                 landed(at: seconds, seekingTo: target, index: current)
             }
-            // A position that moves while playing is heard, as media3's `onAudioPositionAdvancing`.
-            if awaitingFirstAudio, transportStatus == .playing {
-                awaitingFirstAudio = false
-                send(.firstAudioRendered(ref(current), position: seconds))
-            }
+            firstAudioIfPlaying()
+        case let .durationChanged(key, duration, isSeekable):
+            guard key == loadedKey else { return }
+            self.duration = duration
+            seekable = isSeekable
         case let .status(status):
             transportStatus = status
             if status == .ended, reachedEnd() { return }
             refreshState()
+            firstAudioIfPlaying()
         case let .failed(key, underlying):
             failed(key, underlying)
         case let .crossed(key, format):
             crossed(into: key)
             if key == loadedKey, audioFormat != format { audioFormat = format }
+            firstAudioIfPlaying()
         case let .formatChanged(key, format):
             if key == loadedKey, audioFormat != format { audioFormat = format }
         case .recovered:
@@ -645,10 +652,30 @@ public final class Player<Item: Hashable & Sendable> {
         armNext()
     }
 
-    /// Every write of `position` but the pump's. A recovery restarts from what was heard, so it never jumps.
+    /// Every jump of `position`. A recovery restarts from what was heard, so it never jumps.
     private func movePosition(to seconds: TimeInterval) {
-        position = seconds
+        storedPosition = seconds
+        followsTransport = false
         discontinuityCount += 1
+    }
+
+    /// The transport's clock once the current item's audio is heard. Before the main actor learns of a
+    /// crossing the transport already reads the next item, so the last read holds until it does.
+    private func readPosition() -> TimeInterval {
+        if followsTransport, let loadedKey, let heard = transport.position, heard.item == loadedKey {
+            lastRead = (discontinuityCount, heard.seconds)
+            return heard.seconds
+        }
+        if let lastRead, lastRead.discontinuity == discontinuityCount, followsTransport { return lastRead.seconds }
+        return storedPosition
+    }
+
+    /// The first audio after a load, seek or crossing is heard once it has landed with the clock
+    /// running, as media3's `onAudioPositionAdvancing`.
+    private func firstAudioIfPlaying() {
+        guard awaitingFirstAudio, followsTransport, transportStatus == .playing, let current = currentIndex else { return }
+        awaitingFirstAudio = false
+        send(.firstAudioRendered(ref(current), position: position))
     }
 
     /// A source that lands away from the target (a keyframe, a time-offset URL) moves `position`
@@ -694,6 +721,8 @@ public final class Player<Item: Hashable & Sendable> {
         seekTarget = nil
         startTarget = nil
         movePosition(to: 0)
+        // The join is heard: the transport's clock is already in this item.
+        followsTransport = true
         forgetSource()
         guard let index = index(of: entryID) else {
             // Removed since it was armed, so the current has ended: on to what the list armed after
@@ -739,7 +768,8 @@ public final class Player<Item: Hashable & Sendable> {
     private func pauseAtEnd() {
         atEnd = true
         pausedAtEnd = true
-        if let duration { position = duration }
+        storedPosition = duration ?? position
+        followsTransport = false
         refreshState()
         pauseByPlayer(.endOfItem)
     }
@@ -787,6 +817,8 @@ public final class Player<Item: Hashable & Sendable> {
 
     /// Stops the transport and forgets what it held, keeping the list and position.
     private func unload(as state: PlaybackState) {
+        storedPosition = position
+        followsTransport = false
         endGate(.intentWithdrawn)
         transport.stop()
         keyedEntries = [:]

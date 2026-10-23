@@ -79,10 +79,14 @@ final class TransportFormatChangeTests: XCTestCase {
         recorder.append($0)
     }
 
+    /// `transport.position` after each pump, as a UI polling it reads.
+    private var itemPositions: [(item: String, seconds: TimeInterval)] = []
+
     private func pump() {
         timer.sync()
         executor.runUntilIdle()
         timer.fire()
+        if let position = transport.position { itemPositions.append((position.item, position.seconds)) }
     }
 
     private func run(for seconds: TimeInterval) {
@@ -103,14 +107,10 @@ final class TransportFormatChangeTests: XCTestCase {
         recorder.events.filter { if case .failed = $0 { true } else { false } }.count
     }
 
-    private var positions: [TimeInterval] {
-        recorder.events.compactMap { if case let .position(_, seconds, _, _) = $0 { seconds } else { nil } }
-    }
+    private var positions: [TimeInterval] { itemPositions.map(\.seconds) }
 
-    private var itemPositions: [(item: String, seconds: TimeInterval, duration: TimeInterval?)] {
-        recorder.events.compactMap {
-            if case let .position(item, seconds, duration, _) = $0 { (item, seconds, duration) } else { nil }
-        }
+    private var durations: [TimeInterval?] {
+        recorder.events.compactMap { if case let .durationChanged(_, duration, _) = $0 { Optional(duration) } else { nil } }
     }
 
     /// The formats reported as heard, in order: `.crossed` and `.formatChanged`.
@@ -295,7 +295,7 @@ final class TransportFormatChangeTests: XCTestCase {
         start(ReencodedSource(switchFrames: [8]))
         run(for: 4)
 
-        XCTAssertEqual(Set(itemPositions.map(\.duration)), [3])
+        XCTAssertEqual(Set(durations), [3])
     }
 
     func testAChangeAfterASeekThatChangedFormatRescalesFromTheLandedFrame() {
@@ -313,7 +313,7 @@ final class TransportFormatChangeTests: XCTestCase {
         XCTAssertEqual(processor.events.dropFirst(events).filter { if case .flush = $0 { true } else { false } }, [flush(32), flush(80)])
         XCTAssertEqual(positions, positions.sorted())
         XCTAssertEqual(itemPositions.last?.seconds, 3)
-        XCTAssertEqual(Set(itemPositions.map(\.duration)), [3])
+        XCTAssertEqual(Set(durations), [3])
         XCTAssertTrue(ended)
     }
 
@@ -335,6 +335,6 @@ final class TransportFormatChangeTests: XCTestCase {
         XCTAssertEqual(firstSample(after: enqueues), 1000 + 6001, "frame 5513 at 44.1 kHz is 6000.54 at 48 kHz")
         XCTAssertEqual(positions, positions.sorted())
         XCTAssertEqual(positions.last, 3)
-        XCTAssertEqual(Set(itemPositions.map(\.duration)), [3])
+        XCTAssertEqual(Set(durations), [3])
     }
 }

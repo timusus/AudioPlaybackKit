@@ -79,10 +79,17 @@ final class TransportJoinTests: XCTestCase {
     private lazy var b = FakeItemSource(format: mono, frames: 16, chunkFrames: 2, base: 1000)
     private lazy var slowB = SlowOpenSource(b)
 
+    /// `transport.position` after each pump where it moved, as a UI polling it sees, and whether
+    /// `.ended` had been sent by then.
+    private var samples: [(heard: Heard, afterEnded: Bool)] = []
+
     private func pump() {
         timer.sync()
         executor.runUntilIdle()
         timer.fire()
+        guard let position = transport.position else { return }
+        let heard = Heard(item: position.item, frame: Int64(position.seconds * 8))
+        if heard != samples.last?.heard { samples.append((heard, statuses.last == .ended)) }
     }
 
     private func run(for seconds: TimeInterval) {
@@ -115,12 +122,7 @@ final class TransportJoinTests: XCTestCase {
         recorder.events.compactMap { if case let .status(status) = $0 { status } else { nil } }
     }
 
-    private var positions: [Heard] {
-        recorder.events.compactMap {
-            guard case let .position(item, seconds, _, _) = $0 else { return nil }
-            return Heard(item: item, frame: Int64(seconds * 8))
-        }
-    }
+    private var positions: [Heard] { samples.map(\.heard) }
 
     private var failures: Int {
         recorder.events.filter { if case .failed = $0 { true } else { false } }.count
@@ -235,9 +237,7 @@ final class TransportJoinTests: XCTestCase {
         XCTAssertEqual(crossed, ["a", "b"])
         XCTAssertEqual(statuses, [.buffering, .playing, .ended])
         // The frames held at the end of the last item are heard before it ends.
-        let lastPosition = try XCTUnwrap(recorder.events.lastIndex { if case .position = $0 { true } else { false } })
-        let ended = try XCTUnwrap(recorder.events.firstIndex { if case .status(.ended) = $0 { true } else { false } })
-        XCTAssertLessThan(lastPosition, ended)
+        XCTAssertEqual(try XCTUnwrap(samples.last).afterEnded, false)
     }
 
     // A format change drains the chain before the flush that reconfigures it, so a's held tail is

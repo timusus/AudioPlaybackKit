@@ -30,10 +30,25 @@ final class ExternalConsumerTests: XCTestCase {
         }
         timer.fire()
 
-        let seconds = events.all.compactMap { event -> TimeInterval? in
-            guard case let .position(item, seconds, _, _) = event, item == "a" else { return nil }
-            return seconds
-        }
-        XCTAssertEqual(seconds.last, 1)
+        XCTAssertEqual(transport.position?.item, "a")
+        XCTAssertEqual(transport.position?.seconds, 1)
+        XCTAssert(events.all.contains { if case .landed("a", 0) = $0 { true } else { false } })
+    }
+
+    func testAppCanObserveTimeWithATokenItKeeps() {
+        let output = FakeAudioOutput()
+        let timer = ManualPumpTimer()
+        let executor = ManualExecutor()
+        let transport = Transport<String>(output: output, timer: timer, executor: executor) { _ in }
+        let fired = NSLock()
+        nonisolated(unsafe) var times: [TimeInterval] = []
+        transport.setCurrent(item: "a", source: FakeItemSource(format: PCMFormat(sampleRate: 8, channelCount: 1),
+                                                               frames: 24, chunkFrames: 2))
+        transport.play()
+        let token = transport.addBoundaryObserver(times: [0.5]) { _, time in fired.withLock { times.append(time) } }
+        timer.advance(by: 1, clock: output.advance(by:), settle: executor.runUntilIdle)
+
+        XCTAssertEqual(fired.withLock { times }, [0.5])
+        token.cancel()
     }
 }

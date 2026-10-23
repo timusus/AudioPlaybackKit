@@ -14,6 +14,7 @@ final class SampleBufferAudioOutputIntegrationTests: XCTestCase {
         RenderEventBounds.enabled ? 0.75 : nil
     private let recorder = TimedRecorder()
     private var transport: Transport<String>!
+    private var sampling: TimeObserverToken?
 
     override func setUpWithError() throws {
         var device = AudioObjectID(kAudioObjectUnknown)
@@ -24,11 +25,23 @@ final class SampleBufferAudioOutputIntegrationTests: XCTestCase {
         )
         let status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device)
         try XCTSkipUnless(status == noErr && device != kAudioObjectUnknown, "no audio output device")
-        transport = Transport<String> { [recorder] in recorder.append($0) }
+        let transport = Transport<String> { [recorder] in recorder.append($0) }
+        // Sampled as a UI would read it; weak, as the transport holds its observers.
+        sampling = transport.addPeriodicObserver(interval: 0.05) { [recorder, weak transport] in
+            recorder.sample(transport?.position)
+        }
+        self.transport = transport
     }
 
     override func tearDown() {
+        sampling = nil
         transport = nil
+    }
+
+    /// Waits for `expectations`, then reads the position once more: the read at `.ended` is the end.
+    private func waitAndRead(for expectations: [XCTestExpectation], enforceOrder: Bool = false) {
+        wait(for: expectations, timeout: 5, enforceOrder: enforceOrder)
+        recorder.sample(transport.position)
     }
 
     func testAToneReportsPlayingThenAdvancingPositionsThenEndedInRealTime() {
@@ -37,7 +50,7 @@ final class SampleBufferAudioOutputIntegrationTests: XCTestCase {
         let playAt = recorder.now
         transport.setCurrent(item: "tone", source: ToneSource())
         transport.play()
-        wait(for: [playing, ended], timeout: 5, enforceOrder: true)
+        waitAndRead(for: [playing, ended], enforceOrder: true)
 
         let timing = recorder.timing(from: .playing, to: .ended)
         print("1x: playing \(recorder.elapsed(to: .playing) - playAt) s after play(), ended \(timing) s later; \(recorder.positionRate(sampleRate: 48000)) media s per wall s")
@@ -60,7 +73,7 @@ final class SampleBufferAudioOutputIntegrationTests: XCTestCase {
         let ended = recorder.expect { $0.status == .ended }
         let seekAt = recorder.now
         transport.seek(item: "tone", toSeconds: 0.75)
-        wait(for: [ended], timeout: 5)
+        waitAndRead(for: [ended])
 
         // The seek's restart reports `.buffering` before any position of its own.
         let afterSeek = recorder.positions(afterStatus: .buffering, since: seekAt)
@@ -81,7 +94,7 @@ final class SampleBufferAudioOutputIntegrationTests: XCTestCase {
         transport.setRate(2)
         transport.setCurrent(item: "tone", source: ToneSource())
         transport.play()
-        wait(for: [playing, ended], timeout: 5, enforceOrder: true)
+        waitAndRead(for: [playing, ended], enforceOrder: true)
 
         let timing = recorder.timing(from: .playing, to: .ended)
         print("2x: ended \(timing) s after playing; \(recorder.positionRate(sampleRate: 48000)) media s per wall s")
@@ -119,14 +132,19 @@ private final class ToneSource: ItemSource, @unchecked Sendable {
     func release() {}
 }
 
-/// Every event with the wall time it arrived, and expectations fulfilled by the first matching one.
+/// Every event and position read with the wall time it arrived, and expectations fulfilled by the
+/// first matching one.
 private final class TimedRecorder: @unchecked Sendable {
     struct Entry {
-        var event: TransportEvent<String>
+        var event: TransportEvent<String>?
+        var read: TimeInterval?
         var at: TimeInterval
 
         var status: TransportStatus? { if case let .status(status) = event { status } else { nil } }
-        var frame: Int64? { if case let .position(_, seconds, _, _) = event { Int64((seconds * 48000).rounded()) } else { nil } }
+        var frame: Int64? {
+            if case let .landed(_, seconds) = event { return Int64((seconds * 48000).rounded()) }
+            return read.map { Int64(($0 * 48000).rounded()) }
+        }
     }
 
     private let lock = NSLock()
@@ -135,7 +153,15 @@ private final class TimedRecorder: @unchecked Sendable {
     private var pending: [(match: (Entry) -> Bool, expectation: XCTestExpectation)] = []
 
     func append(_ event: TransportEvent<String>) {
-        let entry = Entry(event: event, at: Date().timeIntervalSince(start))
+        record(Entry(event: event, at: Date().timeIntervalSince(start)))
+    }
+
+    func sample(_ position: TransportPosition<String>?) {
+        guard let position else { return }
+        record(Entry(read: position.seconds, at: Date().timeIntervalSince(start)))
+    }
+
+    private func record(_ entry: Entry) {
         let met = lock.withLock {
             entries.append(entry)
             let met = pending.filter { $0.match(entry) }.map(\.expectation)

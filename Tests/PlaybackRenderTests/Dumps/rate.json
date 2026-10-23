@@ -24,15 +24,8 @@
     "status buffering",
     "status playing",
     "crossed a 8.0Hz x1",
-    "position a 0.0 duration=3.0 seekable=true",
-    "position a 0.25 duration=3.0 seekable=true",
-    "position a 0.5 duration=3.0 seekable=true",
-    "position a 0.75 duration=3.0 seekable=true",
-    "position a 1.0 duration=3.0 seekable=true",
-    "position a 1.5 duration=3.0 seekable=true",
-    "position a 2.0 duration=3.0 seekable=true",
-    "position a 2.5 duration=3.0 seekable=true",
-    "position a 3.0 duration=3.0 seekable=true",
+    "durationChanged a 3.0 seekable=true",
+    "landed a 0.0",
     "status ended"
   ],
   "flushes" : [

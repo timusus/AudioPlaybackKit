@@ -316,21 +316,36 @@ final class Feeder {
     /// - the next item or format reaching the playhead;
     /// - the refill once the 30 s cap has drained by `resumeDepth` (the output's ready event never comes
     ///   when it took everything);
-    /// - the next position report, at the next multiple of `pumpInterval` on the clock (the temporary
-    ///   position cadence), so a late pump never pushes the reports after it later.
-    func nextDeadline() -> TimeInterval? {
+    /// - each of `also`, the caller's observer deadlines.
+    ///
+    /// While the clock runs the written end is always due after the last check, which held the output
+    /// had the clock reached it, so a running clock is never left without a deadline.
+    func nextDeadline(also extra: [TimeInterval] = []) -> TimeInterval? {
         guard outputRunning else { return nil }
         let clock = output.currentTime(), latency = output.outputLatency
-        // A clock within 1 % of an interval short of a multiple is at it, so float noise never arms ~0.
-        var due = ((clock / pumpInterval + 0.01).rounded(.down) + 1) * pumpInterval
+        var due: TimeInterval?
         // Work due by the clock the last pump's check saw was handled: arming it again would spin while the clock is frozen.
         func consider(_ deadline: TimeInterval) {
-            if deadline > pumpedAt { due = min(due, deadline) }
+            if deadline > pumpedAt { due = min(due ?? deadline, deadline) }
         }
         consider(map.writtenEnd + (upstreamEnded ? latency : 0))
         if let boundary = map.nextHeardBoundary(after: playhead()) { consider(boundary + latency) }
         if map.writtenEnd - clock >= Self.maxDepth { consider(map.writtenEnd - Self.maxDepth + resumeDepth) }
+        extra.forEach(consider)
         return due
+    }
+
+    /// The clock is running: the playhead moves without a pump.
+    var isClockRunning: Bool { outputRunning }
+
+    /// What a read between pumps maps the clock through, as of this pump.
+    var positionSnapshot: PositionSnapshot {
+        PositionSnapshot(map: map, restart: restartPosition, floor: reportedPosition)
+    }
+
+    /// The output time at which `seconds` into item `id` is heard, nil unless it is written.
+    func heardTime(of id: Int, atSeconds seconds: TimeInterval) -> TimeInterval? {
+        map.playhead(reaching: seconds, of: id).map { $0 + output.outputLatency }
     }
 
     // MARK: Private
@@ -368,7 +383,10 @@ final class Feeder {
 
     /// A restart in seconds is not reported: its first audio carries the frame they became.
     private func reportablePosition(at playhead: TimeInterval) -> MediaPositionMap.Position? {
-        if let position = map.position(at: playhead) { return position }
+        map.position(at: playhead) ?? restartPosition
+    }
+
+    private var restartPosition: MediaPositionMap.Position? {
         guard let restartTarget, case let .frame(frame, sampleRate?) = restartTarget.offset else { return nil }
         return MediaPositionMap.Position(item: restartTarget.item, mediaFrame: frame, sampleRate: sampleRate)
     }

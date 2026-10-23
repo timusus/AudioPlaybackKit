@@ -23,10 +23,14 @@ final class TransportReFeedTests: XCTestCase {
     /// Two seconds, samples 1000 to 1015.
     private lazy var b = FakeItemSource(format: mono, frames: 16, chunkFrames: 2, base: 1000)
 
+    /// `transport.position` after each pump where it moved, as a UI polling it sees.
+    private var positions: [TimeInterval] = []
+
     private func pump() {
         timer.sync()
         executor.runUntilIdle()
         timer.fire()
+        if let seconds = transport.position?.seconds, seconds != positions.last { positions.append(seconds) }
     }
 
     private func run(for seconds: TimeInterval) {
@@ -97,11 +101,7 @@ final class TransportReFeedTests: XCTestCase {
         transport.processorsChanged()
         run(for: 9.25)
 
-        let frames = recorder.events.compactMap { event -> Int64? in
-            guard case let .position(_, seconds, _, _) = event else { return nil }
-            return Int64(seconds * 8)
-        }
-        XCTAssertEqual(frames, Array(stride(from: Int64(0), through: 80, by: 2)))
+        XCTAssertEqual(positions.map { Int64($0 * 8) },Array(stride(from: Int64(0), through: 80, by: 2)))
     }
 
     func testTheKeptDepthIsOutputTimeAtAnyRateAndCountsFromTheClock() {
