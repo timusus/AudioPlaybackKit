@@ -89,7 +89,10 @@ public final class LoopbackMediaServer: @unchecked Sendable {
 
         let ready = DispatchSemaphore(value: 0)
         let cancelled = listenerCancelled
+        let startedAt = Date()
+        let seen = StateLog()
         listener.stateUpdateHandler = { [weak self] state in
+            seen.append("\(state) at \(Int(Date().timeIntervalSince(startedAt) * 1000)) ms")
             switch state {
             case .ready:
                 self?.port = self?.listener.port?.rawValue ?? 0
@@ -106,12 +109,20 @@ public final class LoopbackMediaServer: @unchecked Sendable {
         listener.start(queue: queue)
         guard ready.wait(timeout: .now() + 5) == .success, port != 0 else {
             listener.cancel()
-            throw ServerError.didNotStart
+            throw ServerError.didNotStart(states: seen.entries, port: port)
         }
     }
 
-    /// Thrown by `init` when the listener never reached `.ready`.
-    public enum ServerError: Error { case didNotStart }
+    /// Thrown by `init` when the listener never reached `.ready`: every state it reported, with
+    /// the time since `start`, and the port it bound.
+    public enum ServerError: Error { case didNotStart(states: [String], port: UInt16) }
+
+    private final class StateLog: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _entries: [String] = []
+        var entries: [String] { lock.lock(); defer { lock.unlock() }; return _entries }
+        func append(_ entry: String) { lock.lock(); _entries.append(entry); lock.unlock() }
+    }
 
     /// The one URL this origin serves.
     public var url: URL { URL(string: "http://127.0.0.1:\(port)/fixture.mp3")! }
