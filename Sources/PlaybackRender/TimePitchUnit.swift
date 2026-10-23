@@ -1,3 +1,4 @@
+import Accelerate
 import AudioToolbox
 // UnsafeMutableAudioBufferListPointer comes from this overlay on iOS; macOS finds it without.
 import AVFoundation
@@ -66,7 +67,11 @@ final class TimePitchUnit: StretchUnit {
     var queuedFrames: Int { (input.count - inputStart) / channels }
 
     func append(_ samples: [Float]) {
-        if inputStart > 0 {
+        // Drop the consumed head only once it is the bigger half, so each sample moves O(1) times.
+        if inputStart == input.count {
+            input.removeAll(keepingCapacity: true)
+            inputStart = 0
+        } else if inputStart > input.count / 2 {
             input.removeFirst(inputStart)
             inputStart = 0
         }
@@ -74,17 +79,18 @@ final class TimePitchUnit: StretchUnit {
     }
 
     func render(_ frames: Int) -> [Float] {
-        var samples: [Float] = []
-        var left = frames
-        while left > 0 {
-            let count = min(left, Self.maximumFrames)
-            samples += renderSlice(count)
-            left -= count
+        [Float](unsafeUninitializedCapacity: frames * channels) { buffer, count in
+            var done = 0
+            while done < frames {
+                let slice = min(frames - done, Self.maximumFrames)
+                renderSlice(slice, into: buffer.baseAddress! + done * channels)
+                done += slice
+            }
+            count = frames * channels
         }
-        return samples
     }
 
-    private func renderSlice(_ frames: Int) -> [Float] {
+    private func renderSlice(_ frames: Int, into target: UnsafeMutablePointer<Float>) {
         for channel in 0..<channels { output[channel].mDataByteSize = UInt32(frames * 4) }
         var flags = AudioUnitRenderActionFlags()
         var time = AudioTimeStamp()
@@ -92,21 +98,23 @@ final class TimePitchUnit: StretchUnit {
         time.mFlags = .sampleTimeValid
         sampleTime += Double(frames)
         AudioUnitRender(unit, &flags, &time, 0, UInt32(frames), output.unsafeMutablePointer)
-        var samples = [Float](repeating: 0, count: frames * channels)
         for channel in 0..<channels {
-            let source = output[channel].mData!.assumingMemoryBound(to: Float.self)
-            for frame in 0..<frames { samples[frame * channels + channel] = source[frame] }
+            cblas_scopy(Int32(frames), output[channel].mData!.assumingMemoryBound(to: Float.self), 1,
+                        target + channel, Int32(channels))
         }
-        return samples
     }
 
     private func pull(_ frames: Int, into data: UnsafeMutablePointer<AudioBufferList>) -> OSStatus {
         let buffers = UnsafeMutableAudioBufferListPointer(data)
         let available = min(frames, queuedFrames)
-        for channel in 0..<channels {
-            let target = buffers[channel].mData!.assumingMemoryBound(to: Float.self)
-            for frame in 0..<available { target[frame] = input[inputStart + frame * channels + channel] }
-            for frame in available..<frames { target[frame] = 0 }
+        input.withUnsafeBufferPointer { samples in
+            for channel in 0..<channels {
+                let target = buffers[channel].mData!.assumingMemoryBound(to: Float.self)
+                if available > 0 {
+                    cblas_scopy(Int32(available), samples.baseAddress! + inputStart + channel, Int32(channels), target, 1)
+                }
+                (target + available).update(repeating: 0, count: frames - available)
+            }
         }
         inputStart += available * channels
         return noErr
