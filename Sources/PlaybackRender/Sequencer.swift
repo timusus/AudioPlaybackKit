@@ -259,11 +259,12 @@ final class Sequencer: @unchecked Sendable {
                 schedule()
                 return .chunk(chunk)
             }
+            // Nothing set, an end and a failure all wait for an item set later, whose first chunk wakes the caller.
+            waiting = true
             if let failure { return .failed(item: failure.item, error: failure.error) }
             // Nothing set is not an end: the transport pumps before its first item.
             guard let cursor else { return .pending }
             guard !(cursor.ended && entry(after: cursor.entry) == nil) else { return .ended }
-            waiting = true
             return .pending
         }
     }

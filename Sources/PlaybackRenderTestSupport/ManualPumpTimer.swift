@@ -11,6 +11,7 @@ public final class ManualPumpTimer: @unchecked Sendable {
     private var tick: (@Sendable () -> Void)?
     private var suspended = false
     private var _wakes = 0
+    private var woken = false
     private var _armedDelay: TimeInterval?
     private var _armCount = 0
 
@@ -35,7 +36,7 @@ public final class ManualPumpTimer: @unchecked Sendable {
         }
     }
 
-    /// Wakes are only counted: a test fires the pump they ask for itself.
+    /// Wakes are counted, and pumped only by `advance`: `fire` pumps whether or not one is pending.
     public var wakes: Int { lock.withLock { _wakes } }
 
     /// The delay the transport last asked for, nil when it asked for none: nothing is due on the clock.
@@ -52,7 +53,40 @@ public final class ManualPumpTimer: @unchecked Sendable {
     }
 
     public func wake() {
-        lock.withLock { _wakes += 1 }
+        lock.withLock {
+            _wakes += 1
+            woken = true
+        }
+    }
+
+    /// Moves time on by `seconds` as the real timer sees it: after every call already made, it pumps
+    /// for a pending `wake` and for each armed deadline that falls due, moving `clock` to it first, and
+    /// never otherwise, so a test using only this catches a missed wakeup. `settle` runs between pumps,
+    /// e.g. the decode jobs a pump queued.
+    public func advance(by seconds: TimeInterval, clock: (TimeInterval) -> Void, settle: () -> Void = {}) {
+        var left = seconds
+        var pumps = 0
+        while true {
+            sync()
+            settle()
+            let (wasWoken, delay) = lock.withLock { () -> (Bool, TimeInterval?) in
+                defer { woken = false }
+                return (woken, _armedDelay)
+            }
+            if !wasWoken {
+                // Within float noise: a deadline the sum of the steps lands on is due.
+                guard let delay, delay <= left + 1e-9 else { break }
+                let step = max(delay, 0)
+                clock(step)
+                left -= step
+            }
+            pumps += 1
+            precondition(pumps < 100_000, "the pump re-arms without time passing")
+            fire()
+        }
+        guard left > 0 else { return }
+        clock(left)
+        lock.withLock { _armedDelay = _armedDelay.map { $0 - left } }
     }
 
     /// Runs one pump and returns once it has finished.

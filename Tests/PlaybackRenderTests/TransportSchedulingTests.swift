@@ -4,7 +4,8 @@ import PlaybackRenderTestSupport
 import XCTest
 
 /// When the transport asks to be pumped (ADR-0018): only for work due on the clock, never while it
-/// has none. The fake timer records what was armed; a test fires the pump itself.
+/// has none. Time moves only through `advance`, which pumps as the real timer does, on a wake or an
+/// armed deadline, so a wakeup the transport misses leaves it stuck here too.
 final class TransportSchedulingTests: XCTestCase {
     private let mono = PCMFormat(sampleRate: 8, channelCount: 1)
     private let output = FakeAudioOutput()
@@ -21,10 +22,9 @@ final class TransportSchedulingTests: XCTestCase {
     /// Two seconds.
     private lazy var b = FakeItemSource(format: mono, frames: 16, chunkFrames: 2, base: 1000)
 
-    private func pump() {
-        timer.sync()
-        executor.runUntilIdle()
-        timer.fire()
+    /// Decode keeps up: every job a pump queues lands before the next.
+    private func advance(by seconds: TimeInterval) {
+        timer.advance(by: seconds, clock: output.advance(by:), settle: executor.runUntilIdle)
     }
 
     private var crossed: [String] {
@@ -35,29 +35,9 @@ final class TransportSchedulingTests: XCTestCase {
         recorder.events.compactMap { if case let .status(status) = $0 { status } else { nil } }
     }
 
-    /// Plays on as a timer would: the clock moves to each armed time and the pump runs, until nothing is armed.
-    private func runOnTheTimer(limit: TimeInterval) {
-        while let delay = timer.armedDelay, output.currentTime() < limit {
-            output.advance(by: delay)
-            pump()
-        }
-    }
-
-    /// Plays to `time` in half-second steps so the output never runs dry on the way.
-    private func play(to time: TimeInterval) {
-        while output.currentTime() + 0.5 < time {
-            output.advance(by: 0.5)
-            pump()
-        }
-        output.advance(by: time - output.currentTime())
-        pump()
-    }
-
     func testPausedForAMinuteArmsNothing() {
         transport.setCurrent(item: "a", source: a)
-        pump()
-        output.advance(by: 60)
-        pump()
+        advance(by: 60)
 
         XCTAssertEqual(statuses, [.buffering, .paused])
         XCTAssertEqual(timer.armCount, 0)
@@ -66,9 +46,7 @@ final class TransportSchedulingTests: XCTestCase {
 
     func testIdleWithNoItemArmsNothing() {
         transport.play()
-        pump()
-        output.advance(by: 60)
-        pump()
+        advance(by: 60)
 
         XCTAssertEqual(timer.armCount, 0)
         XCTAssertNil(timer.armedDelay)
@@ -77,18 +55,30 @@ final class TransportSchedulingTests: XCTestCase {
     func testEndedArmsNothing() {
         transport.setCurrent(item: "a", source: a)
         transport.play()
-        pump()
-        runOnTheTimer(limit: 60)
+        advance(by: 60)
 
         XCTAssertEqual(statuses.last, .ended)
         XCTAssertGreaterThan(timer.armCount, 0)
         XCTAssertNil(timer.armedDelay)
     }
 
+    func testANextItemSetAfterTheEndPlaysOn() {
+        transport.setCurrent(item: "a", source: a)
+        transport.play()
+        advance(by: 60)
+        XCTAssertEqual(statuses.last, .ended)
+
+        transport.setNext(item: "b", source: b)
+        advance(by: 5)
+
+        XCTAssertEqual(crossed, ["a", "b"])
+        XCTAssertEqual(statuses.suffix(2), [.playing, .ended])
+    }
+
     func testPausingDisarms() {
         transport.setCurrent(item: "a", source: a)
         transport.play()
-        pump()
+        advance(by: 0)
         XCTAssertNotNil(timer.armedDelay)
 
         transport.pause()
@@ -99,7 +89,7 @@ final class TransportSchedulingTests: XCTestCase {
     func testPlayingWithTheOutputFullArmsOnlyThePositionCadence() {
         transport.setCurrent(item: "a", source: a)
         transport.play()
-        pump()
+        advance(by: 0)
 
         // Two seconds are queued of three, the output takes no more, and the end is 2 s off.
         XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 0.1, accuracy: 1e-9)
@@ -109,8 +99,7 @@ final class TransportSchedulingTests: XCTestCase {
         transport.setCurrent(item: "a", source: a)
         transport.setNext(item: "b", source: b)
         transport.play()
-        pump()
-        play(to: 2.9)
+        advance(by: 2.9)
 
         // `b` starts at 3 s, heard from half a frame (1/16 s) before it.
         XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 0.0375, accuracy: 1e-9)
@@ -119,8 +108,7 @@ final class TransportSchedulingTests: XCTestCase {
     func testTheEndOfWhatIsWrittenIsDueBeforeTheNextPositionReport() {
         transport.setCurrent(item: "a", source: a)
         transport.play()
-        pump()
-        play(to: 2.95)
+        advance(by: 2.95)
 
         XCTAssertEqual(try XCTUnwrap(timer.armedDelay), 0.05, accuracy: 1e-9)
     }
@@ -129,16 +117,12 @@ final class TransportSchedulingTests: XCTestCase {
         transport.setCurrent(item: "a", source: a)
         transport.setNext(item: "b", source: b)
         transport.play()
-        pump()
-        var crossedAt: TimeInterval?
-        while let delay = timer.armedDelay, output.currentTime() < 10 {
-            output.advance(by: delay)
-            pump()
-            if crossedAt == nil, crossed.count == 2 { crossedAt = output.currentTime() }
-        }
+        advance(by: 0)
+        while crossed.count < 2, let delay = timer.armedDelay { advance(by: delay) }
 
         XCTAssertEqual(crossed, ["a", "b"])
-        XCTAssertEqual(try XCTUnwrap(crossedAt), 2.9375, accuracy: 1e-6)
+        XCTAssertEqual(output.currentTime(), 2.9375, accuracy: 1e-6)
+        advance(by: 10)
         XCTAssertEqual(statuses.last, .ended)
     }
 
@@ -147,15 +131,12 @@ final class TransportSchedulingTests: XCTestCase {
         transport.play()
         timer.sync()
         // Decode delivers just enough to start and then no more, so the output runs dry.
-        while !statuses.contains(.playing), executor.runNext() { timer.fire() }
+        while !statuses.contains(.playing), executor.runNext() { timer.advance(by: 0, clock: output.advance(by:)) }
         XCTAssertEqual(statuses, [.buffering, .playing], "started on what was written")
         let writtenEnd = try XCTUnwrap(output.enqueues.last).time + 0.25
         XCTAssertLessThan(writtenEnd, 3)
 
-        while let delay = timer.armedDelay, output.currentTime() < writtenEnd {
-            output.advance(by: min(delay, writtenEnd - output.currentTime()))
-            timer.fire()
-        }
+        timer.advance(by: 1, clock: output.advance(by:))
 
         XCTAssertEqual(statuses.last, .buffering, "the written end was reached")
         XCTAssertEqual(output.rate, 0)
