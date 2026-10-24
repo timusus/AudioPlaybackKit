@@ -44,6 +44,12 @@ final class ManualGrowingFileClock: GrowingFileClock, @unchecked Sendable {
         }
     }
 
+    /// The process is suspended for `seconds`: time passes and nothing scheduled runs until the
+    /// test next advances.
+    func suspend(for seconds: TimeInterval) {
+        lock.withLock { current += seconds }
+    }
+
     /// Steps the clock `step` at a time, letting the real network answer between steps, until
     /// `condition` holds or `timeout` real seconds pass without the network answering. It steps
     /// only while `source` owes the network nothing, so a loaded machine's slow loopback is never

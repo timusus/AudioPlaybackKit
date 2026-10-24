@@ -77,6 +77,8 @@ struct GrowingFileDownload {
     var samples: [(at: TimeInterval, bytes: Int)] = []
     var firstSampleAt: TimeInterval?
     var lastDownloadEventAt: TimeInterval = -.infinity
+    /// When an event last came in: a gap since then longer than any timer was a suspension (``ran(now:)``).
+    var lastRanAt: TimeInterval?
     private var transactionsOpened = 0
     var attemptsSent = 0
     /// An ``Effect/openFile`` is out: what the transaction it opens is.
@@ -182,6 +184,7 @@ struct GrowingFileDownload {
     /// A read of up to `maxLength` bytes at the decoder's position. `isRecheck` re-runs the
     /// decision of a read that just parked, so it is not a new park.
     mutating func read(maxLength: Int, now: TimeInterval, isRecheck: Bool = false) -> ReadStep {
+        ran(now: now)
         let opened = readOpened
         readOpened = false
         if cancelled { return step(.fail(.cancelled)) }
@@ -294,6 +297,7 @@ struct GrowingFileDownload {
     /// The answer to an ``Effect/openFile``: the new transaction's request goes out, or, without a
     /// file, there is no transaction and `failure` says why.
     mutating func opened(fileReady: Bool, now: TimeInterval) -> [Effect] {
+        ran(now: now)
         guard let open = pendingOpen else { return [] }
         pendingOpen = nil
         guard fileReady else {

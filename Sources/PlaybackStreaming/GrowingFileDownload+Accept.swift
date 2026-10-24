@@ -7,6 +7,7 @@ extension GrowingFileDownload {
 
     /// The response to the request `attempt`: whether its body is taken.
     mutating func received(_ response: Response, attempt: Int, now: TimeInterval) -> (allow: Bool, effects: [Effect]) {
+        ran(now: now)
         guard !cancelled, let tx = current, tx.attempt == attempt, !tx.ended else { return (false, []) }
         let allow = accept(response, tx, now: now)
         return (allow, takeEffects())

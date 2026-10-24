@@ -13,6 +13,7 @@ extension GrowingFileDownload {
         _ count: Int, attempt: Int, writeError: Int32? = nil, overlapMatches: Bool = true,
         now: TimeInterval, head: () -> [UInt8]?
     ) -> [Effect] {
+        ran(now: now)
         // Still this request's: across the write, an idle check may have ended it and a resume
         // gone out from the frontier this chunk would move, under the same transaction.
         guard let tx = current, tx.attempt == attempt, !tx.ended else { return [] }
@@ -74,6 +75,7 @@ extension GrowingFileDownload {
     mutating func completed(
         attempt: Int, errorDomain: String = NSURLErrorDomain, errorCode: Int?, now: TimeInterval
     ) -> [Effect] {
+        ran(now: now)
         guard !cancelled, let tx = current, tx.attempt == attempt, !tx.ended else { return [] }
         if let errorCode {
             let urlError = errorDomain == NSURLErrorDomain ? URLError(URLError.Code(rawValue: errorCode)) : nil

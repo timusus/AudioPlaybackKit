@@ -79,6 +79,11 @@ extension GrowingFileDownload {
             linkDownSince = nil
         }
 
+        /// The process was suspended for `gap`: the link window resumes where it stood.
+        mutating func suspended(for gap: TimeInterval) {
+            linkDownSince? += gap
+        }
+
         /// A fresh budget.
         mutating func reset() {
             self = Retry(linkWindow: linkWindow)

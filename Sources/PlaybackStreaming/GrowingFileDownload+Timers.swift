@@ -5,7 +5,20 @@ import PlaybackDecode
 
 extension GrowingFileDownload {
 
+    /// Every event's first step. While the link window or an attempt's wait runs, a timer comes due within
+    /// ``GrowingFileByteSource/requestTimeoutSeconds``; an event 5 s past that found the process suspended,
+    /// which says nothing of the link, so the quiet clocks skip the gap.
+    mutating func ran(now: TimeInterval) {
+        defer { lastRanAt = now }
+        guard let last = lastRanAt, now - last > GrowingFileByteSource.requestTimeoutSeconds + 5 else { return }
+        let gap = now - last
+        retry.suspended(for: gap)
+        current?.attemptStartedAt += gap
+        current?.lastByteAt += gap
+    }
+
     mutating func fire(_ timer: Timer, now: TimeInterval) -> [Effect] {
+        ran(now: now)
         switch timer {
         case .recheck:
             recheckPending = false
@@ -51,6 +64,7 @@ extension GrowingFileDownload {
     /// frontier after the backoff, from the same budget. A transaction done with the network, or
     /// whose every byte is in and only its completion is still on the way, is left alone.
     mutating func pathChanged(now: TimeInterval) -> [Effect] {
+        ran(now: now)
         guard !cancelled, let tx = current, !tx.ended, !tx.isComplete,
               tx.frontier < min(tx.totalLength ?? .max, tx.bodyEnd ?? .max) else { return [] }
         end(StreamFailure(.network, detail: "path_changed at=\(tx.frontier)"), retryable: true, pathChanged: true, now: now)
@@ -67,6 +81,7 @@ extension GrowingFileDownload {
     /// The path's cost, on every path the monitor reports. A paused transaction resumes at once
     /// on a path that no longer costs; one that costs pauses at its next chunk.
     mutating func pathCost(isExpensive: Bool, now: TimeInterval) -> [Effect] {
+        ran(now: now)
         pathIsExpensive = isExpensive
         if !cancelled, let tx = current, tx.paused, !isCapped(tx) { resume(now: now) }
         return takeEffects()
@@ -75,6 +90,7 @@ extension GrowingFileDownload {
     /// The system refused the origin's certificate and the user trusted no such leaf: the read fails
     /// at once, with no retry.
     mutating func certificateRejected(attempt: Int, now: TimeInterval) -> [Effect] {
+        ran(now: now)
         guard !cancelled, let tx = current, tx.attempt == attempt, !tx.ended else { return [] }
         end(
             StreamFailure(
