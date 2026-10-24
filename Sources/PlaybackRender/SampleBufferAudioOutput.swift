@@ -109,6 +109,8 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
             let start = old == 0 && rate != 0 ? " hasSufficientMediaDataForReliablePlaybackStart=\(sufficient)" : ""
             note("setRate old=\(old) new=\(Float(rate)) anchor=\(time.map(fixed) ?? "none")\(start)")
         }
+        // Init and media-services-reset reads can land before the session is active; re-read once it is.
+        if old == 0 && rate != 0 { refreshOutputLatency() }
         if let time {
             synchronizer.setRate(Float(rate), time: anchorTime(time))
         } else {
