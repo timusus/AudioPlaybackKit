@@ -27,20 +27,36 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     private var lowestSampleRate = 48000.0
     private let readyQueue = DispatchQueue(label: "SampleBufferAudioOutput.ready")
     private let newRenderer: @Sendable () -> AVSampleBufferAudioRenderer
+    private let latencySource: @Sendable () -> TimeInterval
+    private let latencyQueue = DispatchQueue(label: "SampleBufferAudioOutput.latency")
+    // Under `lock`: the last value `latencySource` returned.
+    private var latency: TimeInterval = 0
     #if os(iOS)
     private var resetObserver: (any NSObjectProtocol)?
+    private var routeObserver: (any NSObjectProtocol)?
     #endif
 
-    /// `newRenderer` lets a test stand in a renderer that delivers its ready-for-more block on cue.
-    init(newRenderer: @escaping @Sendable () -> AVSampleBufferAudioRenderer = { AVSampleBufferAudioRenderer() }) {
+    /// `newRenderer` lets a test stand in a renderer that delivers its ready-for-more block on cue;
+    /// `latencySource` one that counts its reads. The default is the session's latency on iOS and 0
+    /// on macOS, whose clock already includes it (ADR-0018).
+    init(
+        newRenderer: @escaping @Sendable () -> AVSampleBufferAudioRenderer = { AVSampleBufferAudioRenderer() },
+        latencySource: @escaping @Sendable () -> TimeInterval = SampleBufferAudioOutput.sessionLatency
+    ) {
         self.newRenderer = newRenderer
+        self.latencySource = latencySource
         (_renderer, _synchronizer) = settings.makeRenderer(newRenderer())
         observers = observe(_renderer)
+        refreshOutputLatency()
         #if os(iOS)
+        routeObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification, object: nil, queue: nil
+        ) { [weak self] _ in self?.refreshOutputLatency() }
         // The audio objects must be recreated after a reset (AVAudioSession docs).
         resetObserver = NotificationCenter.default.addObserver(
             forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: nil
         ) { [weak self] _ in
+            self?.refreshOutputLatency()
             // The notification names no renderer, so it skips `send`'s identity guard.
             self?.lock.withLock { self?.handler?(.mediaServicesReset) }
         }
@@ -52,6 +68,7 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
         _renderer.stopRequestingMediaData()
         #if os(iOS)
         if let resetObserver { NotificationCenter.default.removeObserver(resetObserver) }
+        if let routeObserver { NotificationCenter.default.removeObserver(routeObserver) }
         #endif
     }
 
@@ -108,15 +125,25 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
         synchronizer.currentTime().seconds
     }
 
-    var outputLatency: TimeInterval {
+    @Sendable static func sessionLatency() -> TimeInterval {
         #if os(iOS)
-        // Read per call: it changes with the route. The iPhone probe heard currentTime 11 ms ahead
-        // with outputLatency at 9.7 ms (ADR-0018).
+        // The iPhone probe heard currentTime 11 ms ahead with outputLatency at 9.7 ms (ADR-0018).
         AVAudioSession.sharedInstance().outputLatency
         #else
-        // The macOS clock already includes the output latency (ADR-0018).
         0
         #endif
+    }
+
+    // The session read is an IPC that can block for seconds, so position reads take the cache.
+    var outputLatency: TimeInterval { lock.withLock { latency } }
+
+    /// Re-reads the latency source off the calling thread and swaps the cache in.
+    func refreshOutputLatency() {
+        latencyQueue.async { [weak self] in
+            guard let self else { return }
+            let value = latencySource()
+            lock.withLock { self.latency = value }
+        }
     }
 
     var isReadyForMoreMediaData: Bool {
@@ -152,6 +179,7 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     /// A fresh renderer on a fresh synchronizer: Apple does not say whether a synchronizer survives
     /// a media-services reset, and a new one costs little.
     func rebuild() throws {
+        refreshOutputLatency()
         let (renderer, synchronizer) = lock.withLock { settings }.makeRenderer(newRenderer())
         if renderer.status == .failed { throw renderer.error ?? AudioOutputError.rendererFailed }
         let observers = observe(renderer)

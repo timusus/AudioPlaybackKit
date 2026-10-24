@@ -61,3 +61,36 @@ private final class EventBox: @unchecked Sendable {
         lock.withLock { events.append(event) }
     }
 }
+
+/// The latency is cached: position reads must never reach the session (a blocking IPC on iOS).
+final class SampleBufferAudioOutputLatencyTests: XCTestCase {
+    private final class Source: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _value = 0.0, _reads = 0
+        var value: Double { get { lock.withLock { _value } } set { lock.withLock { _value = newValue } } }
+        var reads: Int { lock.withLock { _reads } }
+        func read() -> Double { lock.withLock { _reads += 1; return _value } }
+    }
+
+    private func waitUntil(_ condition: () -> Bool) {
+        let deadline = Date().addingTimeInterval(5)
+        while !condition(), Date() < deadline { Thread.sleep(forTimeInterval: 0.005) }
+    }
+
+    func testPositionReadsUseTheCacheAndARefreshFollowsTheRoute() {
+        let source = Source()
+        source.value = 0.01
+        let output = SampleBufferAudioOutput(latencySource: { source.read() })
+        waitUntil { output.outputLatency == 0.01 }
+        let reads = source.reads
+
+        for _ in 0..<100 { XCTAssertEqual(output.outputLatency, 0.01) }
+        XCTAssertEqual(source.reads, reads, "a read must not consult the source")
+
+        source.value = 0.25
+        XCTAssertEqual(output.outputLatency, 0.01, "the cache holds until a refresh")
+        output.refreshOutputLatency()
+        waitUntil { output.outputLatency == 0.25 }
+        XCTAssertEqual(output.outputLatency, 0.25)
+    }
+}
