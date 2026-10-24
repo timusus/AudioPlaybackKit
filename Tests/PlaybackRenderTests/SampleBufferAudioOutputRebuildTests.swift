@@ -72,16 +72,12 @@ final class SampleBufferAudioOutputLatencyTests: XCTestCase {
         func read() -> Double { lock.withLock { _reads += 1; return _value } }
     }
 
-    private func waitUntil(_ condition: () -> Bool) {
-        let deadline = Date().addingTimeInterval(5)
-        while !condition(), Date() < deadline { Thread.sleep(forTimeInterval: 0.005) }
-    }
-
     func testPositionReadsUseTheCacheAndARefreshFollowsTheRoute() {
         let source = Source()
         source.value = 0.01
         let output = SampleBufferAudioOutput(latencySource: { source.read() })
-        waitUntil { output.outputLatency == 0.01 }
+        output.latencyQueue.sync {}
+        XCTAssertEqual(output.outputLatency, 0.01)
         let reads = source.reads
 
         for _ in 0..<100 { XCTAssertEqual(output.outputLatency, 0.01) }
@@ -90,7 +86,7 @@ final class SampleBufferAudioOutputLatencyTests: XCTestCase {
         source.value = 0.25
         XCTAssertEqual(output.outputLatency, 0.01, "the cache holds until a refresh")
         output.refreshOutputLatency()
-        waitUntil { output.outputLatency == 0.25 }
+        output.latencyQueue.sync {}
         XCTAssertEqual(output.outputLatency, 0.25)
     }
 }

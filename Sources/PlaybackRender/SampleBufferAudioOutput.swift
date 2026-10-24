@@ -28,7 +28,8 @@ final class SampleBufferAudioOutput: AudioOutput, @unchecked Sendable {
     private let readyQueue = DispatchQueue(label: "SampleBufferAudioOutput.ready")
     private let newRenderer: @Sendable () -> AVSampleBufferAudioRenderer
     private let latencySource: @Sendable () -> TimeInterval
-    private let latencyQueue = DispatchQueue(label: "SampleBufferAudioOutput.latency")
+    // Internal so tests can drain pending refreshes with `latencyQueue.sync {}`.
+    let latencyQueue = DispatchQueue(label: "SampleBufferAudioOutput.latency")
     // Under `lock`: the last value `latencySource` returned.
     private var latency: TimeInterval = 0
     #if os(iOS)
