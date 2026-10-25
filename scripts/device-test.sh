@@ -26,6 +26,11 @@ xcodegen generate --quiet --spec "$spec"
 if [ "${1:-}" = "--simulator" ]; then
   [ -n "${2:-}" ] || fail "--simulator needs a UDID from: xcrun simctl list devices available"
   udid="$2"; shift 2
+  # Boots through the machine-wide simulator gate, which queues for a slot; xcodebuild would boot it unmetered.
+  sim boot "$udid" || case $? in
+    75) fail "no simulator slot free for $udid after the wait; rerun later" ;;
+    *) fail "sim boot $udid failed" ;;
+  esac
   exec lease -- xcodebuild test -project "$project" -scheme PlaybackDeviceTests \
     -derivedDataPath "$derived" -destination "platform=iOS Simulator,id=$udid" \
     -parallel-testing-enabled NO -collect-test-diagnostics never "$@"
