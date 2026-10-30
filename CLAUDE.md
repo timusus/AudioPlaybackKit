@@ -38,7 +38,7 @@ scripts/test-all                                    # whole suite, about 490 s: 
 swift test --filter PlaybackDecodeConformance       # about 410-480 s (the matrix test alone about 234 s)
 GOLDEN_UPDATE=1 swift test --filter PlaybackDecodeConformance   # after an intended change; review the JSON diff
 xcodebuild test -scheme AudioPlaybackKit-Package -only-testing:PlaybackStreamingTests \
-  -destination "$(sim destination)" -parallel-testing-enabled NO -collect-test-diagnostics never   # this worktree's own simulator
+  -destination "$(sim destination)" -parallel-testing-enabled NO -collect-test-diagnostics never   # an exclusively held pool simulator
 ```
 
 Iterate with `--filter` and finish with one `scripts/test-fast` run (`--filter` and other args pass
