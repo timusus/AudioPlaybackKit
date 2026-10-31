@@ -64,7 +64,7 @@ final class PlayerAdvanceTests: XCTestCase {
         XCTAssertEqual(PlayerRig.transitions(events), [.init(from: 0, to: 0, reason: .repeat)])
     }
 
-    func testTurningRepeatOffAtTheLastItemEnds() async {
+    func testTurningRepeatOffAtTheLastItemEnds() {
         player.setItems(["a", "b"], startIndex: 1)
         player.repeatMode = .all
         player.play()

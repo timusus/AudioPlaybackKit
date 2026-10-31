@@ -6,6 +6,7 @@ import XCTest
 /// The checklist's interruption, route and media-services rows, with the session's notifications
 /// posted as iOS posts them; `RealCallTests` proves a real call delivers them.
 final class SessionNotificationTests: DeviceTestCase {
+
     // MARK: Interruptions
 
     func testInterruptionEndingWithShouldResumeResumes() async {

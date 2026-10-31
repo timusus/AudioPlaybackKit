@@ -74,8 +74,7 @@ extension LoopbackMediaServer {
         let whole: ClosedRange<Int64> = 0...max(total - 1, 0)
         guard let line = head.split(separator: "\r\n").first(where: {
             $0.lowercased().hasPrefix("range:")
-        }) else { return whole }
-        guard let spec = line.split(separator: "=").last else { return whole }
+        }), let spec = line.split(separator: "=").last else { return whole }
         let bounds = spec.split(separator: "-", omittingEmptySubsequences: false)
         guard let start = Int64(bounds.first ?? "") else { return whole }
         let end = bounds.count > 1 ? Int64(bounds[1]) : nil

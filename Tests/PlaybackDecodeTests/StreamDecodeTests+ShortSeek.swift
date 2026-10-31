@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// Stands in for a growing download: bytes before `frontier` are fetched, the rest are not, until a
@@ -76,6 +75,7 @@ private final class FrontierByteReader: StreamByteReader {
 }
 
 extension StreamDecodeTests {
+
     // MARK: - A short forward seek past the fetched bytes
 
     /// `tone.mp3` is 64 kbps CBR (8000 bytes a second) whose audio starts at byte 313, after a

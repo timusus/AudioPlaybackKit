@@ -410,6 +410,7 @@ private final class Negate: AudioProcessor, @unchecked Sendable {
     func flush(_ metadata: StreamMetadata) {
         flushes.append(metadata)
     }
+
     func reset() {}
 }
 

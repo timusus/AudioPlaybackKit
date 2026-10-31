@@ -1,13 +1,13 @@
 import AVFoundation
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 #if canImport(CStreamDecode)
-    import CStreamDecode
+import CStreamDecode
 #endif
 
 extension StreamDecodeTests {
+
     // MARK: - Cancel
 
     func testCancelUnblocksAStalledRead() throws {
@@ -262,11 +262,11 @@ extension StreamDecodeTests {
         XCTAssertEqual(StreamProbeBudget.default.bytes, 64 * 1024)
         XCTAssertEqual(StreamProbeBudget.default.analyzeDuration, 1)
         #if canImport(CStreamDecode)
-            XCTAssertEqual(StreamProbeBudget.default.bytes, Int64(STREAM_DECODE_DEFAULT_PROBE_BYTES))
-            XCTAssertEqual(
-                Int64(StreamProbeBudget.default.analyzeDuration * 1_000_000),
-                Int64(STREAM_DECODE_DEFAULT_MAX_ANALYZE_US)
-            )
+        XCTAssertEqual(StreamProbeBudget.default.bytes, Int64(STREAM_DECODE_DEFAULT_PROBE_BYTES))
+        XCTAssertEqual(
+            Int64(StreamProbeBudget.default.analyzeDuration * 1_000_000),
+            Int64(STREAM_DECODE_DEFAULT_MAX_ANALYZE_US)
+        )
         #endif
     }
 

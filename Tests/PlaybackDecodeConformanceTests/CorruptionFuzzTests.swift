@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// Seeded corruption of the conformance fixtures, decoded to the end with a couple of seeks. The
@@ -225,7 +224,7 @@ final class HostileReader: StreamByteReader {
 
     init(data: Data, control c: [UInt8]) {
         self.data = data
-        seekable = c[0] & 3 != 0  // independent bits: every size is tried with and without seeking
+        seekable = c[0] & 3 != 0 // independent bits: every size is tried with and without seeking
         size = Size(rawValue: Int(c[0] >> 2) & 3) ?? .correct
         maxRead = 1 + Int(c[1]) * (c[2] & 1 == 0 ? 1 : 64)
         eofAt = c[3] & 3 == 0 ? Int(UInt64(data.count) * UInt64(c[4]) / 255) : data.count

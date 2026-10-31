@@ -1,9 +1,8 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 #if canImport(CStreamDecode)
-    import CStreamDecode
+import CStreamDecode
 #endif
 
 /// A source that can only move forward (an unknown-length chunked transcode): no total length unless
@@ -153,7 +152,7 @@ final class ForwardOnlySourceTests: XCTestCase {
         var state: UInt64 = 404
         let junk = Data((0..<100_000).map { _ -> UInt8 in
             state = state &* 6364136223846793005 &+ 1442695040888963407
-            return UInt8(0x20 + (state >> 33) % 0x5f)   // printable, never the 0xFF sync byte
+            return UInt8(0x20 + (state >> 33) % 0x5f) // printable, never the 0xFF sync byte
         })
         let body = try Data(contentsOf: fixtureURL("../../PlaybackDecodeConformanceTests/Fixtures/cbr_padding_bit.mp3"))
         // A budget that covers the junk, so libavformat takes it for MP3 and mp3dec's scan misses.

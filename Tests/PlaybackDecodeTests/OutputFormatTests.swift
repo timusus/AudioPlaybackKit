@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// A fixed output format (`setOutputFormat`) and the buffer-filling `read(into:maxFrames:)`.

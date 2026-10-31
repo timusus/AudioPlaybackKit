@@ -237,7 +237,7 @@ final class LoopbackFaultKnobTests: XCTestCase {
         origin.etags = ["\"a\"", "\"b\""]
         var seen: [String?] = []
         for _ in 0..<3 {
-            seen.append(try await respond(origin.url, headers: [:]).1.value(forHTTPHeaderField: "ETag"))
+            await seen.append(try respond(origin.url, headers: [:]).1.value(forHTTPHeaderField: "ETag"))
         }
         XCTAssertEqual(seen, ["\"a\"", "\"b\"", "\"b\""])
     }

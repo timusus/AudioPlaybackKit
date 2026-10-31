@@ -1,13 +1,13 @@
 import AVFoundation
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 #if canImport(CStreamDecode)
-    import CStreamDecode
+import CStreamDecode
 #endif
 
 extension StreamDecodeTests {
+
     // MARK: - The trailing-moov bandwidth trap
 
     func testMoovLastCostsOneSeekNotTheWholeFile() throws {
@@ -35,9 +35,9 @@ extension StreamDecodeTests {
          * while on a 60 MB file that same fixed cost is 0.1%. What these numbers pin down is
          * the SHAPE of the transfer — probe, one seek to the end, the moov, nothing else — and a
          * walked mdat blows through every one of them. */
-        let probeBudget: Int64 = 64 * 1024      // stream_decode.c sets AVFormatContext.probesize
-        let avioBuffer: Int64 = 32 * 1024       // one refill of slack
-        let moovSize: Int64 = 4215              // Fixtures/README.md; testMoovLastAtomOrder walks it
+        let probeBudget: Int64 = 64 * 1024 // stream_decode.c sets AVFormatContext.probesize
+        let avioBuffer: Int64 = 32 * 1024 // one refill of slack
+        let moovSize: Int64 = 4215 // Fixtures/README.md; testMoovLastAtomOrder walks it
         let mdatSize: Int64 = 160_680
         XCTAssertLessThan(counting.bytesRead, probeBudget + avioBuffer + moovSize,
                           "read \(counting.bytesRead) of \(fileSize) bytes — more than probe + moov")
@@ -116,7 +116,7 @@ extension StreamDecodeTests {
                 frames += chunk.count / format.channelCount
             }
             XCTAssertGreaterThanOrEqual(frames, Int(format.sampleRate), label)
-            let bound: Int64 = 512 * 1024   // measured 258-291 KB: the table, a probe window and a refill
+            let bound: Int64 = 512 * 1024 // measured 258-291 KB: the table, a probe window and a refill
             let openCost = counting.bytesRead
             XCTAssertLessThan(openCost, bound, "\(label): open plus one second of audio read \(openCost) of \(size) bytes")
 

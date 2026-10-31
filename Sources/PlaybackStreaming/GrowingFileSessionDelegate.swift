@@ -19,7 +19,8 @@ final class SessionDelegate: NSObject, URLSessionDataDelegate {
     ) {
         source.urlSession(
             session, task: task, willPerformHTTPRedirection: response, newRequest: newRequest,
-            completionHandler: completionHandler)
+            completionHandler: completionHandler
+        )
     }
 
     func urlSession(

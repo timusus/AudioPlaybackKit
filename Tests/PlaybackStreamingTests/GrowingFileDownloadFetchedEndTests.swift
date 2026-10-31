@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-
 @testable import PlaybackStreaming
 
 /// Where the fetched bytes end, which the decoder seeks past rather than reads forward to.

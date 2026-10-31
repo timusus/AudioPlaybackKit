@@ -72,6 +72,7 @@ extension LoopbackMediaServer {
             z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
             return z ^ (z >> 31)
         }
+
         mutating func below(_ bound: Int) -> Int { Int(next() % UInt64(max(bound, 1))) }
     }
 
@@ -102,10 +103,9 @@ extension LoopbackMediaServer {
     func sendChaotic(
         header: String, slice: Data, random: ChaosRandom, fault: ChaosFault?, on connection: NWConnection
     ) {
-        let limit: Int
-        switch fault {
-        case .disconnect(let n), .reset(let n), .hang(let n): limit = min(n, slice.count)
-        case nil: limit = slice.count
+        let limit: Int = switch fault {
+        case .disconnect(let n), .reset(let n), .hang(let n): min(n, slice.count)
+        case nil: slice.count
         }
         connection.send(content: Data(header.utf8), completion: .contentProcessed { [weak self] error in
             guard error == nil, let self else { return }

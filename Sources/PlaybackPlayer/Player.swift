@@ -24,9 +24,11 @@ public final class Player<Item: Hashable & Sendable> {
     public private(set) var state = PlaybackState.idle {
         didSet { updateRebuffering() }
     }
+
     public private(set) var suppression = PlaybackSuppression.unsuppressed {
         didSet { updateRebuffering() }
     }
+
     public var isPlaying: Bool { Self.isPlaying(state: state, playWhenReady: playWhenReady, suppression: suppression) }
     /// The failure that ended the current item; nil while playback is healthy.
     public private(set) var error: PlaybackError?
@@ -76,6 +78,7 @@ public final class Player<Item: Hashable & Sendable> {
             if !intent { endGate(.intentWithdrawn) }
         }
     }
+
     private var storedRate: Double = 1
     private var storedVolume: Float = 1
 
@@ -87,6 +90,7 @@ public final class Player<Item: Hashable & Sendable> {
     @ObservationIgnored private var entries: [Entry] = [] {
         didSet { items = entries.map(\.item) }
     }
+
     @ObservationIgnored private var lastID = 0
     /// The entry id behind each key handed to the transport since the last `setCurrent`. Every load
     /// and arm takes a fresh key, so a repeat of the current entry is told from its own first audio.
@@ -118,6 +122,7 @@ public final class Player<Item: Hashable & Sendable> {
     @ObservationIgnored private var awaitingFirstAudio = false {
         didSet { updateRebuffering() }
     }
+
     @ObservationIgnored private var rebuffering = false
     /// The transport heard the end of the list; nothing is armed until a seek or load restarts it.
     @ObservationIgnored private var atEnd = false

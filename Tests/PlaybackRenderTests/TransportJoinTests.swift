@@ -224,7 +224,7 @@ final class TransportJoinTests: XCTestCase {
 
     // Output frames are re-tagged against their input, so a look-ahead limiter's latency is never
     // reported as position: media3 has no latency API either.
-    func testALookAheadProcessorShiftsNoPositionAcrossAGaplessJoinAndDrainsBeforeEnded() throws {
+    func testALookAheadProcessorShiftsNoPositionAcrossAGaplessJoinAndDrainsBeforeEnded() {
         transport.setProcessors([DelayProcessor(frames: 3)])
         transport.setCurrent(item: "a", source: a)
         transport.setNext(item: "b", source: b)

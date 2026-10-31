@@ -91,8 +91,7 @@ extension GrowingFileDownload {
     /// Cancels the request once the frontier is the read-ahead ahead of the decoder. No failure:
     /// nothing is spent and no timer starts; the file stays, and a read resumes it (``read(maxLength:now:)``).
     mutating func pauseIfFarAhead(now: TimeInterval) {
-        guard let readAhead, let tx = current, isCapped(tx), !tx.ended else { return }
-        guard tx.frontier - offset >= readAhead, tx.frontier < min(tx.totalLength ?? .max, tx.end ?? .max) else { return }
+        guard let readAhead, let tx = current, isCapped(tx), !tx.ended, tx.frontier - offset >= readAhead, tx.frontier < min(tx.totalLength ?? .max, tx.end ?? .max) else { return }
         current?.ended = true
         current?.paused = true
         let rate = downloadBytesPerSecond(now: now)

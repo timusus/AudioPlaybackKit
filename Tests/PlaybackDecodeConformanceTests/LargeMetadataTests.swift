@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// #46: `StreamProbeBudget` defaults to 64 KiB / 1 s, and no committed fixture has a large metadata
@@ -201,12 +200,12 @@ final class LargeMetadataTests: XCTestCase {
     func testFLACWithA2MBPictureOpensDecodesAndSeeksAtTheDefaultBudget() throws {
         let large = try write(try flacWithPicture(pictureBytes: 2 * 1024 * 1024), ext: "flac")
         try assertAtEveryReader(large: large, small: fixture("flac_stereo.flac"), name: "FLAC 2 MB PICTURE",
-                           minBytesBeforeAudio: 2 * 1024 * 1024, seekFailsWithUnknownLength: true)
+                                minBytesBeforeAudio: 2 * 1024 * 1024, seekFailsWithUnknownLength: true)
     }
 
     func testVorbisWithA1MBCommentOpensDecodesAndSeeksAtTheDefaultBudget() throws {
         let large = try write(try vorbisWithComment(commentBytes: 1024 * 1024), ext: "ogg")
         try assertAtEveryReader(large: large, small: fixture("vorbis_stereo.ogg"), name: "Vorbis 1 MB comment",
-                           minBytesBeforeAudio: 1024 * 1024)
+                                minBytesBeforeAudio: 1024 * 1024)
     }
 }

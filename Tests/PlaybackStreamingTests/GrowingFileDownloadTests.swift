@@ -1,7 +1,6 @@
 import Foundation
 import PlaybackDecode
 import Testing
-
 @testable import PlaybackStreaming
 
 /// **The transaction lifecycle, driven event by event with no server**: each test feeds
@@ -382,6 +381,7 @@ final class Harness {
     init(readAhead: Int64? = nil, readAheadSetting: GrowingFileReadAhead? = nil, unknownLengthWindow: Int64 = GrowingFileDownload.unknownLengthWindowBytes) {
         machine = GrowingFileDownload(url: Harness.url, readAhead: readAheadSetting ?? readAhead.map(GrowingFileReadAhead.init(bytes:)), unknownLengthWindow: unknownLengthWindow)
     }
+
     private(set) var requests: [GrowingFileDownload.Request] = []
     private(set) var events: [GrowingFileEvent] = []
     private(set) var log: [GrowingFileDownload.Effect] = []

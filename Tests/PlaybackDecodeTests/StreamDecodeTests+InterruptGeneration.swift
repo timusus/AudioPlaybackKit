@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// An interrupt aimed at a generation must survive the clear at the start of that generation's own

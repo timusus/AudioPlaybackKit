@@ -101,7 +101,7 @@ final class TransportReFeedTests: XCTestCase {
         transport.processorsChanged()
         run(for: 9.25)
 
-        XCTAssertEqual(positions.map { Int64($0 * 8) },Array(stride(from: Int64(0), through: 80, by: 2)))
+        XCTAssertEqual(positions.map { Int64($0 * 8) }, Array(stride(from: Int64(0), through: 80, by: 2)))
     }
 
     func testTheKeptDepthIsOutputTimeAtAnyRateAndCountsFromTheClock() {

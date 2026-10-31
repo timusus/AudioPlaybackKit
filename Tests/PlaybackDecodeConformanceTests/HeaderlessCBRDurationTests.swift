@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// Issue #53: a CBR MP3 with no Xing/Info/VBRI header reports a bitrate estimate over the source
@@ -24,6 +23,7 @@ final class HeaderlessCBRDurationTests: XCTestCase {
             offset += Int64(take)
             return take
         }
+
         func seek(to newOffset: Int64) throws { offset = newOffset }
         func cancel() {}
         func interrupt() {}

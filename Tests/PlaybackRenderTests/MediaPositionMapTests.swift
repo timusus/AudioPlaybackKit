@@ -79,7 +79,7 @@ final class MediaPositionMapTests: XCTestCase {
 
         XCTAssertEqual(map.advance(to: at(50)), entered(0))
         XCTAssertEqual(map.advance(to: at(150)), entered(1, 2), "item 1 is entered and left in one step")
-        XCTAssertEqual(map.advance(to: at(200)), entered(3),"a zero-frame last item is still reached")
+        XCTAssertEqual(map.advance(to: at(200)), entered(3), "a zero-frame last item is still reached")
         XCTAssertEqual(map.position(at: at(200)), .init(item: 3, mediaFrame: 0, sampleRate: 44100))
     }
 

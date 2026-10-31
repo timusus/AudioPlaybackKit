@@ -107,7 +107,8 @@ final class GrowingFileStoreTests: XCTestCase {
     func testShortDiskEvictsTheWholeCacheBeforeATransaction() throws {
         var free: Int64 = 10 * 1024 * 1024 * 1024
         let store = GrowingFileStore(
-            directory: directory, write: { Foundation.pwrite($0, $1, $2, $3) }, availableCapacity: { free })
+            directory: directory, write: { Foundation.pwrite($0, $1, $2, $3) }, availableCapacity: { free }
+        )
         try cached(store, URL(string: "https://example.com/1.mp3")!, bytes: 100, ageHours: 1)
         try cached(store, URL(string: "https://example.com/2.mp3")!, bytes: 100, ageHours: 2)
 

@@ -4,6 +4,7 @@ import PlaybackStreamingTestSupport
 import PlaybackDecode
 
 extension GrowingFileByteSourceTests {
+
     // MARK: - Failure
 
     func testInterruptAndCancelEndAReadParkedAtTheFrontierAndCancelDeletesThePartial() throws {

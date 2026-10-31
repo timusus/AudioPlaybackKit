@@ -107,7 +107,7 @@ enum KnownIssues {
         Rule(issue: "https://github.com/timusus/AudioPlaybackKit/issues/61 (sample_opus_fragmented: unknown length stops after 0.5 s)",
              fixture: "sample_opus_fragmented.mp4", kind: .seekPCM, switches: unknownLengthCombos,
              messages: ["0.8333333333333333", "1.6666666666666665", "2.4", "2.5"]
-                .map { "seek to \($0)s: PCM after the landing at 0.5s is not in the clean decode" }),
+                 .map { "seek to \($0)s: PCM after the landing at 0.5s is not in the clean decode" }),
         // A partially fragmented MP4 decodes nothing without a length; every seek lands at 0.11 s.
         Rule(issue: "https://github.com/timusus/AudioPlaybackKit/issues/62 (sample_partially_fragmented: unknown length decodes 0 frames)",
              fixture: "sample_partially_fragmented.mp4", kind: .frameCount, switches: unknownLengthCombos,
@@ -118,7 +118,7 @@ enum KnownIssues {
         Rule(issue: "https://github.com/timusus/AudioPlaybackKit/issues/62 (sample_partially_fragmented: unknown length decodes 0 frames)",
              fixture: "sample_partially_fragmented.mp4", kind: .seekPCM, switches: unknownLengthCombos,
              messages: partiallyFragmentedSeeks
-                .map { "seek to \($0)s: PCM after the landing at 0.11072562358276644s is not in the clean decode" }),
+                 .map { "seek to \($0)s: PCM after the landing at 0.11072562358276644s is not in the clean decode" }),
     ] + mediaThreeFlacRules + codecRules
 
     // media3 FlacExtractorTest port. `found` is the bytes read under ioError, partial+ioError and

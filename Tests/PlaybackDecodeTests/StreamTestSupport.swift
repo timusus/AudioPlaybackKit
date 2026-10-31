@@ -1,7 +1,6 @@
 import AVFoundation
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 // MARK: - Fixtures
@@ -326,7 +325,7 @@ enum ReferenceDecoder {
             var pointer: UnsafeMutablePointer<Int8>?
             guard CMBlockBufferGetDataPointer(block, atOffset: 0, lengthAtOffsetOut: nil,
                                               totalLengthOut: &length, dataPointerOut: &pointer) == noErr,
-                  let pointer else { continue }
+                let pointer else { continue }
             pointer.withMemoryRebound(to: Float.self, capacity: length / MemoryLayout<Float>.size) { floats in
                 pcm.append(contentsOf: UnsafeBufferPointer(start: floats, count: length / MemoryLayout<Float>.size))
             }
@@ -374,8 +373,8 @@ enum PCMComparison {
     /// 38 periods out. RMS difference does not have that blind spot — a period's shift leaves a
     /// 0.23-sample phase error, which is 8° of the carrier and shows up as a large residual.
     static func bestLag(_ a: [Float], _ b: [Float], sampleRate: Double, maxLag: Int = 4096) -> Int {
-        let window = Int(sampleRate / 10)        // 100 ms: enough to be decisive, 8193 lags cheap
-        let start = Int(sampleRate * 2)          // two seconds in: past every decoder's priming
+        let window = Int(sampleRate / 10) // 100 ms: enough to be decisive, 8193 lags cheap
+        let start = Int(sampleRate * 2) // two seconds in: past every decoder's priming
         guard a.count >= start + window + maxLag, b.count >= start + window + maxLag else { return 0 }
 
         return a.withUnsafeBufferPointer { pa in

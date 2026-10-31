@@ -192,7 +192,7 @@ struct PlayerModel {
         let clamped = min(max(target, 0), durationKnown ? length(of: currentIndex!) : .infinity)
         if prepared, !failed, !pausedAtEnd, !ended {
             position = clamped
-        } else if (ended || pausedAtEnd), !failed {
+        } else if ended || pausedAtEnd, !failed {
             load(currentIndex!, at: clamped)
         } else {
             position = clamped

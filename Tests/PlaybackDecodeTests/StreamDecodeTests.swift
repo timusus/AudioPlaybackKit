@@ -1,10 +1,9 @@
 import AVFoundation
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 #if canImport(CStreamDecode)
-    import CStreamDecode
+import CStreamDecode
 #endif
 
 /// The playback decoder's tests.

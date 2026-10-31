@@ -93,6 +93,7 @@ final class Feeder {
         var resume: MediaPositionMap.Position
         var held = false
     }
+
     /// Where each written chunk ends, ascending and pruned behind the playhead: the map merges
     /// contiguous chunks, and a partial flush must cut between them.
     private var chunkEnds: [TimeInterval] = []
@@ -245,7 +246,7 @@ final class Feeder {
             refeedTrace = (pending.stalled ? "stall" : "autoFlush", .now(), false)
             // A stall is the renderer starving, a downstream underrun; a route change's flush is not.
             // Not while paused: a pause ends the rebuffer even if the stall is drained after it.
-            if pending.stalled && playWhenReady { afterUnderrun = true }
+            if pending.stalled, playWhenReady { afterUnderrun = true }
         }
         // A restart above cleared the pending flush, so its late completion is stale and ignored here.
         for result in pending.partialFlushes where result.token == pendingPartialFlush?.token {

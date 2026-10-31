@@ -4,6 +4,7 @@ import PlaybackStreamingTestSupport
 import PlaybackDecode
 
 extension GrowingFileByteSourceTests {
+
     // MARK: - The frontier
 
     /// On a clock that never moves: the 1.5 s body is real time, and on the system clock a stall
@@ -28,10 +29,10 @@ extension GrowingFileByteSourceTests {
         XCTAssertNotNil(source.snapshot.downloadBytesPerSecond)
         // The read events come on the decoder's thread and the download's on the delegate queue,
         // unordered between the two: the last read's `.readResumed` may follow the completion.
-        let downloads = { self.events.events.filter { if case .download = $0 { return true } else { return false } } }
-        XCTAssertTrue(downloads().contains { if case .download(_, _, false) = $0 { return true } else { return false } })
+        let downloads = { self.events.events.filter { if case .download = $0 { true } else { false } } }
+        XCTAssertTrue(downloads().contains { if case .download(_, _, false) = $0 { true } else { false } })
         XCTAssertTrue(waitUntil {
-            if case .download(Int64(body.count), _, true) = downloads().last { return true } else { return false }
+            if case .download(Int64(body.count), _, true) = downloads().last { true } else { false }
         }, "the last download event is the completion")
         let reads = events.events.filter {
             switch $0 { case .readWaiting, .readResumed: return true; default: return false }

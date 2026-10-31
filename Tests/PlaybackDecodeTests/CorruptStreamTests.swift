@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// A reader over bytes held in memory, so a test can damage a committed fixture without writing it.

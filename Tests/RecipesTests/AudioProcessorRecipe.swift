@@ -199,8 +199,8 @@ final class AudioProcessorRecipe: XCTestCase {
 
     func testAnInPlaceProcessorRewritesTheChunkAndRestartsAfterASeek() throws {
         let fade = FadeIn(frames: 4)
-        XCTAssertEqual(try fade.configure(mono), mono)      // in place: the format is the input's
-        fade.flush(start)                                    // `configure` only staged; `flush` applies
+        XCTAssertEqual(try fade.configure(mono), mono) // in place: the format is the input's
+        fade.flush(start) // `configure` only staged; `flush` applies
 
         var chunk: [Float] = [1, 1, 1, 1, 1, 1]
         chunk.withUnsafeMutableBufferPointer { fade.process($0) }
@@ -218,8 +218,8 @@ final class AudioProcessorRecipe: XCTestCase {
         XCTAssertEqual(try downmix.configure(stereo), mono)
         downmix.flush(start)
 
-        downmix.queueInput([1, 3, 2, 4])                     // two stereo frames in
-        XCTAssertEqual(downmix.getOutput().samples, [2, 3])  // two mono frames out
+        downmix.queueInput([1, 3, 2, 4]) // two stereo frames in
+        XCTAssertEqual(downmix.getOutput().samples, [2, 3]) // two mono frames out
         downmix.queueEndOfStream()
         XCTAssertTrue(downmix.isEnded)
     }
@@ -250,7 +250,7 @@ final class AudioProcessorOnPlayerRecipe: XCTestCase {
         let factory = FakeItemFactory<Track>(format: PCMFormat(sampleRate: 8, channelCount: 2))
         let rig = PlayerTestRig<Track> { try factory.make($0) }
         let meter = LevelMeter()
-        rig.player.setProcessors([meter, MonoDownmix()])    // the meter hears stereo; the speaker gets mono
+        rig.player.setProcessors([meter, MonoDownmix()]) // the meter hears stereo; the speaker gets mono
         rig.player.setItems([Track(id: 1)])
         rig.player.play()
         rig.run(for: 3)

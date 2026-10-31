@@ -1,7 +1,6 @@
 import XCTest
 @testable import PlaybackStreaming
 
-
 /// **The seek-wait rule**: what a read at a position of a growing file
 /// does, pinned with literals.
 final class GrowingFileDownloadReadRuleTests: XCTestCase {
@@ -57,7 +56,6 @@ final class GrowingFileDownloadReadRuleTests: XCTestCase {
         XCTAssertEqual(action(1001, rate: nil), .restart, "no throughput sample yet restarts")
         XCTAssertEqual(action(1001, rate: 0), .restart, "a stopped download restarts")
     }
-
 
     func testFooterLookIsEndOfStreamOnlyDuringTheProbe() {
         XCTAssertEqual(action(9872, probing: true), .endOfStream)

@@ -133,7 +133,7 @@ final class GrowingFileContractTests: GrowingFileContractCase {
 
     /// An unsupported URL scheme (-1002) fails the read at once as `.network`, with the `URLError` that
     /// tells it from a lost connection; media3 gives such errors no category of their own.
-    func testAPermanentTransportErrorFailsAtOnceWithItsURLError() throws {
+    func testAPermanentTransportErrorFailsAtOnceWithItsURLError() {
         let clock = ManualGrowingFileClock()
         let source = makeSource(URL(string: "gopher://127.0.0.1:1/a.mp3")!, clock: clock)
         let failure = sourceFailure(finish(readAsync(source, 1), of: source, on: clock, "gopher"), "gopher")

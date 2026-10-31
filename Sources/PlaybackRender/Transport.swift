@@ -116,7 +116,8 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         discontinuityLock.withLock {
             guard let published, published.epoch == calledDiscontinuities,
                   let position = published.snapshot.position(
-                      currentTime: output.currentTime(), outputLatency: output.outputLatency),
+                      currentTime: output.currentTime(), outputLatency: output.outputLatency
+                  ),
                   let item = published.ids[position.item] else { return nil }
             var seconds = position.seconds
             // The clock steps back on a re-anchor or a latency change; the snapshot's floor is only as new as its pump.

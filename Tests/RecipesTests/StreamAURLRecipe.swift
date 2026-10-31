@@ -13,8 +13,8 @@ final class StreamAURLRecipe: XCTestCase {
 
         let source = GrowingFileByteSource(
             url: server.url,
-            authHeaders: [:],               // already resolved; add "Authorization" here for a private feed
-            store: .temporary()             // an app uses `.shared`, or a store of its own
+            authHeaders: [:], // already resolved; add "Authorization" here for a private feed
+            store: .temporary() // an app uses `.shared`, or a store of its own
         )
         // The source and its partial file live until cancelled.
         defer { source.cancel() }

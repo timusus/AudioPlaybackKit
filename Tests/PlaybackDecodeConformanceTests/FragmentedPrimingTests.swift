@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// A fragmented MP4 has no edit list, so nothing in the file says to skip the AAC encoder's priming.

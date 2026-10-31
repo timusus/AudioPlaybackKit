@@ -8,7 +8,7 @@ import XCTest
 final class GaplessQueueRecipe: XCTestCase {
     // The player arms the next item itself, so the app only hands over the list.
     func testAQueuePlaysThroughItsItemsWithoutAGap() {
-        let factory = FakeItemFactory<Track>()    // ten seconds per item at 8 Hz
+        let factory = FakeItemFactory<Track>() // ten seconds per item at 8 Hz
         let rig = PlayerTestRig<Track> { try factory.make($0) }
         var transitions: [(to: Track?, reason: TransitionReason)] = []
         rig.onEvent = {

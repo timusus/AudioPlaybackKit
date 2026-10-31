@@ -164,12 +164,11 @@ extension LoopbackMediaServer {
 
     private func answerRedirect(status: Int, location: RedirectLocation, head: String, on connection: NWConnection) {
         lock.lock(); _requestHeads.append(head); lock.unlock()
-        let target: String
-        switch location {
-        case .absolute: target = "http://127.0.0.1:\(port)\(Self.fixturePath)"
-        case .rooted: target = Self.fixturePath
-        case .parentRelative: target = "../fixture.mp3"
-        case .schemeRelative: target = "//127.0.0.1:\(port)\(Self.fixturePath)"
+        let target: String = switch location {
+        case .absolute: "http://127.0.0.1:\(port)\(Self.fixturePath)"
+        case .rooted: Self.fixturePath
+        case .parentRelative: "../fixture.mp3"
+        case .schemeRelative: "//127.0.0.1:\(port)\(Self.fixturePath)"
         }
         connection.send(
             content: errorAnswer(status: status, extra: "Location: \(target)\r\n", withPage: false),
@@ -260,7 +259,7 @@ extension LoopbackMediaServer {
         }
         let send = { [weak self] in
             guard let self else { return }
-            if rate == nil && bursts == nil {
+            if rate == nil, bursts == nil {
                 var payload = Data(header.utf8)
                 payload.append(written)
                 self.lock.lock(); self._servedBytes += Int64(written.count); self.lock.unlock()

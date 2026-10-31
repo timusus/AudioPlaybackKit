@@ -1,13 +1,13 @@
 import AVFoundation
 import Foundation
 import XCTest
-
 @testable @_spi(Testing) import PlaybackDecode
 #if canImport(CStreamDecode)
-    import CStreamDecode
+import CStreamDecode
 #endif
 
 extension StreamDecodeTests {
+
     // MARK: - Parity against AVAssetReader
 
     func testDecodeMatchesAVAssetReader() throws {

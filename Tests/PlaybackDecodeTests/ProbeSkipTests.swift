@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// #21: FLAC, ALAC and PCM WAV/AIFF open without `avformat_find_stream_info` (the header already
@@ -14,8 +13,7 @@ final class ProbeSkipTests: XCTestCase {
     }
 
     private func open(_ name: String, forcesProbe: Bool, reportsTotalLength: Bool = true) throws
-        -> (FFmpegStreamDecoder, StreamAudioFormat)
-    {
+        -> (FFmpegStreamDecoder, StreamAudioFormat) {
         let reader = try FileByteReader(url: url(name), reportsTotalLength: reportsTotalLength)
         let decoder = FFmpegStreamDecoder(reader: reader, forcesProbe: forcesProbe)
         return (decoder, try decoder.open())
@@ -47,6 +45,7 @@ final class ProbeSkipTests: XCTestCase {
         try assertSkipMatchesProbe("wav_s16.wav")
         try assertSkipMatchesProbe("wav_s24.wav")
     }
+
     func testAIFFSkipsTheProbeAndDecodesTheSame() throws { try assertSkipMatchesProbe("aiff_s16.aiff") }
 
     func testASourceWithoutALengthSkipsTheProbeAndReadsLess() throws {

@@ -98,6 +98,7 @@ extension ForwardingNowPlayingControllable {
         get { player.rate }
         set { player.rate = newValue }
     }
+
     public var availableCommands: PlayerCommands { player.availableCommands }
     public var skipIntervals: SkipIntervals? { player.skipIntervals }
     public func play() { player.play() }

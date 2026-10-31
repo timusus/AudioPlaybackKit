@@ -20,7 +20,7 @@ final class SeekAndProgressRecipe: XCTestCase {
 
 @MainActor
 final class PlayerSeekRecipe: XCTestCase {
-    private let factory = FakeItemFactory<Track>()    // ten seconds per item at 8 Hz
+    private let factory = FakeItemFactory<Track>() // ten seconds per item at 8 Hz
     private func makeRig() -> PlayerTestRig<Track> {
         let factory = factory
         return PlayerTestRig { try factory.make($0) }
@@ -52,7 +52,7 @@ final class PlayerSeekRecipe: XCTestCase {
 
     // A source that cannot land on the target says so, and `position` is where it did land.
     func testAnAdjustedSeekReportsWhereItLanded() {
-        factory.coarseSeeks = [Track(id: 1)]        // lands on the whole second before, as at a keyframe
+        factory.coarseSeeks = [Track(id: 1)] // lands on the whole second before, as at a keyframe
         let rig = makeRig()
         var adjusted: [(requested: TimeInterval, position: TimeInterval)] = []
         rig.onEvent = { if case let .seekAdjusted(_, requested, position) = $0 { adjusted.append((requested, position)) } }

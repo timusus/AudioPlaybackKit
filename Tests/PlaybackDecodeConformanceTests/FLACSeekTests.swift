@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// A FLAC seek on a stream with no seek table, beyond what `flac_stereo.flac`'s golden
@@ -86,8 +85,8 @@ final class FLACSeekTests: XCTestCase {
             let noise = steady || (seconds >= 20 && seconds < 40) || seconds >= 50
             var frame: [UInt8] = [0xFF, variable ? 0xF9 : 0xF8]
             let sizeCode: UInt8 = blockSize == 4096 ? 12 : blockSize == 1152 ? 3 : 7
-            frame.append(sizeCode << 4 | 9)          // 44.1 kHz
-            frame.append(1 << 4 | 4 << 1)            // two independent channels, 16 bits
+            frame.append(sizeCode << 4 | 9) // 44.1 kHz
+            frame.append(1 << 4 | 4 << 1) // two independent channels, 16 bits
             frame += Self.utf8(UInt64(variable ? first : index))
             if sizeCode == 7 { frame += [UInt8((blockSize - 1) >> 8), UInt8((blockSize - 1) & 0xFF)] }
             frame.append(Self.crc8(frame))
@@ -95,7 +94,7 @@ final class FLACSeekTests: XCTestCase {
                 noise ? (0..<blockSize).map { Self.noise(first + $0, channel) }
                     : [Int16](repeating: Int16(index % 64 * 8 - 256 + channel), count: blockSize)
             }
-            if lookalikes && noise && index % 2 == 0 && blockSize >= 8 {
+            if lookalikes, noise, index % 2 == 0, blockSize >= 8 {
                 // A header of this stream, CRC-8 and all, naming the frame three before this one.
                 // In every frame, each would name the one after the last's: a chain as consistent
                 // as the real one.
@@ -109,12 +108,12 @@ final class FLACSeekTests: XCTestCase {
             }
             for channel in 0..<2 {
                 if noise {
-                    frame.append(0x02)               // VERBATIM
+                    frame.append(0x02) // VERBATIM
                     for v in samples[channel] {
                         frame += [UInt8(UInt16(bitPattern: v) >> 8), UInt8(UInt16(bitPattern: v) & 0xFF)]
                     }
                 } else {
-                    frame.append(0x00)               // CONSTANT
+                    frame.append(0x00) // CONSTANT
                     let v = samples[channel][0]
                     frame += [UInt8(UInt16(bitPattern: v) >> 8), UInt8(UInt16(bitPattern: v) & 0xFF)]
                 }
@@ -131,13 +130,13 @@ final class FLACSeekTests: XCTestCase {
         }
 
         var file = Data("fLaC".utf8)
-        file += [0x00, 0x00, 0x00, 34]               // STREAMINFO, not the last block
+        file += [0x00, 0x00, 0x00, 34] // STREAMINFO, not the last block
         let minBlock = variable ? 1152 : 4096
         file += [UInt8(minBlock >> 8), UInt8(minBlock & 0xFF), 0x10, 0x00]
         file += [0, 0, 0, UInt8(maxFrame >> 16), UInt8(maxFrame >> 8 & 0xFF), UInt8(maxFrame & 0xFF)]
         let packed = UInt64(Self.rate) << 44 | 1 << 41 | 15 << 36 | UInt64(unknownTotal ? 0 : total)
         file += (0..<8).map { UInt8(packed >> (56 - 8 * $0) & 0xFF) }
-        file += [UInt8](repeating: 0, count: 16)     // no MD5
+        file += [UInt8](repeating: 0, count: 16) // no MD5
         let padding = 8192
         file += [0x81, UInt8(padding >> 16), UInt8(padding >> 8 & 0xFF), UInt8(padding & 0xFF)]
         file += [UInt8](repeating: 0, count: padding)
@@ -307,7 +306,7 @@ final class FLACSeekTests: XCTestCase {
                 let label = "\(steady ? "steady" : "swinging") n=\(n)"
                 let start = Int((landed * Double(Self.rate)).rounded()) * 2
                 XCTAssertLessThanOrEqual(landed, 45.0 + 0.5 / Double(Self.rate), "\(label): landed \(landed)")
-                if steady && abs(landed - 45.0) <= 0.5 / Double(Self.rate) {
+                if steady, abs(landed - 45.0) <= 0.5 / Double(Self.rate) {
                     exact += 1
                     XCTAssertLessThanOrEqual(bytes, budget, "\(label): read \(bytes) bytes")
                 }

@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// Issue #50: the Info/Xing byte count is trusted as the end of the audio only when it is
@@ -20,6 +19,7 @@ final class InfoTagByteCountTests: XCTestCase {
             offset += Int64(take)
             return take
         }
+
         func seek(to newOffset: Int64) throws { offset = newOffset }
         func cancel() {}
         func interrupt() {}

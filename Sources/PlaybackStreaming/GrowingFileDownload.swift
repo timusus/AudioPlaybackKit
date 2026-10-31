@@ -97,6 +97,7 @@ struct GrowingFileDownload {
         if let probedDuration, let total = totalLength, total > 0 { bitsPerSecond = Double(total) * 8 / probedDuration }
         return readAheadSetting?.limit(bitsPerSecond: bitsPerSecond)
     }
+
     /// The network path is expensive or constrained: the read-ahead cap applies.
     var pathIsExpensive = false
 

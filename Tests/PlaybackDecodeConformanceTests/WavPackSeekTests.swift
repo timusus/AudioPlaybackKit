@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable @_spi(Testing) import PlaybackDecode
 
 /// `wavpack_stereo.wv`: 4 s at 44.1 kHz in eight blocks of about 25 KB. The wv demuxer has no seek of

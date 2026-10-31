@@ -4,6 +4,7 @@ import PlaybackStreamingTestSupport
 import PlaybackDecode
 
 extension GrowingFileByteSourceTests {
+
     // MARK: - Read-ahead on an expensive path (ADR-0013)
 
     static let hotspot = GrowingFilePathMonitor.Path(satisfied: true, interface: "en0", isExpensive: true)

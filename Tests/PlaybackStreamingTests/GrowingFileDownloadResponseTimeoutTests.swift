@@ -1,7 +1,6 @@
 import Foundation
 import PlaybackDecode
 import Testing
-
 @testable import PlaybackStreaming
 
 /// The wait for a request's response is the machine's, on its clock: it cancels the task itself and

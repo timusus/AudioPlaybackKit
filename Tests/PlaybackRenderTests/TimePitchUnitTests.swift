@@ -58,7 +58,8 @@ private final class ReferenceTimePitch: StretchUnit {
         channels = format.channelCount
         var description = AudioComponentDescription(
             componentType: kAudioUnitType_FormatConverter, componentSubType: kAudioUnitSubType_NewTimePitch,
-            componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0)
+            componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0
+        )
         var instance: AudioUnit?
         AudioComponentInstanceNew(AudioComponentFindNext(nil, &description)!, &instance)
         unit = instance!
@@ -66,7 +67,8 @@ private final class ReferenceTimePitch: StretchUnit {
             mSampleRate: format.sampleRate, mFormatID: kAudioFormatLinearPCM,
             mFormatFlags: kAudioFormatFlagsNativeFloatPacked | kAudioFormatFlagIsNonInterleaved,
             mBytesPerPacket: 4, mFramesPerPacket: 1, mBytesPerFrame: 4, mChannelsPerFrame: UInt32(channels),
-            mBitsPerChannel: 32, mReserved: 0)
+            mBitsPerChannel: 32, mReserved: 0
+        )
         let size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         AudioUnitSetProperty(unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Input, 0, &stream, size)
         AudioUnitSetProperty(unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 0, &stream, size)

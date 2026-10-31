@@ -9,6 +9,7 @@ public final class FakeNowPlayingInfoCenter {
     public var nowPlayingInfo: [String: Any]? {
         didSet { writes += 1 }
     }
+
     public var playbackState: MPNowPlayingPlaybackState = .unknown
     public private(set) var writes = 0
 

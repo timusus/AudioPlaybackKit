@@ -35,6 +35,7 @@ enum ConformanceMatrix {
         targets.insert(max(0, duration - nearEndSeconds), at: targets.count - 1)
         return targets
     }
+
     /// A seek restarts the codec: the first frames after it lack the previous frame's overlap (AAC,
     /// Opus, Vorbis) or bit-reservoir bytes (MP3, catalogue C20), so they are not expected to equal
     /// the continuous decode. The warm-up is skipped; the frames after it must match.
@@ -139,8 +140,7 @@ enum ConformanceMatrix {
     /// Seeks to each fraction of the clean duration and records where it landed and the PCM after it.
     /// An injected error during a seek or its window read restarts that seek, as the player would.
     static func seekResults(_ url: URL, switches: FaultSwitches, clean: DecodeRun, name: String, label: String) throws
-        -> [SeekResult]
-    {
+        -> [SeekResult] {
         guard let cleanFormat = clean.format else { return [] }
         let channels = cleanFormat.channelCount
         let duration = Double(clean.frames) / cleanFormat.sampleRate
@@ -211,7 +211,7 @@ enum ConformanceMatrix {
         let reference = try seekResults(url, switches: [], clean: clean, name: name, label: "\(name) [clean]")
         for switches in FaultSwitches.allCombinations {
             let faulted = try seekResults(url, switches: switches, clean: clean, name: name,
-                                       label: "\(name) [\(switches)]")
+                                          label: "\(name) [\(switches)]")
             if faulted.count != reference.count {
                 report(.seek, name, switches, "seek count \(faulted.count) vs \(reference.count)")
             }
@@ -258,7 +258,9 @@ enum ConformanceMatrix {
                 alignFrames: alignment(of: result, clean: clean),
                 windowFrames: result.window.count / max(clean.format?.channelCount ?? 1, 1),
                 windowSha256Int16: GoldenStore.perSecondHashes(
-                    result.window, sampleRate: max(result.window.count, 1), channels: 1).first ?? "")
+                    result.window, sampleRate: max(result.window.count, 1), channels: 1
+                ).first ?? ""
+            )
         }
     }
 
@@ -290,7 +292,7 @@ enum ConformanceMatrix {
         if let at = firstDifference(faulted, clean) {
             report(faulted.resumeFrames.isEmpty ? .pcm : .resumePCM, name, switches,
                    "PCM differs from the clean decode at sample \(at) "
-                   + "(\(faulted.frames) vs \(clean.frames) frames, resumes at frames \(faulted.resumeFrames.prefix(6)))")
+                       + "(\(faulted.frames) vs \(clean.frames) frames, resumes at frames \(faulted.resumeFrames.prefix(6)))")
         }
         if faulted.frames != clean.frames {
             report(.frameCount, name, switches, "\(faulted.frames) frames, clean \(clean.frames)")
@@ -399,7 +401,7 @@ enum ConformanceMatrix {
         let measured = Golden(
             fixture: name,
             sha256: fileHash,
-            expect: { if case let .failed(why) = clean.outcome { return "error:\(why)" } else { return "decodes" } }(),
+            expect: { if case let .failed(why) = clean.outcome { "error:\(why)" } else { "decodes" } }(),
             sampleRate: rate,
             channels: channels,
             frames: clean.frames,
@@ -407,7 +409,8 @@ enum ConformanceMatrix {
             durationAtEofS: rate > 0 ? Double(clean.frames) / Double(rate) : 0,
             pcmSha256PerSecondInt16: GoldenStore.perSecondHashes(clean.pcm, sampleRate: rate, channels: channels),
             seeks: landings,
-            bytesBeforeFirstAudioMax: (clean.bytesBeforeFirstAudio + 1023) / 1024 * 1024)
+            bytesBeforeFirstAudioMax: (clean.bytesBeforeFirstAudio + 1023) / 1024 * 1024
+        )
 
         // Counted from the start of the open attempt that succeeded, so an open retried after an
         // injected error is held to the same budget as one that was not.
@@ -462,7 +465,7 @@ enum ConformanceMatrix {
             XCTAssertEqual(got.durationAtEofS, 2.821187, accuracy: 0.011, "\(name): media3's duration")
         }
         for (second, pair) in zip(got.pcmSha256PerSecondInt16, golden.pcmSha256PerSecondInt16).enumerated()
-        where pair.0 != pair.1 {
+            where pair.0 != pair.1 {
             XCTFail("\(name): PCM of second \(second) differs from the golden")
         }
         XCTAssertEqual(got.pcmSha256PerSecondInt16.count, golden.pcmSha256PerSecondInt16.count,

@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// An MP3 that starts with far more than the 64 KiB probe budget of something that is not audio: a
@@ -20,6 +19,7 @@ final class LeadingBytesTests: XCTestCase {
             bytesRead += Int64(n)
             return n
         }
+
         func seek(to offset: Int64) throws { try inner.seek(to: offset) }
         func cancel() { inner.cancel() }
         func interrupt() { inner.interrupt() }
@@ -88,12 +88,11 @@ final class LeadingBytesTests: XCTestCase {
         try check(prefix: id3v2Tag(payload: 13_000_000), label: "13 MB ID3v2", maxBytesBeforeAudio: 256 * 1024)
     }
 
-
     private func garbage(_ count: Int) -> Data {
         var state: UInt64 = 404
         return Data((0..<count).map { _ -> UInt8 in
             state = state &* 6364136223846793005 &+ 1442695040888963407
-            return UInt8(0x20 + (state >> 33) % 0x5f)  // printable, never the 0xFF sync byte
+            return UInt8(0x20 + (state >> 33) % 0x5f) // printable, never the 0xFF sync byte
         })
     }
 
@@ -137,6 +136,7 @@ final class LeadingBytesTests: XCTestCase {
             inner = try FileByteReader(url: url)
             self.boundaries = boundaries
         }
+
         var totalLength: Int64? { inner.totalLength }
         var position: Int64 { inner.position }
         func read(into buffer: UnsafeMutableRawPointer, maxLength: Int) throws -> Int {
@@ -146,6 +146,7 @@ final class LeadingBytesTests: XCTestCase {
             bytesRead += Int64(n)
             return n
         }
+
         func seek(to offset: Int64) throws { try inner.seek(to: offset) }
         func cancel() { inner.cancel() }
         func interrupt() { inner.interrupt() }

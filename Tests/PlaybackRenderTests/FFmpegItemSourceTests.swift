@@ -18,6 +18,7 @@ final class FFmpegItemSourceTests: XCTestCase {
         func read(into buffer: UnsafeMutableRawPointer, maxLength: Int) throws -> Int {
             try file.read(into: buffer, maxLength: maxLength)
         }
+
         func seek(to offset: Int64) throws { try file.seek(to: offset) }
         func cancel() { file.cancel() }
         func interrupt() { file.interrupt() }

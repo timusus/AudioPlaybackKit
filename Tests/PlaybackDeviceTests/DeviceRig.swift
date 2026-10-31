@@ -71,10 +71,12 @@ final class TappedOutput: AudioOutput, @unchecked Sendable {
     func flush(fromTime time: TimeInterval, completion: @escaping @Sendable (Bool) -> Void) {
         base.flush(fromTime: time, completion: completion)
     }
+
     func setRate(_ rate: Double, at time: TimeInterval?) {
         lock.withLock { self.rate = rate }
         base.setRate(rate, at: time)
     }
+
     func setVolume(_ volume: Float) { base.setVolume(volume) }
     func currentTime() -> TimeInterval { base.currentTime() }
     var outputLatency: TimeInterval { base.outputLatency }
@@ -102,6 +104,7 @@ final class GatedSource: ItemSource, @unchecked Sendable {
         _ = gate.wait(timeout: .now() + 10)
         return try base.open()
     }
+
     var frameCount: Int64? { base.frameCount }
     var isSeekable: Bool { base.isSeekable }
     func seek(toFrame frame: Int64) throws -> Int64 { try base.seek(toFrame: frame) }

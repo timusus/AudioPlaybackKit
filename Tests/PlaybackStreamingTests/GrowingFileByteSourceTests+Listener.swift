@@ -32,6 +32,7 @@ private final class RecordingListener: GrowingFileListener, @unchecked Sendable 
 }
 
 extension GrowingFileByteSourceTests {
+
     // MARK: - Listener and lifecycle
 
     /// media3 `DataSourceContractTest.transferListenerCallbacks`: a start, then bytes as they move,
@@ -62,12 +63,12 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(try readToEnd(source), body)
         XCTAssertEqual(listener.started[0].position(), Int64(body.count), "the decoder's position, live")
         XCTAssertTrue(waitUntil {
-            listener.received.contains { if case .download(_, _, true) = $0.event { return true } else { return false } }
+            listener.received.contains { if case .download(_, _, true) = $0.event { true } else { false } }
         }, "the end is reported")
 
         let received = listener.received
         // The parked first read is announced before the response; the transaction precedes any download.
-        let transactions = received.filter { if case .transaction = $0.event { return true } else { return false } }
+        let transactions = received.filter { if case .transaction = $0.event { true } else { false } }
         XCTAssertEqual(transactions.count, 1)
         guard case .transaction(let base, let generation, nil, let status)? = transactions.first?.event else {
             return XCTFail("no transaction: \(received.map(\.event))")
@@ -76,12 +77,12 @@ extension GrowingFileByteSourceTests {
         XCTAssertEqual(generation, 1)
         XCTAssertEqual(status, 206)
         XCTAssertEqual(transactions.first?.snapshot.transactionGeneration, 1)
-        let firstTransaction = received.firstIndex { if case .transaction = $0.event { return true } else { return false } }
-        let firstDownload = received.firstIndex { if case .download = $0.event { return true } else { return false } }
+        let firstTransaction = received.firstIndex { if case .transaction = $0.event { true } else { false } }
+        let firstDownload = received.firstIndex { if case .download = $0.event { true } else { false } }
         XCTAssertLessThan(try XCTUnwrap(firstTransaction), try XCTUnwrap(firstDownload))
 
         let downloads = received.compactMap { entry -> (frontier: Int64, snapshot: GrowingFileSnapshot, bytes: Data?)? in
-            if case .download(let frontier, _, _) = entry.event { return (frontier, entry.snapshot, entry.fileBytes) } else { return nil }
+            if case .download(let frontier, _, _) = entry.event { (frontier, entry.snapshot, entry.fileBytes) } else { nil }
         }
         XCTAssertEqual(downloads.last?.frontier, Int64(body.count))
         for (frontier, snapshot, bytes) in downloads {

@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-
 @testable import PlaybackStreaming
 
 /// **The session's one file** (ADR-0014): promotion once `[0, total)` is covered, whichever

@@ -15,7 +15,7 @@ extension GrowingFileDownload {
         let from: Int64
         /// Exclusive: where the next covered range of the session's file starts (ADR-0014), plus
         /// the overlap into it.
-        var end: Int64? = nil
+        var end: Int64?
         /// The resume's validator: the first response's strong ETag.
         let ifRange: String?
     }

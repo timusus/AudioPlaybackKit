@@ -1,7 +1,6 @@
 import Foundation
 import PlaybackDecode
 import Testing
-
 @testable import PlaybackStreaming
 
 /// **Redirect chains and pages, driven event by event with no server**: where a retry goes after a
@@ -12,8 +11,8 @@ struct GrowingFileDownloadRedirectTests {
 
     @Test("a chain that crosses schemes either way is remembered whole: the resume goes to the end, scheme included",
           arguments: [
-            ("http://host.example/episode.mp3", "https://cdn.example/episode.mp3"),
-            ("https://host.example/episode.mp3", "http://cdn.example/episode.mp3"),
+              ("http://host.example/episode.mp3", "https://cdn.example/episode.mp3"),
+              ("https://host.example/episode.mp3", "http://cdn.example/episode.mp3"),
           ])
     func aCrossProtocolChainEndIsResumedAt(from: String, to: String) {
         let start = URL(string: from)!

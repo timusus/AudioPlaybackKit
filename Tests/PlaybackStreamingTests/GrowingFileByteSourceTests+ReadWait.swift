@@ -4,6 +4,7 @@ import PlaybackStreamingTestSupport
 import PlaybackDecode
 
 extension GrowingFileByteSourceTests {
+
     // MARK: - A read waiting for bytes
 
     /// Issue #70: the host polls the snapshot to tell a stall from a slow read.
@@ -76,8 +77,8 @@ extension GrowingFileByteSourceTests {
     private var readEvents: [GrowingFileEvent] {
         events.events.filter {
             switch $0 {
-            case .readWaiting, .readResumed: return true
-            default: return false
+            case .readWaiting, .readResumed: true
+            default: false
             }
         }
     }

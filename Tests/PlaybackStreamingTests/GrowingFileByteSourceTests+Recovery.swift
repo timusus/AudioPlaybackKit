@@ -4,6 +4,7 @@ import PlaybackStreamingTestSupport
 import PlaybackDecode
 
 extension GrowingFileByteSourceTests {
+
     // MARK: - Recovery
 
     /// A read that failed past the link window takes its transaction with it, but not the total

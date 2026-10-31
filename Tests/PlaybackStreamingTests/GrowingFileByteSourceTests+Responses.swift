@@ -4,6 +4,7 @@ import PlaybackStreamingTestSupport
 import PlaybackDecode
 
 extension GrowingFileByteSourceTests {
+
     // MARK: - 416, gzip and a changing resource
 
     /// The file shrank behind the URL between a drop and its resume, so the frontier is now at

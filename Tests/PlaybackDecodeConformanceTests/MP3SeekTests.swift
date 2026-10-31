@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// What an MP3 seek costs and what it decodes, beyond what the goldens pin: the goldens compare a
@@ -128,7 +127,7 @@ final class MP3SeekTests: XCTestCase {
                 XCTAssertGreaterThan(compared, 0, "\(url.lastPathComponent): nothing after the seek to \(target)")
                 let firstDiff = (0..<max(0, compared)).first { got[$0] != clean[start + $0] }
                 XCTAssertNil(firstDiff, "\(url.lastPathComponent): the seek to \(target) differs from the clean decode "
-                             + "\(firstDiff.map { $0 / channels } ?? 0) frames after the target")
+                    + "\(firstDiff.map { $0 / channels } ?? 0) frames after the target")
             }
         }
     }

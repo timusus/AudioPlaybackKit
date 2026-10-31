@@ -1,13 +1,13 @@
 import AVFoundation
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 #if canImport(CStreamDecode)
-    import CStreamDecode
+import CStreamDecode
 #endif
 
 extension StreamDecodeTests {
+
     // MARK: - Mid-stream format change
 
     /// A stitched fixture: 4 s of 440 Hz left / 660 Hz right at one rate glued to 4 s of the same
@@ -22,10 +22,10 @@ extension StreamDecodeTests {
         var expectedFrames: Double {
             Double(frames.0 * 1152) + Double(frames.1 * 1152) * rates.0 / rates.1
         }
+
         /// Where the first half ends in the output.
         var switchFrame: Int { frames.0 * 1152 }
     }
-
 
     /// Rising zero crossings per second of `channel` over `range` (frames).
     private func pitch(_ pcm: [Float], channels: Int, channel: Int, range: Range<Int>, rate: Double) -> Double {
@@ -130,7 +130,7 @@ extension StreamDecodeTests {
                     let error = (sum / Double(span * channels)).squareRoot()
                     if error < best.error { best = (lag, error) }
                 }
-                let byte = Int((rate / 8000).rounded(.up))   // one byte at 64 kbps, in frames
+                let byte = Int((rate / 8000).rounded(.up)) // one byte at 64 kbps, in frames
                 XCTAssertLessThanOrEqual(abs(best.lag), byte, "\(name): seek to \(target)s: audio is \(best.lag) frames off")
                 XCTAssertLessThan(best.error, 0.05, "\(name): seek to \(target)s: RMS error \(best.error)")
             }
@@ -156,7 +156,6 @@ extension StreamDecodeTests {
         /// out at its level (not the Opus codec's own 0.5 x (L + R), #49).
         let secondLevel: Double
     }
-
 
     func testChainedOggDecodesBothStreamsAtTheOpenFormat() throws {
         try skipUnlessAvailable()

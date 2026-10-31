@@ -13,23 +13,23 @@ import XCTest
 /// and the keys thrown away. The fingerprints are `openssl x509 -noout -fingerprint -sha256`.
 final class GrowingFileConnectionPolicyTests: XCTestCase {
     private static let pinnedDER = Data(base64Encoded: """
-        MIIBhDCCASqgAwIBAgIUV9uVg9Gca3M0cxDXO466lGHw+H0wCgYIKoZIzj0EAwIwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4X\
-        DTI2MTAwNzIyMDYzMFoXDTI4MTIxNTIyMDYzMFowFDESMBAGA1UEAwwJbG9jYWxob3N0MFkwEwYHKoZIzj0CAQYIKoZIzj0D\
-        AQcDQgAEPbB2TKLL5s+TDcVaP+m9zzanust+qI4+XdLlzwxUioTiS92fTQUn/oLEY8LpCc/KWgKOJ1NxiID9ywPU5K2SNaNa\
-        MFgwHQYDVR0OBBYEFFzVqcY3Q7pJL1Fxwq60Ia3ba4tHMBQGA1UdEQQNMAuCCWxvY2FsaG9zdDATBgNVHSUEDDAKBggrBgEF\
-        BQcDATAMBgNVHRMBAf8EAjAAMAoGCCqGSM49BAMCA0gAMEUCIHuee6E4Fsg5OUiIMRuYLtDHToSLQbHR7+2DXyiXJ7BAAiEA\
-        3PZ/SlUh+4Ny1l8zOTF43Vv7yQxKE20YBySUo00lfEs=
-        """)!
+    MIIBhDCCASqgAwIBAgIUV9uVg9Gca3M0cxDXO466lGHw+H0wCgYIKoZIzj0EAwIwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4X\
+    DTI2MTAwNzIyMDYzMFoXDTI4MTIxNTIyMDYzMFowFDESMBAGA1UEAwwJbG9jYWxob3N0MFkwEwYHKoZIzj0CAQYIKoZIzj0D\
+    AQcDQgAEPbB2TKLL5s+TDcVaP+m9zzanust+qI4+XdLlzwxUioTiS92fTQUn/oLEY8LpCc/KWgKOJ1NxiID9ywPU5K2SNaNa\
+    MFgwHQYDVR0OBBYEFFzVqcY3Q7pJL1Fxwq60Ia3ba4tHMBQGA1UdEQQNMAuCCWxvY2FsaG9zdDATBgNVHSUEDDAKBggrBgEF\
+    BQcDATAMBgNVHRMBAf8EAjAAMAoGCCqGSM49BAMCA0gAMEUCIHuee6E4Fsg5OUiIMRuYLtDHToSLQbHR7+2DXyiXJ7BAAiEA\
+    3PZ/SlUh+4Ny1l8zOTF43Vv7yQxKE20YBySUo00lfEs=
+    """)!
     private static let pinnedSHA256 = "FF:81:5C:B3:5B:F1:58:8F:8E:5E:DF:30:02:5A:51:F0:98:59:BA:0D:9D:8D:EF:12:70:0F:93:9F:B8:D4:46:9C"
 
     private static let attackerDER = Data(base64Encoded: """
-        MIIBhDCCASqgAwIBAgIUKvya+u+kgLEubyutq5wKXBzVFdcwCgYIKoZIzj0EAwIwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4X\
-        DTI2MTAwNzIyMDYzMFoXDTI4MTIxNTIyMDYzMFowFDESMBAGA1UEAwwJbG9jYWxob3N0MFkwEwYHKoZIzj0CAQYIKoZIzj0D\
-        AQcDQgAEylopgGmqZNiUsws6/4I1th/n+14/zgjrNrd7W7EL5uABD/BmKVGFIePyKcBwb1yNHNVSIicxVYu8hq9LDh3iMKNa\
-        MFgwHQYDVR0OBBYEFOnJ/9HjQ1jSU541ko5aWxsJxEI5MBQGA1UdEQQNMAuCCWxvY2FsaG9zdDATBgNVHSUEDDAKBggrBgEF\
-        BQcDATAMBgNVHRMBAf8EAjAAMAoGCCqGSM49BAMCA0gAMEUCIH33cTMquLeuEV035DyDInNNOUYZaQYPzM0muHx9Jy/4AiEA\
-        jC0+wSB43t55mtRS2Ai00PZqOPVFjCG0nn7rpb3Bxwo=
-        """)!
+    MIIBhDCCASqgAwIBAgIUKvya+u+kgLEubyutq5wKXBzVFdcwCgYIKoZIzj0EAwIwFDESMBAGA1UEAwwJbG9jYWxob3N0MB4X\
+    DTI2MTAwNzIyMDYzMFoXDTI4MTIxNTIyMDYzMFowFDESMBAGA1UEAwwJbG9jYWxob3N0MFkwEwYHKoZIzj0CAQYIKoZIzj0D\
+    AQcDQgAEylopgGmqZNiUsws6/4I1th/n+14/zgjrNrd7W7EL5uABD/BmKVGFIePyKcBwb1yNHNVSIicxVYu8hq9LDh3iMKNa\
+    MFgwHQYDVR0OBBYEFOnJ/9HjQ1jSU541ko5aWxsJxEI5MBQGA1UdEQQNMAuCCWxvY2FsaG9zdDATBgNVHSUEDDAKBggrBgEF\
+    BQcDATAMBgNVHRMBAf8EAjAAMAoGCCqGSM49BAMCA0gAMEUCIH33cTMquLeuEV035DyDInNNOUYZaQYPzM0muHx9Jy/4AiEA\
+    jC0+wSB43t55mtRS2Ai00PZqOPVFjCG0nn7rpb3Bxwo=
+    """)!
     private static let attackerSHA256 = "E9:E1:B7:50:5C:29:EA:4A:EB:76:EA:8F:B7:9D:EB:F9:FC:9E:18:90:13:3B:F3:65:C1:75:55:1C:1C:4F:6A:D2"
 
     private let pinnedPolicy = GrowingFileConnectionPolicy(trustedLeafSHA256: [GrowingFileConnectionPolicyTests.pinnedSHA256])
@@ -46,7 +46,7 @@ final class GrowingFileConnectionPolicyTests: XCTestCase {
             XCTAssertEqual(SecTrustSetAnchorCertificates(made, roots as CFArray), errSecSuccess)
             XCTAssertEqual(SecTrustSetAnchorCertificatesOnly(made, true), errSecSuccess)
         }
-        XCTAssertEqual(SecTrustSetVerifyDate(made, Date(timeIntervalSince1970: 1_791_500_000) as CFDate), errSecSuccess)  // 2026-10-08
+        XCTAssertEqual(SecTrustSetVerifyDate(made, Date(timeIntervalSince1970: 1_791_500_000) as CFDate), errSecSuccess) // 2026-10-08
         XCTAssertEqual(SecTrustSetNetworkFetchAllowed(made, false), errSecSuccess)
         return made
     }

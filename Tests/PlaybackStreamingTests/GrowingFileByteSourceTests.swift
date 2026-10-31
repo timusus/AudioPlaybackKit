@@ -36,8 +36,9 @@ final class GrowingFileByteSourceTests: XCTestCase {
             lock.lock(); _events.append(event); lock.unlock()
             ChangeSignal.shared.notify()
         }
+
         var transactions: [GrowingFileEvent] {
-            events.filter { if case .transaction = $0 { return true } else { return false } }
+            events.filter { if case .transaction = $0 { true } else { false } }
         }
     }
 

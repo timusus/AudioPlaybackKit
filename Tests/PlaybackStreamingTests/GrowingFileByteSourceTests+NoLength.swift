@@ -4,6 +4,7 @@ import PlaybackStreamingTestSupport
 import PlaybackDecode
 
 extension GrowingFileByteSourceTests {
+
     // MARK: - A body with no length
 
     /// A server transcode: `200` whatever the range, chunked, no length anywhere.
@@ -31,7 +32,7 @@ extension GrowingFileByteSourceTests {
         assertTransport(rest.result)
         XCTAssertEqual(source.position, 20_000)
         XCTAssertNil(source.totalLength, "a dropped body gave its length")
-        let completions = events.events.filter { if case .download(_, _, true) = $0 { return true } else { return false } }
+        let completions = events.events.filter { if case .download(_, _, true) = $0 { true } else { false } }
         XCTAssertEqual(completions, [], "a dropped body was reported complete")
     }
 

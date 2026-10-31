@@ -4,6 +4,7 @@ import PlaybackStreamingTestSupport
 import PlaybackDecode
 
 extension GrowingFileByteSourceTests {
+
     // MARK: - Files
 
     func testABodyCompletedFromByteZeroIsPromotedIntoTheCacheAndOutlivesCancel() throws {
@@ -125,7 +126,7 @@ extension GrowingFileByteSourceTests {
     // MARK: - Seek claims
 
     private var seekLandings: [GrowingFileEvent] {
-        events.events.filter { if case .seekLanded = $0 { return true } else { return false } }
+        events.events.filter { if case .seekLanded = $0 { true } else { false } }
     }
 
     /// A seek the file already answers opens nothing: it lands, and says so, so the target waiting

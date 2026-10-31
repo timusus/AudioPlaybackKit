@@ -175,6 +175,7 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
         get { locked { changeHook } }
         set { locked { changeHook = newValue } }
     }
+
     private var changeHook: (() -> Void)?
 
     /// - Parameters:
@@ -676,9 +677,9 @@ public final class GrowingFileByteSource: NSObject, StreamByteReader, GrowingFil
             return (decision.allow, runLocked(decision.effects))
         }
         // The store makes room before the body is let in; the events follow it.
-        perform(deferred.filter { if case .makeRoom = $0 { return true } else { return false } })
+        perform(deferred.filter { if case .makeRoom = $0 { true } else { false } })
         completionHandler(allow ? .allow : .cancel)
-        perform(deferred.filter { if case .makeRoom = $0 { return false } else { return true } })
+        perform(deferred.filter { if case .makeRoom = $0 { false } else { true } })
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {

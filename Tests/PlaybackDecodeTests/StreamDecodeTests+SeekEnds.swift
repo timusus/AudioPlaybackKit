@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// Delivers normally until ``arm()``, then parks every read until interrupted or cancelled: the
@@ -57,6 +56,7 @@ private final class ParkOnceArmedReader: StreamByteReader {
 }
 
 extension StreamDecodeTests {
+
     // MARK: - A seek that is ended
 
     private func openArmable() throws -> (FFmpegStreamDecoder, ParkOnceArmedReader) {

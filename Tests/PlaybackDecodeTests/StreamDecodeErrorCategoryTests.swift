@@ -1,6 +1,5 @@
 import Foundation
 import XCTest
-
 @testable import PlaybackDecode
 
 /// A file whose reads fail with `error` from byte `failAt` on, as a source that drops part way.

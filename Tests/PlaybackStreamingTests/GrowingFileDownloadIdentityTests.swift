@@ -1,7 +1,6 @@
 import Foundation
 import PlaybackDecode
 import Testing
-
 @testable import PlaybackStreaming
 
 /// The snapshot's `entityTag`/`lastModified` belong to its `transactionGeneration`: an app compares
