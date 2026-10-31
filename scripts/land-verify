@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.." || exit 2
 
 artifacts="${LAND_ARTIFACT_DIR:-$(mktemp -d)}"
 mkdir -p "$artifacts"
-failed=0
+failed=0 failed_phase=
 
 # The build tool colours its output even when piped.
 # shellcheck disable=SC2329
@@ -19,6 +19,12 @@ plain() { sed $'s/\x1b\\[[0-9;]*m//g' "$1"; }
 # shellcheck disable=SC2329 # called by name from run_phase
 compile_failures() {
     plain "$1" | sed -nE 's|^.*/([^/:]+):[0-9]+:[0-9]+: error: (.*)$|\1: \2|p' | sort -u
+}
+
+# swiftformat findings as `File.swift: (rule)`, line numbers dropped like the compiler's.
+# shellcheck disable=SC2329 # called by name from run_phase
+format_failures() {
+    plain "$1" | sed -nE 's|^.*/([^/:]+):[0-9]+:[0-9]+: error: (\([A-Za-z]+\)).*$|\1: \2|p' | sort -u
 }
 
 # XCTest `-[Module.Class testName]` becomes `Module.Class/testName`; swift-testing reports the display name.
@@ -41,14 +47,14 @@ run_phase() {
     echo "verify: == $phase"
     # A stale .build would report another tree's failures.
     if [[ "$phase" == test && "$failed" -ne 0 ]]; then
-        echo "verify: -- test failed: build failed"
+        echo "verify: -- test failed: $failed_phase failed"
         return
     fi
     if "$@" >"$log" 2>&1; then
         echo "verify:    $phase: $((SECONDS - started)) s"
         return
     fi
-    failed=1
+    failed=1 failed_phase=${failed_phase:-$phase}
     local failures
     failures="$("$extractor" "$log")"
     if [[ -n "$failures" ]]; then
@@ -112,6 +118,7 @@ if [[ "${LAND_MODE:-}" == confirm ]]; then
     phase_wanted test && run_phase test test_failures run_confirm_tests
 else
     echo "verify: confirm"
+    command -v swiftformat >/dev/null && phase_wanted lint && run_phase lint format_failures swiftformat --lint .
     phase_wanted build && run_phase build compile_failures swift build --build-tests -j 5
     # base and bisect reruns (verify_failed_cmd) set LAND_ONLY without LAND_MODE and still need the build.
     if [[ -n "${LAND_ONLY:-}" ]]; then

@@ -55,6 +55,13 @@ bugs run under `XCTExpectFailure` (`KnownIssues.swift`, e.g. #55). Conformance d
 issues and fixtures: `docs/contributing.md`. Consumers pin a tag, never a branch. A public API change
 is a minor bump at 0.x; so is any decoder change that alters PCM, and the release note says what moved.
 
+## Formatting
+
+`.swiftformat` is the style (`brew install swiftformat`). Install the pre-commit lint once per clone with
+`git config core.hooksPath scripts/git`; it runs `swiftformat --lint` on staged Swift files and names the fix
+(`swiftformat <files>`). `.claude/format-on-edit.conf` formats each file Claude edits. `land-verify` lints the
+whole tree first. `.git-blame-ignore-revs` hides the baseline reformat (`git config blame.ignoreRevsFile .git-blame-ignore-revs`).
+
 ## Conventions
 
 - Testable first: anything touching time, the network, the file system or the OS sits behind a seam a

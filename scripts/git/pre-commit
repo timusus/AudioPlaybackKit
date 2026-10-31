@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Lints staged Swift files with swiftformat. Install once: git config core.hooksPath scripts/git
+set -uo pipefail
+
+command -v swiftformat >/dev/null || { echo "pre-commit: swiftformat not installed, skipping format lint"; exit 0; }
+
+files=()
+while IFS= read -r -d '' f; do files+=("$f"); done < <(git diff --cached --name-only --diff-filter=ACM -z -- '*.swift')
+[[ ${#files[@]} -eq 0 ]] && exit 0
+
+if ! swiftformat --lint --quiet "${files[@]}"; then
+    echo "pre-commit: staged Swift files are not formatted. Fix: swiftformat ${files[*]} (then git add)" >&2
+    exit 1
+fi
