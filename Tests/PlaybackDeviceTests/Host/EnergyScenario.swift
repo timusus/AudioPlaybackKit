@@ -24,7 +24,7 @@ enum EnergyScenario {
         func hold() async { try? await Task.sleep(for: .seconds(stateSeconds)) }
 
         let url = Bundle.main.url(forResource: "cbr_info_64k.mp3", withExtension: nil)!
-        let player = Player<Int>(makeSource: { _ in try FFmpegItemSource(reader: FileByteReader(url: url)) })
+        let player = Player<Int>(makeSource: { _, _ in try FFmpegItemSource(reader: FileByteReader(url: url)) })
         // The 8 s fixture loops, so every state has audio to decode.
         player.repeatMode = .one
         player.setItems([0])

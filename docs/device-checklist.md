@@ -65,7 +65,7 @@ iOS draws them over next and previous. Run the rows for each kind of item your a
 | Drag the scrubber | The audio follows the release point; elapsed lands there and keeps counting | `RemoteCommandTests.testScrubberSeeksAndElapsedKeepsCounting` |
 | Change the rate (with `supportedRates`) | Audio speeds up or slows with pitch kept; the lock screen's rate matches | `RemoteCommandTests.testRateCommandChangesTheHeardRateAndTheShownOne` |
 | Last item, repeat off | Next is greyed out. With repeat `.all` it wraps | `RemoteCommandTests.testNextOnTheLastItemIsOffWithRepeatOffAndWrapsWithRepeatAll` |
-| Before the item has opened (just after a skip, on a slow stream) | Scrubbing and skips are off until the duration is known | `RemoteCommandTests.testScrubbingAndSkipsAreOffUntilTheDurationIsKnown` |
+| Before the item has opened (just after a skip, on a slow stream) | Scrubbing and skips are accepted; the latest lands once the item opens, with none of the previous item heard | `RemoteCommandTests.testScrubbingAndSkipsBeforeTheItemOpensLandOnceItDoes` |
 
 ## Elapsed time stays in step
 

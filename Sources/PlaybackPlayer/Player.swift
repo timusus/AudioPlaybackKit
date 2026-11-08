@@ -898,6 +898,8 @@ public final class Player<Item: Hashable & Sendable> {
     /// has nothing left to resume.
     private func reportFailure(at index: Int, _ error: PlaybackError) {
         self.error = error
+        // A seek pending on the failed load would otherwise be added to by a later `seek(by:)`.
+        seekTarget = nil
         endGate(.superseded)
         nothingToPlay(.idle)
         refreshState()

@@ -156,7 +156,7 @@ final class DeviceRig {
         let session = SystemAudioSession(configuration: .longFormAudio)
         self.session = session
         player = Player(
-            makeSource: { item in
+            makeSource: { item, _ in
                 let source = try FFmpegItemSource(reader: FileByteReader(url: Fixture.url(item)))
                 if weakSelf?.unknownLength.contains(item) == true { return UnknownLengthSource(source) }
                 guard let rig = weakSelf, rig.gated.contains(item) else { return source }

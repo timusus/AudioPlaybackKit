@@ -137,7 +137,7 @@ final class RemoteCommandTests: DeviceTestCase {
         XCTAssertEqual(rig.shownTitle, Fixture.items[0])
     }
 
-    func testScrubbingAndSkipsAreOffUntilTheDurationIsKnown() async {
+    func testScrubbingAndSkipsBeforeTheItemOpensLandOnceItDoes() async {
         await makePolicyRig(intervals: SkipIntervals(forward: 3, backward: 3))
         rig.gated = [Fixture.items[1]]
         rig.player.setItems(Fixture.items, startIndex: 1)
@@ -145,16 +145,14 @@ final class RemoteCommandTests: DeviceTestCase {
         await rig.waitUntil("item 1 current") { rig.player.currentIndex == 1 }
         await rig.settle()
         XCTAssertNil(rig.player.duration)
-        XCTAssertNil(rig.send(.changePlaybackPosition, .position(2)), "no scrubbing before the item opens")
-        XCTAssertNil(rig.send(.skipForward, .interval(3)))
-        XCTAssertNil(rig.send(.skipBackward, .interval(3)))
+        XCTAssertEqual(rig.send(.changePlaybackPosition, .position(2)), .success, "scrubbing is kept while the item opens")
+        XCTAssertEqual(rig.send(.skipForward, .interval(3)), .success)
         XCTAssertEqual(rig.shownTitle, Fixture.items[1], "the title shows at once")
 
         rig.gates.forEach { $0.openGate() }
         await rig.waitUntil("opened") { rig.player.duration != nil }
         await rig.settle()
-        XCTAssertTrue(rig.remote(.changePlaybackPosition).isEnabled)
-        XCTAssertTrue(rig.remote(.skipForward).isEnabled)
+        XCTAssertGreaterThanOrEqual(rig.player.position, 5, "both presses land on the opened item")
         XCTAssertTrue(rig.remote(.skipBackward).isEnabled)
         XCTAssertEqual(rig.shownDuration ?? 0, 8, accuracy: 0.05)
     }
