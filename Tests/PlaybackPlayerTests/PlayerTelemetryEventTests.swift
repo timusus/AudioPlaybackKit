@@ -216,8 +216,8 @@ final class PlayerTelemetryEventTests: XCTestCase {
 
     /// A stall replays what is still queued and plays on, so decode is starved first: a second
     /// heard with no decode leaves less than the 2 s rebuffer depth held.
-    private func starvedStall() {
-        for _ in 0..<4 {
+    private func starvedStall(after seconds: TimeInterval = 1) {
+        for _ in 0..<Int(seconds * 4) {
             rig.timer.fire()
             rig.output.advance(by: 0.25)
         }
@@ -261,6 +261,23 @@ final class PlayerTelemetryEventTests: XCTestCase {
         rig.output.injectFailure()
         rig.run(for: 2)
         XCTAssertEqual(names, ["bufferingStarted", "bufferingEnded", "recoveredPaused"])
+    }
+
+    // The stall straddles the end of a, so b's source failing is what moves on and fails the item.
+    func testAnItemFailureEndsAStallBeforeItReports() {
+        rig.factory.failing = ["b"]
+        player.setItems(["a", "b"])
+        player.play()
+        rig.run(for: 7)
+        events = []
+        starvedStall(after: 1.5)
+        XCTAssertEqual(telemetry, ["bufferingStarted"])
+
+        rig.pump()
+        XCTAssertEqual(names, ["bufferingStarted", "bufferingEnded"], "1.5 s of a is short of the 2 s rebuffer")
+        rig.run(for: 2)
+
+        XCTAssertEqual(names, ["bufferingStarted", "bufferingEnded", "itemTransition", "itemFailed"])
     }
 
     // Once b's failure ends the upstream, a stall replays the rest of a and plays on, so the stall
