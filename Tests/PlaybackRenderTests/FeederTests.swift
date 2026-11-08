@@ -623,6 +623,18 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(positions, (0...7).map { pos(0, $0) } + stride(from: 0, through: 16, by: 2).map { pos(1, $0) })
     }
 
+    // After 0.6 s at 10 Hz the 4 Hz chunks sit off their frame grid: 0.3 s in is frame 1, as the map reports.
+    func testAReplayInAChunkOffTheFrameGridStartsAtTheFrameTheMapReports() {
+        makeFeeder([.init(id: 0, frames: 6, format: PCMFormat(sampleRate: 10, channelCount: 1)), item(1, 40)])
+        feeder.play()
+        run(for: 1)
+        output.injectAutoFlush(at: 0.9)
+        feeder.pump()
+
+        XCTAssertEqual(upstream.resupplies, [])
+        XCTAssertEqual(output.enqueues.last { $0.time == 1 }?.samples.first, FakeUpstream.sample(1, 1))
+    }
+
     func testAReplayAtDoubleSpeedKeepsTheSpeed() {
         makeFeeder([item(0, 80)])
         feeder.setRate(2)

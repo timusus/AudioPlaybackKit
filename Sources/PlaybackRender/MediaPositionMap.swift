@@ -152,6 +152,14 @@ struct MediaPositionMap: Sendable {
         )
     }
 
+    /// Output frames from `start`, where a written chunk begins, to `time`, counted from the start of the
+    /// segment at `time` as `position(at:)` counts: a frame or half-frame tie rounds as the position does.
+    func outputFrames(from start: TimeInterval, to time: TimeInterval, sampleRate: Double) -> Int64 {
+        let origin = segmentIndex(at: time).map { segments[$0].start } ?? start
+        let frame = { (seconds: TimeInterval) in Int64(((seconds - origin) * sampleRate).rounded()) }
+        return frame(time) - frame(start)
+    }
+
     /// Moves to `playhead` and returns the items and formats it entered since the last call, in order,
     /// a zero-frame item included. Positions behind `playhead` are forgotten.
     mutating func advance(to playhead: TimeInterval) -> [Heard] {

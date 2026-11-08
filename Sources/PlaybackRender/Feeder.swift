@@ -448,9 +448,8 @@ final class Feeder {
         // Upstream carries on after the last replay, so what it had not yet written follows.
         var chunks = ArraySlice(kept.map(\.chunk) + replaying)
         if let first = kept.first {
-            // Each time rounded to its frame, so a half-frame time lands where the map's position does.
-            let frame = { (seconds: TimeInterval) in Int64((seconds * first.chunk.format.sampleRate).rounded()) }
-            chunks[chunks.startIndex] = first.chunk.dropping(first: frame(time) - frame(first.start))
+            let frames = map.outputFrames(from: first.start, to: time, sampleRate: first.chunk.format.sampleRate)
+            chunks[chunks.startIndex] = first.chunk.dropping(first: frames)
         }
         restart(from: currentPosition(at: time), replaying: chunks)
         return true
@@ -481,6 +480,9 @@ final class Feeder {
     func halt() {
         failed = true
         pendingPartialFlush = nil
+        // Only a restart, which seeks, leaves the halt: the audio kept for a replay is dead weight.
+        written = []
+        replaying = []
         recovering = false
         pause()
         // No audio is coming, so it is not waiting for any.
