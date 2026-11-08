@@ -502,6 +502,8 @@ final class Feeder {
             // Its one ready event wakes the pump, so a deep route refills as fast as it drains.
             guard output.isReadyForMoreMediaData else { return output.requestMediaDataWhenReady() }
             if let chunk = replaying.popFirst() {
+                // A drained slice still holds its base buffer, so drop it to free the replayed samples.
+                if replaying.isEmpty { replaying = [] }
                 guard write(chunk) else { return }
                 continue
             }
