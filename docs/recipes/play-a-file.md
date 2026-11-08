@@ -37,6 +37,6 @@ XCTAssertTrue(player.isPlaying)
 XCTAssertEqual(player.duration ?? 0, 3, accuracy: 0.01)
 ```
 
-In the app: `Player<URL>(makeSource: { FFmpegItemSource(reader: try FileByteReader(url: $0)) })`, then
+In the app: `Player<URL>(makeSource: { url, _ in FFmpegItemSource(reader: try FileByteReader(url: url)) })`, then
 `setItems` and `play()`. The session is activated on the first `play()`. Read `state`, `position` and
 `duration` from the `@Observable` player.

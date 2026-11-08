@@ -798,7 +798,7 @@ public final class Player<Item: Hashable & Sendable> {
         startTarget = position
         let source: any ItemSource
         do {
-            source = try makeSource(entry.item)
+            source = try makeSource(entry.item, position)
         } catch {
             endGate(.superseded)
             unload(as: .idle)
@@ -871,7 +871,7 @@ public final class Player<Item: Hashable & Sendable> {
             return
         }
         do {
-            let source = try makeSource(next.item)
+            let source = try makeSource(next.item, 0)
             let key = newKey(for: next)
             transport.setNext(item: key, source: source)
             armedKey = key

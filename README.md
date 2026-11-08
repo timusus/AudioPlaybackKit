@@ -113,7 +113,7 @@ import PlaybackDecode
 import PlaybackPlayer
 import PlaybackRender
 
-let player = Player<URL>(makeSource: { FFmpegItemSource(reader: try FileByteReader(url: $0)) })
+let player = Player<URL>(makeSource: { url, _ in FFmpegItemSource(reader: try FileByteReader(url: url)) })
 player.setItems(urls)
 player.play()          // then read player.state, player.position and player.duration
 ```

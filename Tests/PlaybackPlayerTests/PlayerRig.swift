@@ -21,7 +21,7 @@ final class PlayerRig {
         let names = ["a", "b", "c", "d", "x", "y"]
         let factory = FakeItemFactory<String> { Float(names.firstIndex(of: $0)! * 1000) }
         self.factory = factory
-        base = PlayerTestRig { try factory.make($0) }
+        base = PlayerTestRig { try factory.make($0, startPosition: $1) }
     }
 
     var output: FakeAudioOutput { base.output }

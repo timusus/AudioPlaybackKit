@@ -45,6 +45,8 @@ public final class FakeItemFactory<Item: Hashable & Sendable> {
     /// Items whose source holds `open()` or a read until the stall is released.
     public var stalls: [Item: SourceStall] = [:]
     public private(set) var calls: [Item] = []
+    /// The start position the player passed with each call in `calls`.
+    public private(set) var starts: [TimeInterval] = []
     private var made: [(item: Item, source: FakeItemSource)] = []
     private let base: (Item) -> Float
 
@@ -57,8 +59,9 @@ public final class FakeItemFactory<Item: Hashable & Sendable> {
         self.base = base
     }
 
-    public func make(_ item: Item) throws -> any ItemSource {
+    public func make(_ item: Item, startPosition: TimeInterval = 0) throws -> any ItemSource {
         calls.append(item)
+        starts.append(startPosition)
         if failing.contains(item) { throw FakeItemError(item: item) }
         let source = FakeItemSource(format: formats[item] ?? format, frames: lengths[item] ?? frames, chunkFrames: chunkFrames, base: base(item))
         if live.contains(item) { source.frameCount = nil }

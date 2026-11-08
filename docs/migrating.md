@@ -6,7 +6,11 @@ not onto `Transport` first: each would write the session, state machine and adva
 page has what each app does today, where it goes, and the order of work. Paths are relative to each app's
 iOS directory (`mobile/ios` in `timusus/shuttle-podcasts`, `ios` in `timusus/shuttle2`).
 
-## Migrating from 0.16 to 0.17
+## Migrating from 0.20 to 0.21
+
+| Old | New |
+|---|---|
+| `ItemSourceFactory<Item>` as `(Item) throws -> any ItemSource` | `(Item, _ startPosition: TimeInterval) throws -> any ItemSource` (breaking). `Player.load` passes its start position and a gapless next item gets 0, so a transcode opens at the resume point in one request. The transport still seeks the source to that position afterwards; a source opened there treats the seek as a no-op. Write `{ item, _ in ... }` to ignore it |
 
 | Old | New |
 |---|---|

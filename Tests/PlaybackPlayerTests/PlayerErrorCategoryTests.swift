@@ -67,7 +67,7 @@ final class PlayerErrorCategoryTests: XCTestCase {
     }
 
     private func readerFailing(with error: Error) -> ItemSourceFactory<String> {
-        { _ in FFmpegItemSource(reader: try FailingByteReader(url: Self.mp3, failAt: 40_000, error: error)) }
+        { _, _ in FFmpegItemSource(reader: try FailingByteReader(url: Self.mp3, failAt: 40_000, error: error)) }
     }
 
     func testAConnectionLostMidItemIsNetwork() async {
@@ -96,7 +96,7 @@ final class PlayerErrorCategoryTests: XCTestCase {
 
     func testAMissingFileIsIO() async {
         let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let category = await failedCategory { _ in FFmpegItemSource(reader: try FileByteReader(url: missing)) }
+        let category = await failedCategory { _, _ in FFmpegItemSource(reader: try FileByteReader(url: missing)) }
         XCTAssertEqual(category, .io)
     }
 
@@ -104,7 +104,7 @@ final class PlayerErrorCategoryTests: XCTestCase {
         let page = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try Data(String(repeating: "<html><body>Not found</body></html>\n", count: 400).utf8).write(to: page)
         addTeardownBlock { try? FileManager.default.removeItem(at: page) }
-        let category = await failedCategory { _ in FFmpegItemSource(reader: try FileByteReader(url: page)) }
+        let category = await failedCategory { _, _ in FFmpegItemSource(reader: try FileByteReader(url: page)) }
         XCTAssertEqual(category, .unsupported)
     }
 
@@ -116,7 +116,7 @@ final class PlayerErrorCategoryTests: XCTestCase {
     }
 
     func testAnAppFactorysOwnErrorIsInternal() async {
-        let category = await failedCategory { _ in throw CocoaError(.featureUnsupported) }
+        let category = await failedCategory { _, _ in throw CocoaError(.featureUnsupported) }
         XCTAssertEqual(category, .internal)
     }
 }

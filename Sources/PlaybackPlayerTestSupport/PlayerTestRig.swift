@@ -17,6 +17,10 @@ public final class PlayerTestRig<Item: Hashable & Sendable> {
     private let events: AsyncStream<PlayerEvent<Item>>
     private let gate = EventGate()
 
+    public convenience init(makeSource: @escaping @MainActor (Item) throws -> any ItemSource) {
+        self.init { item, _ in try makeSource(item) }
+    }
+
     public init(makeSource: @escaping ItemSourceFactory<Item>) {
         let (output, timer, executor, gate) = (output, timer, executor, gate)
         player = Player(makeSource: makeSource, session: session) { onEvent in

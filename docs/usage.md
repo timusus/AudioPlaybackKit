@@ -362,7 +362,7 @@ import PlaybackRender
 import PlaybackStreaming
 
 let player = Player<Episode>(
-    makeSource: { episode in
+    makeSource: { episode, startPosition in   // startPosition: 0 for a gapless next item
         FFmpegItemSource(reader: GrowingFileByteSource(url: episode.url, authHeaders: [:]))
     },
     audioSession: .spokenAudio      // or .longFormAudio (the default) for music

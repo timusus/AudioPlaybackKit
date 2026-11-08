@@ -4,7 +4,10 @@ import PlaybackRender
 
 /// Makes the PCM source for an item when the player is about to decode it. Called on the main
 /// actor and must not block: `FFmpegItemSource` opens lazily, so construct it and return.
-public typealias ItemSourceFactory<Item> = @MainActor (Item) throws -> any ItemSource
+/// `startPosition` is where playback begins (0 for a gapless next item), so a source that can open
+/// there in one request does. The player still seeks the source to it afterwards; a source opened
+/// at the position treats that seek as a no-op.
+public typealias ItemSourceFactory<Item> = @MainActor (Item, _ startPosition: TimeInterval) throws -> any ItemSource
 
 /// media3 `Player.State`: `.idle` has nothing prepared or stopped on an error; `.buffering` is
 /// waiting for audio (a load or seek not yet decoded, or decode behind the clock) whatever
