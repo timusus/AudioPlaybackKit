@@ -555,6 +555,46 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(positions.map(\.mediaFrame), Array(0...40))
     }
 
+    // A shallow route takes 0.5 s of an 8 s replay; a second flush must keep the 7.5 s not yet
+    // written, as upstream carries on from the end of the first replay.
+    func testASecondAutoFlushDuringAReplayKeepsTheAudioNotYetReplayed() {
+        makeFeeder([item(0, 80)])
+        output.capacity = 8
+        feeder.play()
+        run(for: 1)
+        output.capacity = 0.5
+        output.injectAutoFlush()
+        feeder.pump()
+        output.injectAutoFlush()
+        feeder.pump()
+        run(for: 25)
+
+        XCTAssertEqual(upstream.resupplies, [])
+        XCTAssertEqual(heard, ramp(0, 0..<80))
+        XCTAssertEqual(positions.map(\.mediaFrame), Array(0...80))
+    }
+
+    // CarPlay and AirPlay route changes send flushes in bursts.
+    func testABurstOfAutoFlushesPlaysOnContinuously() {
+        makeFeeder([item(0, 80)])
+        output.capacity = 8
+        feeder.play()
+        run(for: 1)
+        output.capacity = 0.5
+        output.injectAutoFlush()
+        feeder.pump()
+        run(for: 0.25)
+        output.injectAutoFlush()
+        feeder.pump()
+        output.injectAutoFlush()
+        feeder.pump()
+        run(for: 25)
+
+        XCTAssertEqual(upstream.resupplies, [])
+        XCTAssertEqual(heard, ramp(0, 0..<80))
+        XCTAssertEqual(positions.map(\.mediaFrame), Array(0...80))
+    }
+
     func testAnAutoFlushBehindTheAudioStillHeldSeeksTheSourceToTheExactFrame() {
         makeFeeder([item(0, 40)])
         feeder.play()

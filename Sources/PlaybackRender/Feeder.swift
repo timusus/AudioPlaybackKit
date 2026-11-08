@@ -438,7 +438,8 @@ final class Feeder {
         // A zero-frame chunk at `time` carries an item's tag still to be heard.
         let kept = written.drop { $0.end < time || ($0.end == time && $0.chunk.frameCount > 0) }
         guard pendingPartialFlush == nil, !failed, (kept.first?.start ?? map.writtenEnd) <= time else { return false }
-        var chunks = kept.map(\.chunk)[...]
+        // Upstream carries on after the last replay, so what it had not yet written follows.
+        var chunks = ArraySlice(kept.map(\.chunk) + replaying)
         if let first = kept.first {
             // Each time rounded to its frame, so a half-frame time lands where the map's position does.
             let frame = { (seconds: TimeInterval) in Int64((seconds * first.chunk.format.sampleRate).rounded()) }
