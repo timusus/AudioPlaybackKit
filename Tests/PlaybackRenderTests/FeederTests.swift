@@ -510,14 +510,15 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(statuses, [.buffering, .playing, .buffering, .playing, .ended])
     }
 
-    func testAnAutoFlushMidItemResuppliesFromTheFlushPosition() {
+    func testAnAutoFlushMidItemReplaysFromTheFlushPosition() {
         makeFeeder([item(0, 40)])
         feeder.play()
         run(for: 1)
         output.injectAutoFlush()
         feeder.pump()
 
-        XCTAssertEqual(upstream.resupplies, [pos(0, 4)])
+        XCTAssertEqual(upstream.resupplies, [])
+        XCTAssertEqual(output.enqueues.last { $0.time == 1 }?.samples.first, FakeUpstream.sample(0, 4))
         run(for: 10)
         XCTAssertEqual(heard, ramp(0, 0..<40))
         XCTAssertEqual(positions.map(\.mediaFrame), Array(0...40))
@@ -525,17 +526,43 @@ final class FeederTests: XCTestCase {
 
     // #102: the flush time is where the output dropped audio, already on the clock's timeline, so
     // re-feeding a latency earlier replayed that much on every iPhone route change.
-    func testWithOutputLatencyAnAutoFlushResuppliesFromTheFlushTimeNotALatencyEarlier() {
+    func testWithOutputLatencyAnAutoFlushReplaysFromTheFlushTimeNotALatencyEarlier() {
         makeFeeder([item(0, 40)], latency: 0.25)
         feeder.play()
         run(for: 1)
         output.injectAutoFlush()
         feeder.pump()
 
-        XCTAssertEqual(upstream.resupplies, [pos(0, 4)])
+        XCTAssertEqual(upstream.resupplies, [])
         XCTAssertEqual(output.enqueues.last { $0.time == 1 }?.samples.first, FakeUpstream.sample(0, 4))
         run(for: 10)
         XCTAssertEqual(heard, ramp(0, 0..<40))
+    }
+
+    // Shuttle Music #1120: a route change re-seeked the source, which a transcoding server reopens at a
+    // rounded offset, so the song jumped. The written audio past the flush is replayed instead.
+    func testAnAutoFlushReplaysTheWrittenAudioWithoutSeekingTheSource() {
+        makeFeeder([item(0, 40)], chunkFrames: 4)
+        feeder.play()
+        run(for: 1.25)
+        output.injectAutoFlush()
+        feeder.pump()
+
+        XCTAssertEqual(upstream.resupplies, [])
+        XCTAssertEqual(output.enqueues.last { $0.time == 1.25 }?.samples.first, FakeUpstream.sample(0, 5))
+        run(for: 10)
+        XCTAssertEqual(heard, ramp(0, 0..<40))
+        XCTAssertEqual(positions.map(\.mediaFrame), Array(0...40))
+    }
+
+    func testAnAutoFlushBehindTheAudioStillHeldSeeksTheSourceToTheExactFrame() {
+        makeFeeder([item(0, 40)])
+        feeder.play()
+        run(for: 1.25)
+        output.injectAutoFlush(at: 0.75)
+        feeder.pump()
+
+        XCTAssertEqual(upstream.resupplies, [pos(0, 3)])
     }
 
     func testAStallTakesTheSameRecoveryPath() {
@@ -546,7 +573,8 @@ final class FeederTests: XCTestCase {
         output.advance(by: 0.5)
         feeder.pump()
 
-        XCTAssertEqual(upstream.resupplies, [pos(0, 4)])
+        XCTAssertEqual(upstream.resupplies, [])
+        XCTAssertEqual(output.enqueues.last { $0.time == 1.5 }?.samples.first, FakeUpstream.sample(0, 4))
         XCTAssertEqual(output.flushes, [1.5])
         run(for: 10)
         XCTAssertEqual(heard, ramp(0, 0..<40))
@@ -556,12 +584,13 @@ final class FeederTests: XCTestCase {
     // A stalled renderer starved, which media3 counts as a rebuffer; a route change's flush is no starvation.
     func testAfterAStallTheOutputWaitsForTheRebufferDepth() {
         makeFeeder([item(0, 40)])
+        upstream.available = 2
         feeder.play()
-        run(for: 1)
+        run(for: 0.5)
         output.injectStall()
         upstream.available = 1
         feeder.pump()
-        XCTAssertEqual(output.rate, 0, "0.5 s of 2 s")
+        XCTAssertEqual(output.rate, 0, "0.5 s replayed and 0.5 s new of 2 s")
 
         upstream.available = 3
         feeder.pump()
@@ -661,7 +690,7 @@ final class FeederTests: XCTestCase {
         output.injectAutoFlush(at: 1)
         feeder.pump()
 
-        XCTAssertEqual(upstream.resupplies, [pos(0, 4)])
+        XCTAssertEqual(upstream.resupplies, [])
         run(for: 10)
         XCTAssertEqual(positions.map(\.mediaFrame), Array(0...40))
     }

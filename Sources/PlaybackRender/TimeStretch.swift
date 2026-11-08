@@ -22,6 +22,28 @@ struct TimeStretch {
         var format: PCMFormat
         var spans: [Span]
         var frameCount: Int64 { Int64(samples.count / format.channelCount) }
+
+        /// The chunk without its first `frames` output frames, each span keeping the media frames its
+        /// remaining output carries, as `MediaPositionMap.truncate` keeps them.
+        func dropping(first frames: Int64) -> Chunk {
+            var left = min(max(frames, 0), frameCount)
+            var trimmed = Chunk(samples: Array(samples.dropFirst(Int(left) * format.channelCount)), format: format, spans: [])
+            for var span in spans {
+                let cut = min(left, span.outputFrames)
+                // A span wholly before the cut was heard; a zero-frame one there too.
+                if left > 0, cut == span.outputFrames {
+                    left -= cut
+                    continue
+                }
+                left -= cut
+                let media = cut == 0 ? 0 : (cut * span.tag.frameCount + span.outputFrames / 2) / span.outputFrames
+                span.tag.mediaStartFrame += media
+                span.tag.frameCount -= media
+                span.outputFrames -= cut
+                trimmed.spans.append(span)
+            }
+            return trimmed
+        }
     }
 
     /// The rate the last chunk was stretched at.

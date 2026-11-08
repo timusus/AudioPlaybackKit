@@ -88,15 +88,24 @@ final class Feeder {
     private struct PendingFlush {
         var token: Int
         var before: MediaPositionMap
-        var chunkEnds: [TimeInterval]
+        var written: [Written]
         var upstreamEnded: Bool
         var resume: MediaPositionMap.Position
         var held = false
     }
 
-    /// Where each written chunk ends, ascending and pruned behind the playhead: the map merges
-    /// contiguous chunks, and a partial flush must cut between them.
-    private var chunkEnds: [TimeInterval] = []
+    private struct Written {
+        var start: TimeInterval
+        var chunk: TimeStretch.Chunk
+        var end: TimeInterval { start + Double(chunk.frameCount) / chunk.format.sampleRate }
+    }
+
+    /// Each chunk as written, pruned behind the playhead: the map merges contiguous chunks, and a
+    /// partial flush must cut between them. An auto-flush or stall enqueues them again rather than seek
+    /// the source, which a transcoding server may reopen off the frame. Holds what the output does, up to `maxDepth`.
+    private var written: [Written] = []
+    /// What an auto-flush or stall dropped, enqueued again before upstream is pulled.
+    private var replaying: ArraySlice<TimeStretch.Chunk> = []
     /// Diagnostics: the flush whose re-feed is being timed, until its first buffer and `resumeDepth` are logged.
     private var refeedTrace: (label: String, began: DispatchTime, firstEnqueued: Bool)?
 
@@ -188,17 +197,17 @@ final class Feeder {
         // would re-feed audio the renderer still holds, and an overlap is trimmed or dropped by it.
         let target = output.currentTime() + resumeDepth
         guard pendingPartialFlush == nil, !failed else { return }
-        let before = map, endsBefore = chunkEnds
+        let before = map, writtenBefore = written
         // A flush replacing under `resumeDepth` of audio gains less than appending would delay the
         // change, and a cut that close to the tail is inside what a shallow renderer has committed to.
-        guard let boundary = chunkEnds.first(where: { $0 >= target }),
+        guard let boundary = written.first(where: { $0.end >= target })?.end,
               map.writtenEnd - boundary >= resumeDepth,
               let cut = map.truncate(from: boundary) else { return appendAtWrittenEnd() }
-        chunkEnds.removeAll { $0 > cut.time }
+        written.removeAll { $0.end > cut.time || $0.start >= cut.time }
         lastPartialFlush += 1
         let token = lastPartialFlush
         pendingPartialFlush = PendingFlush(
-            token: token, before: before, chunkEnds: endsBefore, upstreamEnded: upstreamEnded, resume: cut.resume
+            token: token, before: before, written: writtenBefore, upstreamEnded: upstreamEnded, resume: cut.resume
         )
         let inbox = inbox, wake = wake
         note("partialFlush begin cut=\(fixed(cut.time)) sourceResume=\(fixed(cut.resume.seconds))")
@@ -242,7 +251,8 @@ final class Feeder {
             recover(from: pending.reset ? nil : pending.failure, flushedAt: pending.time)
         } else if let time = pending.time {
             note("restart after \(pending.stalled ? "stall" : "autoFlush") flushTime=\(fixed(time))")
-            restart(from: currentPosition(at: max(map.epochStart, time)))
+            let from = max(map.epochStart, time)
+            if !replay(from: from) { restart(from: currentPosition(at: from)) }
             refeedTrace = (pending.stalled ? "stall" : "autoFlush", .now(), false)
             // A stall is the renderer starving, a downstream underrun; a route change's flush is not.
             // Not while paused: a pause ends the rebuffer even if the stall is drained after it.
@@ -256,6 +266,7 @@ final class Feeder {
                 // Resupplied only now: a failed flush leaves the source and the stretch where they were.
                 stretch.reset()
                 upstream.resupply(from: SeekTarget(flush.resume))
+                replaying = []
                 upstreamEnded = false
                 refeedTrace = ("partialFlush", result.completedAt, false)
             } else if flush.held {
@@ -265,7 +276,7 @@ final class Feeder {
             } else {
                 // A failed flush leaves the enqueued buffers unchanged (AVSampleBufferAudioRenderer.flush(fromSourceTime:)).
                 map = flush.before
-                chunkEnds = flush.chunkEnds
+                written = flush.written
                 upstreamEnded = flush.upstreamEnded
                 appendAtWrittenEnd()
             }
@@ -393,7 +404,9 @@ final class Feeder {
     }
 
     /// The one recovery path: an auto-flush, a stall, a transport flush, a seek and a stop all land here.
-    private func restart(from position: SeekTarget?, status: FeederStatus? = nil) {
+    /// `chunks` are written audio to enqueue again instead of resupplying: upstream and the stretch
+    /// carry on from the written end.
+    private func restart(from position: SeekTarget?, status: FeederStatus? = nil, replaying chunks: ArraySlice<TimeStretch.Chunk>? = nil) {
         // Flush times already posted predate this flush, which covers them; a failure does not.
         _ = inbox.drainTime()
         refeedTrace = nil
@@ -404,15 +417,35 @@ final class Feeder {
         outputRunning = false
         afterUnderrun = false
         map.reset(at: anchor)
-        stretch.reset()
-        chunkEnds = []
+        written = []
+        replaying = chunks ?? []
+        // An end is pulled again once the replay is written.
         upstreamEnded = false
         failed = false
         pendingPartialFlush = nil
         restartTarget = position
-        // With no position nothing was consumed, so upstream's next chunk is still the right one.
-        if let position { upstream.resupply(from: position) }
+        if chunks == nil {
+            stretch.reset()
+            // With no position nothing was consumed, so upstream's next chunk is still the right one.
+            if let position { upstream.resupply(from: position) }
+        }
         setStatus(status ?? .buffering)
+    }
+
+    /// Restarts from `time` on the written audio, false when the chunks covering it are pruned or a
+    /// partial flush has cut what upstream supplies next. Exact to the frame within a chunk.
+    private func replay(from time: TimeInterval) -> Bool {
+        // A zero-frame chunk at `time` carries an item's tag still to be heard.
+        let kept = written.drop { $0.end < time || ($0.end == time && $0.chunk.frameCount > 0) }
+        guard pendingPartialFlush == nil, !failed, (kept.first?.start ?? map.writtenEnd) <= time else { return false }
+        var chunks = kept.map(\.chunk)[...]
+        if let first = kept.first {
+            // Each time rounded to its frame, so a half-frame time lands where the map's position does.
+            let frame = { (seconds: TimeInterval) in Int64((seconds * first.chunk.format.sampleRate).rounded()) }
+            chunks[chunks.startIndex] = first.chunk.dropping(first: frame(time) - frame(first.start))
+        }
+        restart(from: currentPosition(at: time), replaying: chunks)
+        return true
     }
 
     /// A failed renderer, or a media-services reset (`error` nil): rebuild the output and restart
@@ -458,6 +491,10 @@ final class Feeder {
         while !failed, pendingPartialFlush == nil, map.writtenEnd - output.currentTime() < Self.maxDepth {
             // Its one ready event wakes the pump, so a deep route refills as fast as it drains.
             guard output.isReadyForMoreMediaData else { return output.requestMediaDataWhenReady() }
+            if let chunk = replaying.popFirst() {
+                guard write(chunk) else { return }
+                continue
+            }
             let supply = upstream.pull()
             if case .ended = supply {
                 guard stretch.finish().allSatisfy(write) else { continue }
@@ -484,6 +521,7 @@ final class Feeder {
 
     /// False when the output refused it: the feeder restarted or failed, so what follows it is stale.
     private func write(_ chunk: TimeStretch.Chunk) -> Bool {
+        let start = map.writtenEnd
         if chunk.frameCount > 0 {
             if let trace = refeedTrace, !trace.firstEnqueued {
                 refeedTrace?.firstEnqueued = true
@@ -500,14 +538,14 @@ final class Feeder {
             }
         }
         for span in chunk.spans { map.append(span.tag, format: span.format, outputFrames: span.outputFrames) }
-        if chunk.frameCount > 0 { chunkEnds.append(map.writtenEnd) }
+        written.append(Written(start: start, chunk: chunk))
         return true
     }
 
     private func report() {
         let playhead = playhead()
         for heard in map.advance(to: playhead) { onEvent(.heard(heard)) }
-        chunkEnds.removeAll { $0 < playhead }
+        written.removeAll { $0.end < playhead }
         // Within an item the position only goes forward, as media3's renderers take
         // max(current, new) unless a seek allowed a discontinuity: the clock steps back on a rate
         // change, a resume or a re-anchor, and apps count listening time from position deltas.

@@ -114,4 +114,23 @@ final class TimeStretchTests: XCTestCase {
         XCTAssertEqual(Double(stretched.reduce(0) { $0 + $1.outputFrames }), 2940, accuracy: 1)
         XCTAssertEqual(stretch.finish().count, 0)
     }
+
+    // A replay after an auto-flush starts mid-chunk: frames before the cut were heard.
+    func testDroppingTheFirstFramesKeepsTheMediaFramesTheRestCarries() {
+        let format = PCMFormat(sampleRate: 4, channelCount: 1)
+        let fast = TimeStretch.Span(tag: SegmentTag(item: 1, mediaStartFrame: 0, frameCount: 4), format: format, outputFrames: 2)
+        let join = TimeStretch.Span(tag: SegmentTag(item: 2, mediaStartFrame: 0, frameCount: 0), format: format, outputFrames: 0)
+        let next = TimeStretch.Span(tag: SegmentTag(item: 2, mediaStartFrame: 0, frameCount: 4), format: format, outputFrames: 4)
+        let chunk = TimeStretch.Chunk(samples: [0, 1, 2, 3, 4, 5], format: format, spans: [fast, join, next])
+
+        let atJoin = chunk.dropping(first: 2)
+        XCTAssertEqual(atJoin.samples, [2, 3, 4, 5])
+        XCTAssertEqual(atJoin.spans, [join, next])
+
+        let inNext = chunk.dropping(first: 3)
+        XCTAssertEqual(inNext.samples, [3, 4, 5])
+        XCTAssertEqual(inNext.spans, [
+            TimeStretch.Span(tag: SegmentTag(item: 2, mediaStartFrame: 1, frameCount: 3), format: format, outputFrames: 3),
+        ])
+    }
 }

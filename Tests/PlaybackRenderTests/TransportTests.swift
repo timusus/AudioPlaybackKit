@@ -204,9 +204,9 @@ final class TransportTests: XCTestCase {
         XCTAssertEqual(output.volume, 0.5, "route change")
     }
 
-    // #102: after a route-change auto-flush the output stayed silent until a pump took the event,
-    // then until another wrote the re-decoded audio: up to two pump intervals.
-    func testAnAutoFlushAndTheReDecodeEachWakeThePumpAtOnce() {
+    // #102: after a route-change auto-flush the output stayed silent until a pump took the event.
+    // That pump replays the written audio, so it plays on with no decode.
+    func testAnAutoFlushWakesThePumpWhichPlaysOnAtOnce() {
         transport.setCurrent(item: "a", source: a)
         transport.play()
         pump()
@@ -215,11 +215,6 @@ final class TransportTests: XCTestCase {
 
         output.injectAutoFlush()
         XCTAssertEqual(timer.wakes, wakes + 1)
-        timer.fire()
-        XCTAssertEqual(output.rate, 0, "nothing decoded from the flush time yet")
-        XCTAssertEqual(timer.wakes, wakes + 2, "the flush answers the output's armed ready request")
-        executor.runUntilIdle()
-        XCTAssertEqual(timer.wakes, wakes + 3)
         timer.fire()
         XCTAssertEqual(output.rate, 1)
 

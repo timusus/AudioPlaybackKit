@@ -190,8 +190,7 @@ final class PlayerTelemetryEventTests: XCTestCase {
         rig.run(for: 3)
         events = []
 
-        rig.output.injectStall()
-        rig.pump()
+        starvedStall()
         XCTAssertEqual(telemetry, ["bufferingStarted"])
 
         player.pause()
@@ -206,8 +205,7 @@ final class PlayerTelemetryEventTests: XCTestCase {
         rig.run(for: 3)
         events = []
 
-        rig.output.injectStall()
-        rig.pump()
+        starvedStall()
         player.seek(to: 6)
         rig.run(for: 1)
 
@@ -216,13 +214,24 @@ final class PlayerTelemetryEventTests: XCTestCase {
 
     // MARK: A stall in progress ends exactly once
 
+    /// A stall replays what is still queued and plays on, so decode is starved first: a second
+    /// heard with no decode leaves less than the 2 s rebuffer depth held.
+    private func starvedStall() {
+        for _ in 0..<4 {
+            rig.timer.fire()
+            rig.output.advance(by: 0.25)
+        }
+        rig.output.injectStall()
+        rig.timer.fire()
+        player.drainTransportEvents()
+    }
+
     private func stallInProgress(_ items: [String] = ["a", "b"], startIndex: Int = 0) {
         player.setItems(items, startIndex: startIndex)
         player.play()
         rig.run(for: 3)
         events = []
-        rig.output.injectStall()
-        rig.pump()
+        starvedStall()
         XCTAssertEqual(telemetry, ["bufferingStarted"])
     }
 
@@ -254,18 +263,18 @@ final class PlayerTelemetryEventTests: XCTestCase {
         XCTAssertEqual(names, ["bufferingStarted", "bufferingEnded", "recoveredPaused"])
     }
 
-    // The stall straddles the end of a, so b's source failing is what moves on and fails the item.
-    func testAnItemFailureEndsAStallBeforeItReports() {
+    // Once b's failure ends the upstream, a stall replays the rest of a and plays on, so the stall
+    // comes earlier and its end must still be reported before b fails.
+    func testAStallEndsBeforeAnItemFailureReports() {
         rig.factory.failing = ["b"]
         player.setItems(["a", "b"])
         player.play()
-        rig.run(for: 9.5)
+        rig.run(for: 4.5)
         events = []
-        rig.output.injectStall()
-        rig.pump()
+        starvedStall()
         XCTAssertEqual(telemetry, ["bufferingStarted"])
 
-        rig.run(for: 2)
+        rig.run(for: 6)
 
         XCTAssertEqual(names, ["bufferingStarted", "bufferingEnded", "itemTransition", "itemFailed"])
     }
@@ -280,10 +289,9 @@ final class PlayerTelemetryEventTests: XCTestCase {
     func testAGaplessTransitionEndsAStallBeforeTheTransition() {
         player.setItems(["a", "b"])
         player.play()
-        rig.run(for: 9.5)
+        rig.run(for: 8.5)
         events = []
-        rig.output.injectStall()
-        rig.pump()
+        starvedStall()
         XCTAssertEqual(telemetry, ["bufferingStarted"])
 
         rig.run(for: 2)
@@ -343,8 +351,7 @@ final class PlayerTelemetryEventTests: XCTestCase {
 
         events = []
         player.remove(at: 0)
-        rig.output.injectStall()
-        rig.pump()
+        starvedStall()
         XCTAssertEqual(names, ["bufferingStarted"])
         guard case let .bufferingStarted(ref, _) = events.first else { return XCTFail("\(events)") }
         XCTAssertEqual(ref, .init(index: 1, item: "b"))

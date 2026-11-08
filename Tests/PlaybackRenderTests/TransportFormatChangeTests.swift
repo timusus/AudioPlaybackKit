@@ -211,19 +211,22 @@ final class TransportFormatChangeTests: XCTestCase {
         XCTAssertTrue(ended)
     }
 
+    // Flushed behind the audio still held, so the source is seeked and re-opens in its new format.
     func testAnAutoFlushHeardBeforeTheChangeRefeedsFromTheSameTime() {
-        start(ReencodedSource(switchFrames: [8]))
+        let source = ReencodedSource(switchFrames: [8])
+        start(source)
         run(for: 0.75)
         let enqueues = output.enqueues.count
         let before = positions.last
 
-        output.injectAutoFlush()
+        output.injectAutoFlush(at: 0.25)
         pump()
         run(for: 3)
 
         XCTAssertEqual(before, 0.75)
         XCTAssertEqual(failures, 0)
-        XCTAssertEqual(firstSample(after: enqueues), 1024, "0.75 s re-opened at 16 Hz is frame 12")
+        XCTAssertEqual(source.seeks, [4], "frame 2 heard at 8 Hz, at the 16 Hz decode-ahead reached")
+        XCTAssertEqual(firstSample(after: enqueues), 1008, "0.25 s re-opened at 16 Hz is frame 4")
         XCTAssertEqual(positions, positions.sorted())
         XCTAssertEqual(positions.last, 3)
     }
@@ -325,14 +328,15 @@ final class TransportFormatChangeTests: XCTestCase {
         let enqueues = output.enqueues.count
         let before = itemPositions.last
 
-        output.injectAutoFlush()
+        // Behind the audio still held, so the source is seeked.
+        output.injectAutoFlush(at: 1500.0 / 44100)
         pump()
         run(for: 4)
 
         XCTAssertEqual(failures, 0)
         XCTAssertTrue(processor.events.contains(flush(13061)), "12000 at 44.1 kHz is 13061.22 at 48 kHz")
         XCTAssertEqual(before?.seconds, 5513.0 / 44100)
-        XCTAssertEqual(firstSample(after: enqueues), 1000 + 6001, "frame 5513 at 44.1 kHz is 6000.54 at 48 kHz")
+        XCTAssertEqual(firstSample(after: enqueues), 1000 + 1633, "frame 1500 at 44.1 kHz is 1632.65 at 48 kHz")
         XCTAssertEqual(positions, positions.sorted())
         XCTAssertEqual(positions.last, 3)
         XCTAssertEqual(Set(durations), [3])
