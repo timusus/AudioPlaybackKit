@@ -555,9 +555,8 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(positions.map(\.mediaFrame), Array(0...40))
     }
 
-    // A shallow route takes 0.5 s of an 8 s replay; a second flush must keep the 7.5 s not yet
-    // written, as upstream carries on from the end of the first replay.
-    func testASecondAutoFlushDuringAReplayKeepsTheAudioNotYetReplayed() {
+    /// 8 s written, then a route change to one that takes 0.5 s: 7.5 s of the replay waits unwritten.
+    private func replayOnAShallowRoute() {
         makeFeeder([item(0, 80)])
         output.capacity = 8
         feeder.play()
@@ -565,6 +564,11 @@ final class FeederTests: XCTestCase {
         output.capacity = 0.5
         output.injectAutoFlush()
         feeder.pump()
+    }
+
+    // Upstream carries on from the end of the first replay, so a second flush must keep what it had not written.
+    func testASecondAutoFlushDuringAReplayKeepsTheAudioNotYetReplayed() {
+        replayOnAShallowRoute()
         output.injectAutoFlush()
         feeder.pump()
         run(for: 25)
@@ -576,13 +580,7 @@ final class FeederTests: XCTestCase {
 
     // CarPlay and AirPlay route changes send flushes in bursts.
     func testABurstOfAutoFlushesPlaysOnContinuously() {
-        makeFeeder([item(0, 80)])
-        output.capacity = 8
-        feeder.play()
-        run(for: 1)
-        output.capacity = 0.5
-        output.injectAutoFlush()
-        feeder.pump()
+        replayOnAShallowRoute()
         run(for: 0.25)
         output.injectAutoFlush()
         feeder.pump()
@@ -650,13 +648,7 @@ final class FeederTests: XCTestCase {
 
     // The replay still to write was stretched at the old speed, so it is dropped and the source resupplied.
     func testASpeedChangeDuringAReplayPlaysAtTheNewSpeedFromTheWrittenEnd() {
-        makeFeeder([item(0, 80)])
-        output.capacity = 8
-        feeder.play()
-        run(for: 1)
-        output.capacity = 0.5
-        output.injectAutoFlush()
-        feeder.pump()
+        replayOnAShallowRoute()
         feeder.setRate(2)
         run(for: 5)
 
