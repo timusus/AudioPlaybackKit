@@ -117,12 +117,13 @@ extension ForwardingNowPlayingControllable {
 
 extension Player: NowPlayingControllable {
     /// media3 `ExoPlayerImpl`'s available commands: next while there is a next item, previous on any
-    /// item but a live one with nothing before it, seeking once the item is known to be seekable.
+    /// item but a live one with nothing before it, seeking unless the item is known not to be seekable.
     public var availableCommands: PlayerCommands {
         var commands: PlayerCommands = [.playPause, .setRate]
         if hasNext { commands.insert(.seekToNext) }
         if hasPrevious || (currentItem != nil && !isLive) { commands.insert(.seekToPrevious) }
-        if isSeekable { commands.formUnion([.seekInCurrentItem, .seekForward, .seekBack]) }
+        // Until the source opens (`seekable` nil) a seek is kept and applied then, not refused.
+        if currentItem != nil, seekable != false { commands.formUnion([.seekInCurrentItem, .seekForward, .seekBack]) }
         return commands
     }
 

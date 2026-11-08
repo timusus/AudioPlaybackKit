@@ -11,6 +11,7 @@ iOS directory (`mobile/ios` in `timusus/shuttle-podcasts`, `ios` in `timusus/shu
 | Old | New |
 |---|---|
 | `ItemSourceFactory<Item>` as `(Item) throws -> any ItemSource` | `(Item, _ startPosition: TimeInterval) throws -> any ItemSource` (breaking). `Player.load` passes its start position and a gapless next item gets 0, so a transcode opens at the resume point in one request. The transport still seeks the source to that position afterwards; a source opened there treats the seek as a no-op. Write `{ item, _ in ... }` to ignore it |
+| `Player.availableCommands` omitted the seek commands until the item opened | includes them until a source says it cannot seek. A seek (or `changePlaybackPosition`) during a load is kept and lands when the item opens. An app wrapper that greys scrubbing out while loading, or a test that expects a refused press, must change |
 
 | Old | New |
 |---|---|

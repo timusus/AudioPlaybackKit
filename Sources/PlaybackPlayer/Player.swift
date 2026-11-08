@@ -57,7 +57,7 @@ public final class Player<Item: Hashable & Sendable> {
     /// item too. Not observed: it changes every pump, so poll it.
     public var bufferedAhead: TimeInterval { transport.bufferedAhead }
     /// The source's `isSeekable`, nil until it has opened.
-    private var seekable: Bool?
+    private(set) var seekable: Bool?
 
     @ObservationIgnored public let events: AsyncStream<PlayerEvent<Item>>
     /// Each event as it is sent, before `events` yields it: a test sees it without awaiting the stream.

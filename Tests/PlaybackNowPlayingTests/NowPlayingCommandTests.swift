@@ -51,13 +51,17 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertFalse(rig.player.playWhenReady)
     }
 
-    func testSeekingIsUnavailableUntilTheItemOpens() async {
+    // Deviates from media3, which greys seeking out until the item opens: a CarPlay scrub during a load
+    // must not be refused, so the player keeps it and applies it when the source answers.
+    func testASeekDuringALoadIsAcceptedAndLandsOnceTheItemOpens() async {
         rig.player.setItems(["a"])
         await rig.settle()
-        XCTAssertFalse(enabled.contains(.changePlaybackPosition))
+        XCTAssertTrue(enabled.contains(.changePlaybackPosition))
+        XCTAssertEqual(rig.commands.press(.changePlaybackPosition, .position(6)), .success)
 
         rig.player.play()
         await rig.run(for: 1)
+        XCTAssertGreaterThanOrEqual(rig.player.position, 6)
         XCTAssertTrue(enabled.contains(.changePlaybackPosition))
     }
 
