@@ -219,9 +219,16 @@ final class Feeder {
     }
 
     /// Nothing queued is replaced: the new chain applies from the next chunk pulled, which is stamped at
-    /// `writtenEnd`, so the change is heard once the queued audio plays out.
+    /// `writtenEnd`, so the change is heard once the queued audio plays out. A replay not yet written
+    /// went through the old chain, so it is dropped and upstream resupplies from its first frame.
     private func appendAtWrittenEnd() {
         note("processor change appended at writtenEnd")
+        guard let span = replaying.first?.spans.first else { return }
+        replaying = []
+        stretch.reset()
+        upstream.resupply(from: SeekTarget(MediaPositionMap.Position(
+            item: span.tag.item, mediaFrame: span.tag.mediaStartFrame, sampleRate: span.format.sampleRate
+        )))
     }
 
     /// Flushes and holds the output at rate 0, reporting `.ended`; upstream must supply nothing more.

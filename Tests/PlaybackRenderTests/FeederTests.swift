@@ -595,6 +595,24 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(positions.map(\.mediaFrame), Array(0...80))
     }
 
+    // The replay still to write was stretched at the old speed, so it is dropped and the source resupplied.
+    func testASpeedChangeDuringAReplayPlaysAtTheNewSpeedFromTheWrittenEnd() {
+        makeFeeder([item(0, 80)])
+        output.capacity = 8
+        feeder.play()
+        run(for: 1)
+        output.capacity = 0.5
+        output.injectAutoFlush()
+        feeder.pump()
+        feeder.setRate(2)
+        run(for: 5)
+
+        XCTAssertEqual(upstream.resupplies, [pos(0, 6)], "0.5 s replayed from frame 4")
+        XCTAssertEqual(positions.last, pos(0, 42), "frame 6 at 1.5 s, then 8 frames a second")
+        run(for: 10)
+        XCTAssertEqual(positions.map(\.mediaFrame), Array(0...6) + Array(stride(from: 8, through: 80, by: 2)))
+    }
+
     func testAnAutoFlushBehindTheAudioStillHeldSeeksTheSourceToTheExactFrame() {
         makeFeeder([item(0, 40)])
         feeder.play()
