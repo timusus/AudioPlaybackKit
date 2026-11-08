@@ -231,6 +231,25 @@ final class TransportFormatChangeTests: XCTestCase {
         XCTAssertEqual(positions.last, 3)
     }
 
+    // At the flush time the audio is still held, so it is replayed across the change with no seek.
+    func testAnAutoFlushHeardBeforeTheChangeReplaysAcrossIt() {
+        let source = ReencodedSource(switchFrames: [8])
+        start(source)
+        run(for: 0.75)
+        let enqueues = output.enqueues.count
+
+        output.injectAutoFlush()
+        pump()
+        run(for: 3)
+
+        XCTAssertEqual(failures, 0)
+        XCTAssertEqual(source.seeks, [])
+        XCTAssertEqual(firstSample(after: enqueues), 6, "0.75 s at 8 Hz is frame 6")
+        XCTAssertEqual(heardFormats, ["crossed a 8.0x1", "changed a 16.0x2"])
+        XCTAssertEqual(positions, positions.sorted())
+        XCTAssertEqual(positions.last, 3)
+    }
+
     func testAChangeSeenBeforeAChunkWithNoSeekStillKeepsTimeContinuous() {
         let source = ReencodedSource(switchFrames: [])
         start(source)
@@ -337,6 +356,30 @@ final class TransportFormatChangeTests: XCTestCase {
         XCTAssertTrue(processor.events.contains(flush(13061)), "12000 at 44.1 kHz is 13061.22 at 48 kHz")
         XCTAssertEqual(before?.seconds, 5513.0 / 44100)
         XCTAssertEqual(firstSample(after: enqueues), 1000 + 1633, "frame 1500 at 44.1 kHz is 1632.65 at 48 kHz")
+        XCTAssertEqual(positions, positions.sorted())
+        XCTAssertEqual(positions.last, 3)
+        XCTAssertEqual(Set(durations), [3])
+    }
+
+    // At the flush time the 44.1 kHz audio is still held, so it is replayed and the change rounds as decoded.
+    func testA44100To48000ChangeAfterAReplayRoundsToTheNearestFrame() {
+        let cd = PCMFormat(sampleRate: 44100, channelCount: 1)
+        let dat = PCMFormat(sampleRate: 48000, channelCount: 1)
+        let source = ReencodedSource(switchFrames: [12000], formats: [cd, dat], chunkFrames: 3000)
+        start(source)
+        run(for: 0.25)
+        let enqueues = output.enqueues.count
+        let before = itemPositions.last
+
+        output.injectAutoFlush()
+        pump()
+        run(for: 4)
+
+        XCTAssertEqual(failures, 0)
+        XCTAssertEqual(source.seeks, [])
+        XCTAssertTrue(processor.events.contains(flush(13061)), "12000 at 44.1 kHz is 13061.22 at 48 kHz")
+        XCTAssertEqual(before?.seconds, 5513.0 / 44100)
+        XCTAssertEqual(firstSample(after: enqueues), 5513, "the frame heard at the flush")
         XCTAssertEqual(positions, positions.sorted())
         XCTAssertEqual(positions.last, 3)
         XCTAssertEqual(Set(durations), [3])

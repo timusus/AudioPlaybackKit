@@ -595,6 +595,47 @@ final class FeederTests: XCTestCase {
         XCTAssertEqual(positions.map(\.mediaFrame), Array(0...80))
     }
 
+    func testAReplayAcrossAGaplessJoinReportsTheNextItemOnce() {
+        makeFeeder([item(0, 8), item(1, 40)])
+        feeder.play()
+        run(for: 1.75)
+        output.injectAutoFlush()
+        feeder.pump()
+        run(for: 12)
+
+        XCTAssertEqual(upstream.resupplies, [])
+        XCTAssertEqual(heard, ramp(0, 0..<8) + ramp(1, 0..<40))
+        XCTAssertEqual(crossed, [0, 1])
+        XCTAssertEqual(positions, (0...7).map { pos(0, $0) } + (0...40).map { pos(1, $0) })
+    }
+
+    func testAReplayAcrossAMonoToStereoJoinReportsTheNextItemInItsFormat() {
+        makeFeeder([item(0, 8), item(1, 16, stereo)])
+        feeder.play()
+        run(for: 1.75)
+        output.injectAutoFlush()
+        feeder.pump()
+        run(for: 4)
+
+        XCTAssertEqual(upstream.resupplies, [])
+        XCTAssertEqual(heard, ramp(0, 0..<8) + ramp(1, 0..<16))
+        XCTAssertEqual(events.compactMap { if case let .heard(.item(item, format)) = $0 { "\(item) \(format.channelCount)" } else { nil } }, ["0 1", "1 2"])
+        XCTAssertEqual(positions, (0...7).map { pos(0, $0) } + stride(from: 0, through: 16, by: 2).map { pos(1, $0) })
+    }
+
+    func testAReplayAtDoubleSpeedKeepsTheSpeed() {
+        makeFeeder([item(0, 80)])
+        feeder.setRate(2)
+        feeder.play()
+        run(for: 1.25)
+        output.injectAutoFlush()
+        feeder.pump()
+        run(for: 20)
+
+        XCTAssertEqual(upstream.resupplies, [])
+        XCTAssertEqual(positions.map(\.mediaFrame), Array(stride(from: 0, through: 80, by: 2)))
+    }
+
     // The replay still to write was stretched at the old speed, so it is dropped and the source resupplied.
     func testASpeedChangeDuringAReplayPlaysAtTheNewSpeedFromTheWrittenEnd() {
         makeFeeder([item(0, 80)])
