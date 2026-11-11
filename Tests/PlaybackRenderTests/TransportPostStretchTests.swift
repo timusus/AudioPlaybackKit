@@ -159,11 +159,11 @@ final class TransportPostStretchOrderTests: XCTestCase {
 
     private var enqueued: [Float] { output.enqueues.flatMap(\.samples) }
 
-    func testItSeesEveryOutputSampleAfterThePreStretchStagesAndStartsWithAResetAndFlush() {
+    func testItSeesEveryOutputSampleAfterThePreStretchStagesAndStartsWithAConfigureAndFlush() {
         start(a, processors: [GainProcessor()])
         run(for: 4)
 
-        XCTAssertEqual(Array(post.events.prefix(3)), [.reset, .configure(mono), flush("a", 0)])
+        XCTAssertEqual(Array(post.events.prefix(2)), [.configure(mono), flush("a", 0)])
         XCTAssertEqual(post.samples, (0..<24).map { Float($0) * 2 }, "after the doubling stage, in order")
         XCTAssertEqual(post.samples, enqueued)
     }
@@ -186,7 +186,7 @@ final class TransportPostStretchOrderTests: XCTestCase {
         XCTAssertNotNil(join)
         XCTAssertEqual(post.frames(in: post.events.prefix(join ?? 0)), 24)
         XCTAssertEqual(post.frames(in: post.events.dropFirst((join ?? 0) + 1)), 16)
-        XCTAssertEqual(post.events.filter { $0 == .reset }.count, 1, "a join is no reset")
+        XCTAssertEqual(post.events.filter { $0 == .reset }.count, 0, "a join is no reset")
     }
 
     func testAFormatChangeJoinConfiguresBeforeTheFlush() {
@@ -268,6 +268,19 @@ final class TransportPostStretchOrderTests: XCTestCase {
         XCTAssertEqual(Array(after.prefix(3)), [.reset, .configure(mono), flush("a", 20)])
     }
 
+    func testAChainChangeResetsTheStagesItReplacesAndConfiguresTheNewOnesFresh() {
+        start(long)
+        run(for: 1)
+        let replacement = OutputRecordingProcessor()
+
+        transport.setProcessors([replacement])
+        pump()
+        run(for: 1)
+
+        XCTAssertEqual(post.events.last, .reset, "swapped out")
+        XCTAssertEqual(Array(replacement.events.prefix(2)), [.configure(mono), flush("a", 12)])
+    }
+
     func testAProcessorRunsOnceWhereItsPlacementFirstSaidEvenIfItLaterSaysOtherwise() {
         start(a, processors: [FlippingDoubler()])
         run(for: 4)
@@ -295,7 +308,7 @@ final class TransportPostStretchOrderTests: XCTestCase {
         XCTAssertEqual(output.flushes.count, 2, "the stall restarted the output")
         XCTAssertGreaterThan(enqueued.count, post.samples.count, "the replay was enqueued again")
         XCTAssertEqual(post.samples, (0..<post.samples.count).map(Float.init), "each frame processed once, in order")
-        XCTAssertEqual(post.events.filter { $0 == .reset }.count, 1)
+        XCTAssertEqual(post.events.filter { $0 == .reset }.count, 0, "a stall is no reset")
     }
 
     func testStopResetsIt() {

@@ -34,9 +34,10 @@ final class OutputProcessors {
     }
 
     /// A seek, stop or renderer recovery: nothing processed so far is continued.
+    /// The chain being replaced is reset, not the one replacing it, as `SequencedUpstream` restarts its pipeline.
     func restart() {
-        takePending()
         processors.forEach { $0.reset() }
+        takePending()
         format = nil
     }
 
