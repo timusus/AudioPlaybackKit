@@ -47,7 +47,11 @@ beyond, so the 0.25...4 range is covered.
   time at the output format, as media3 apps append a processor after Sonic: use it for what the listener
   must hear at a fixed length and level whatever the speed, such as a cue mixed in. It must be in place
   (no buffering, no format change), so spans, the map and gapless boundaries are untouched; it is
-  flushed at each item's first output frame and reset at every re-feed, seek and stop, and audio
+  flushed at each item's first output frame, in output frames from there (at a rate other than 1 they
+  do not advance `mediaStartFrame` one for one), and reset at every seek, stop, renderer recovery and
+  chain replacement. At a re-feed it is asked to step back over the output frames dropped
+  (`rewind(outputFrames:)`), so a cue cut mid-way resumes where it was cut; one that declines, or a
+  drop reaching back past its last flush, is reset and flushed at the re-fed frame as at a seek. Audio
   replayed after a stall is not processed again.
 
 ## Alternatives rejected

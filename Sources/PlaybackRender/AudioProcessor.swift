@@ -110,9 +110,12 @@ public enum AudioProcessorPlacement: Sendable {
     case beforeTimeStretch
     /// In output time at the output format, so what it mixes in keeps its length and level at any
     /// speed, as media3 apps append a processor after Sonic. In-place stages only. It is flushed with
-    /// the item and landed frame before each item's first output frame, after every seek or re-feed
-    /// (a speed or processor change), and reset at each seek and stop; audio replayed after a stall
-    /// or route change is not processed again.
+    /// the item and media frame before each item's first output frame; frames after a flush are output
+    /// frames, so at a rate other than 1 they do not advance `mediaStartFrame` one for one. It is reset
+    /// and flushed again at each seek, stop and renderer recovery, and when `setProcessors` replaces
+    /// it. A re-feed (a speed or processor change) asks it to `rewind`; if it declines, or the dropped
+    /// frames reach back past its last flush, it is reset and flushed at the re-fed frame. Audio
+    /// replayed after a stall or route change is not processed again.
     case afterTimeStretch
 }
 
