@@ -58,7 +58,7 @@ final class FeederTests: XCTestCase {
     }
 
     private var failures: [any Error] {
-        events.compactMap { if case let .failed(error) = $0 { error } else { nil } }
+        events.compactMap { if case let .failed(error, _) = $0 { error } else { nil } }
     }
 
     private func pos(_ item: Int, _ frame: Int64) -> MediaPositionMap.Position {

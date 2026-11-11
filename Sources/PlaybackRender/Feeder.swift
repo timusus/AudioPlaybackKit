@@ -25,9 +25,9 @@ enum FeederEvent {
     case heard(MediaPositionMap.Heard)
     case position(MediaPositionMap.Position)
     case status(FeederStatus)
-    /// The output refused a chunk. The feeder has paused and pulls nothing more until the next flush
-    /// or seek.
-    case failed(any Error)
+    /// The output or a post-stretch processor refused a chunk; `item` is the id of the chunk's item
+    /// when a processor did. The feeder has paused and pulls nothing more until the next flush or seek.
+    case failed(any Error, item: Int?)
     /// The output was rebuilt and the feeder restarted with `playWhenReady` false.
     case recovered
 }
@@ -495,9 +495,9 @@ final class Feeder {
         if status == .buffering { setStatus(.paused) }
     }
 
-    private func fail(_ error: any Error) {
+    private func fail(_ error: any Error, item: Int? = nil) {
         halt()
-        onEvent(.failed(error))
+        onEvent(.failed(error, item: item))
     }
 
     /// Pulls even after an end: an end is an underrun with no supply coming, so supply that comes
@@ -544,7 +544,8 @@ final class Feeder {
             do {
                 try outputProcessors.process(&chunks[index])
             } catch {
-                fail(error)
+                // Only configuring throws, and a chunk is of one format, so its first item is the one.
+                fail(error, item: chunks[index].spans.first?.tag.item)
                 return false
             }
             guard write(chunks[index]) else { return false }

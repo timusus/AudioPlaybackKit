@@ -500,9 +500,9 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
             report(position)
         case let .status(status):
             onEvent(.status(TransportStatus(status)))
-        case let .failed(error):
+        case let .failed(error, id):
             failed = true
-            onEvent(.failed(item: nil, error: error))
+            onEvent(.failed(item: id.flatMap { ids[$0] }, error: error))
         case .recovered:
             onEvent(.recovered)
         }

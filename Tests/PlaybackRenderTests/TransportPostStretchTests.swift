@@ -311,6 +311,14 @@ final class TransportPostStretchOrderTests: XCTestCase {
         XCTAssertEqual(post.events.filter { $0 == .reset }.count, 0, "a stall is no reset")
     }
 
+    func testAStageThatFailsToConfigureFailsTheItemItWasConfiguredFor() {
+        start(a, processors: [FormatChangingStage()])
+        run(for: 1)
+
+        let failed = recorder.events.compactMap { if case let .failed(item, _) = $0 { item } else { nil } }
+        XCTAssertEqual(failed, ["a"])
+    }
+
     func testStopResetsIt() {
         start(a)
         run(for: 1)
@@ -376,6 +384,20 @@ private final class FlippingDoubler: AudioProcessor, @unchecked Sendable {
         for index in samples.indices { samples[index] *= 2 }
     }
 
+    func flush(_ metadata: StreamMetadata) {}
+    func reset() {}
+}
+
+/// Asks to change the sample rate, which no stage after the stretch may.
+private final class FormatChangingStage: AudioProcessor, @unchecked Sendable {
+    var placement: AudioProcessorPlacement { .afterTimeStretch }
+
+    func configure(_ input: PCMFormat) throws -> PCMFormat {
+        PCMFormat(sampleRate: input.sampleRate * 2, channelCount: input.channelCount)
+    }
+
+    var isActive: Bool { true }
+    func process(_ samples: UnsafeMutableBufferPointer<Float>) {}
     func flush(_ metadata: StreamMetadata) {}
     func reset() {}
 }
