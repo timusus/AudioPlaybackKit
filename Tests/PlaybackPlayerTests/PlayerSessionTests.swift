@@ -110,6 +110,32 @@ final class PlayerSessionTests: XCTestCase {
         XCTAssertEqual(session.activations, 1, "no second activation for a play nobody wants")
     }
 
+    func testAnInterruptionDuringTheRetryWaitDropsTheRetry() {
+        session.activationError = SessionError()
+        player.setItems(["a", "b"])
+        player.play()
+        session.interruptionBegan()
+        session.activationError = nil
+        rig.run(for: 1)
+        XCTAssertNil(player.error)
+        XCTAssertFalse(player.isPlaying)
+        XCTAssertFalse(isHeard())
+        XCTAssertEqual(session.activations, 1, "the interruption's end activates, not the retry")
+    }
+
+    func testAStopDuringTheRetryWaitDropsTheRetry() {
+        session.activationError = SessionError()
+        player.setItems(["a", "b"])
+        player.play()
+        player.stop()
+        session.activationError = nil
+        rig.run(for: 1)
+        XCTAssertNil(player.error)
+        XCTAssertFalse(player.isPlaying)
+        XCTAssertFalse(isHeard())
+        XCTAssertEqual(session.activations, 1)
+    }
+
     func testTwoPlaysDuringTheRetryWaitActivateOnce() {
         session.activationError = SessionError()
         player.setItems(["a", "b"])
@@ -225,6 +251,8 @@ final class PlayerSessionTests: XCTestCase {
         player.play()
         XCTAssertEqual(player.suppression, .interruption)
         XCTAssertFalse(isHeard())
+        XCTAssertEqual(session.activations, 2, "the start and the refused play; an interruption's refusal is not retried")
+        XCTAssertNil(player.error)
 
         session.activationError = nil
         session.interruptionEnded(shouldResume: true)
