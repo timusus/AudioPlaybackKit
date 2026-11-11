@@ -104,6 +104,8 @@ public struct PlaybackError: Error, Sendable {
     public enum Kind: Sendable { case source, output, session }
     public var kind: Kind
     public var underlying: any Error
+    /// A `.session` failure that persisted through the player's one retry.
+    public var activationRetried = false
 }
 
 /// `.auto` when the previous item ended, `.seek` on `skipToNext`, `seek(to:itemAt:)` or an edit that
@@ -347,8 +349,10 @@ struct NowPlayingBar: View {
 Rules, taken from Shuttle2's `AudioSessionController` and media3's `AudioFocusManager`:
 
 - **Activation** is lazy: the first `play()` after init or `stop()` calls `setActive(true)` off the main
-  thread, before `Transport.play()`; a throw refuses the play (`error.kind == .session`, `playWhenReady`
-  stays true so the user's next tap retries). The category is set at init. `stop()`, the list
+  thread, before `Transport.play()`; a throw is retried once after 0.3 s, and a second throw refuses the play
+  (`error.kind == .session`, `activationRetried == true`, `playWhenReady` stays true so the user's next
+  tap tries again). A pause, stop or interruption during the wait drops the retry; a refusal during an
+  interruption is not retried, the interruption's end activates. The category is set at init. `stop()`, the list
   emptying, and an item failure call `setActive(false, options: .notifyOthersOnDeactivation)`: failed
   is idle, as media3 abandons focus on idle, so a `play()` whose item fails to load never activates and
   an item failure clears `suppression`.
@@ -425,8 +429,8 @@ Cases each slice must have:
   from `position`; a next item failing to open or mid-decode keeps the current playing (no
   `Transport.pause`) and is reported after its `itemTransition` when playback reaches it, never if it was
   removed first.
-- **Session**: the first `play()` activates once before `Transport.play()`; a throwing activation
-  refuses with a `.session` error and leaves `playWhenReady` true; interruption began suppresses and
+- **Session**: the first `play()` activates once before `Transport.play()`; an activation that
+  throws is retried once, and a second throw refuses with a `.session` error (`activationRetried`) and leaves `playWhenReady` true; interruption began suppresses and
   pauses the transport; ended with `shouldResume` reactivates and plays; without it sets `playWhenReady`
   false with reason; an app `pause()` during the interruption prevents the resume; a reactivation that
   throws stays suppressed; `oldDeviceUnavailable` for headphones pauses with reason `.routeLost`; a

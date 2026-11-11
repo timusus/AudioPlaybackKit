@@ -271,7 +271,8 @@ public final class Player<Item: Hashable & Sendable> {
 
     /// The app's intent. The app and the player's session rules change it; the transport never does.
     /// True with the session not yet active, the transport waits for the activation; if that throws,
-    /// `error` is `.session` and the next `play()` tries again.
+    /// it is retried once after 0.3 s, and a second throw sets `error` to `.session` with
+    /// `activationRetried`; the next `play()` tries again.
     public var playWhenReady: Bool {
         get { intent }
         set {
