@@ -48,6 +48,63 @@ final class TransportPostStretchBurstTests: XCTestCase {
         }
     }
 
+    /// What the output played, silence as zeros, with a burst 1 s in that is 0.3 s ahead of the clock
+    /// when `change` re-feeds what is written past `resumeDepth`.
+    private func heardBurst(across change: (Transport<String>) -> Void) -> [Float] {
+        let output = FakeAudioOutput()
+        let timer = ManualPumpTimer()
+        let executor = ManualExecutor()
+        let transport = Transport<String>(output: output, timer: timer, executor: executor) { _ in }
+        transport.setProcessors([SilenceProcessor(), BurstProcessor(Self.burst, after: 48000, placement: .afterTimeStretch)])
+        transport.setCurrent(item: "a", source: FakeItemSource(format: Self.format, frames: 240_000, chunkFrames: 4800))
+        transport.play()
+        func pump() {
+            timer.sync()
+            executor.runUntilIdle()
+            timer.fire()
+        }
+        pump()
+        for _ in 0..<7 {
+            output.advance(by: 0.1)
+            pump()
+        }
+        change(transport)
+        pump()
+        for _ in 0..<30 {
+            output.advance(by: 0.1)
+            pump()
+        }
+        XCTAssertEqual(output.partialFlushes.count, 1, "re-fed ahead, not restarted")
+        XCTAssertEqual(output.flushes, [0])
+        return output.played.flatMap { played -> [Float] in
+            switch played {
+            case let .audio(_, _, samples): samples
+            case let .silence(_, duration): Array(repeating: 0, count: Int((duration * 48000).rounded()))
+            }
+        }
+    }
+
+    private func assertWholeBurst(_ heard: [Float], file: StaticString = #filePath, line: UInt = #line) {
+        let loud = heard.indices.filter { abs(heard[$0]) > 0.005 }
+        guard let first = loud.first, let last = loud.last else { return XCTFail("no burst", file: file, line: line) }
+        XCTAssertEqual(Double(last - first + 1) / 48000, 0.7, accuracy: 0.01, "heard length", file: file, line: line)
+        // Each burst sample once, in order: nothing cut out at the re-feed and nothing played twice.
+        // The burst's first sample is sin 0, under the threshold.
+        let start = first - 1
+        let played = Array(heard[start..<min(start + Self.burst.count, heard.count)])
+        XCTAssertEqual(played.count, Self.burst.count, file: file, line: line)
+        let error = zip(played, Self.burst).map { abs($0 - $1) }.max() ?? .infinity
+        XCTAssertLessThan(error, 1e-6, "heard burst against the original", file: file, line: line)
+    }
+
+    func testASpeedChangeMidBurstResumesItWhereTheReFeedCut() {
+        assertWholeBurst(heardBurst { $0.setRate(1.5) })
+    }
+
+    func testAProcessorChangeMidBurstResumesItWhereTheReFeedCut() {
+        assertWholeBurst(heardBurst { $0.processorsChanged() })
+    }
+
     func testBeforeTheStretchABurstIsSpedUpWithTheProgramme() {
         XCTAssertEqual(renderBurst(at: 1, placement: .beforeTimeStretch).seconds, 0.7, accuracy: 0.005)
         for rate in [1.5, 2] {
@@ -177,6 +234,40 @@ final class TransportPostStretchOrderTests: XCTestCase {
         XCTAssertEqual(Array(resumed.prefix(3)), [0, 2, 4].map { Float(metadata.mediaStartFrame + $0) }, "at 2x")
     }
 
+    func testASpeedChangeStepsAStageThatRewindsBackToTheCutWithoutAResetOrFlush() {
+        post.rewinds = true
+        start(long)
+        run(for: 1)
+        let before = post.events.count, processed = post.frames(in: post.events)
+
+        transport.setRate(2)
+        pump()
+        run(for: 1)
+
+        let after = Array(post.events.dropFirst(before))
+        guard case let .rewind(frames) = after.first else { return XCTFail("no rewind: \(after)") }
+        // The re-feed keeps what is written up to `resumeDepth`, 0.5 s, past the 1 s clock: frame 12.
+        XCTAssertEqual(processed - frames, 12)
+        XCTAssertFalse(after.contains { if case .flush = $0 { true } else { $0 == .reset } })
+        XCTAssertEqual(Array(post.samples.suffix(post.frames(in: after)).prefix(3)), [12, 14, 16], "at 2x")
+    }
+
+    func testAReFeedWhoseDropCrossesIntoTheNextItemResetsEvenAStageThatRewinds() {
+        post.rewinds = true
+        start(a)
+        transport.setNext(item: "b", source: FakeItemSource(format: mono, frames: 16, chunkFrames: 2, base: 1000))
+        run(for: 2)
+        let before = post.events.count
+        XCTAssertNotNil(post.events.firstIndex(of: flush("b", 0)), "written into b")
+
+        transport.setRate(2)
+        pump()
+        run(for: 1)
+
+        let after = Array(post.events.dropFirst(before))
+        XCTAssertEqual(Array(after.prefix(3)), [.reset, .configure(mono), flush("a", 20)])
+    }
+
     func testTheEndOfTheStreamIsProcessedBeforeEnded() {
         transport.setRate(1.5)
         start(a)
@@ -242,6 +333,11 @@ private final class BurstProcessor: AudioProcessor, @unchecked Sendable {
 
     func flush(_ metadata: StreamMetadata) {}
     func reset() {}
+
+    func rewind(outputFrames frames: Int) -> Bool {
+        frame -= frames
+        return true
+    }
 }
 
 /// Zeroes the programme, so only the burst is left to measure.
@@ -259,11 +355,14 @@ private final class OutputRecordingProcessor: AudioProcessor, @unchecked Sendabl
         case flush(StreamMetadata)
         case input([Float], frames: Int)
         case reset
+        case rewind(Int)
     }
 
     private(set) var events: [Event] = []
     private var staged = 1
     private var channels = 1
+    /// Whether it steps back at a re-feed, or takes the default reset.
+    var rewinds = false
 
     var placement: AudioProcessorPlacement { .afterTimeStretch }
 
@@ -286,6 +385,12 @@ private final class OutputRecordingProcessor: AudioProcessor, @unchecked Sendabl
 
     func reset() {
         events.append(.reset)
+    }
+
+    func rewind(outputFrames frames: Int) -> Bool {
+        guard rewinds else { return false }
+        events.append(.rewind(frames))
+        return true
     }
 
     var samples: [Float] {

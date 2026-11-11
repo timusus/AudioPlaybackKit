@@ -92,6 +92,8 @@ final class Feeder {
         var written: [Written]
         var upstreamEnded: Bool
         var resume: MediaPositionMap.Position
+        /// Output frames of written audio past the cut.
+        var cutFrames: Int
         var held = false
     }
 
@@ -206,11 +208,14 @@ final class Feeder {
         guard let boundary = written.first(where: { $0.end >= target })?.end,
               map.writtenEnd - boundary >= resumeDepth,
               let cut = map.truncate(from: boundary) else { return appendAtWrittenEnd() }
-        written.removeAll { $0.end > cut.time || $0.start >= cut.time }
+        let isCut = { (chunk: Written) in chunk.end > cut.time || chunk.start >= cut.time }
+        let cutFrames = written.reduce(0) { isCut($1) ? $0 + Int($1.chunk.frameCount) : $0 }
+        written.removeAll(where: isCut)
         lastPartialFlush += 1
         let token = lastPartialFlush
         pendingPartialFlush = PendingFlush(
-            token: token, before: before, written: writtenBefore, upstreamEnded: upstreamEnded, resume: cut.resume
+            token: token, before: before, written: writtenBefore, upstreamEnded: upstreamEnded, resume: cut.resume,
+            cutFrames: cutFrames
         )
         let inbox = inbox, wake = wake
         note("partialFlush begin cut=\(fixed(cut.time)) sourceResume=\(fixed(cut.resume.seconds))")
@@ -227,8 +232,7 @@ final class Feeder {
     private func appendAtWrittenEnd() {
         note("processor change appended at writtenEnd")
         guard let span = replaying.first?.spans.first else { return }
-        replaying = []
-        resetStretch()
+        refeedStretch(discarding: 0)
         upstream.resupply(from: SeekTarget(MediaPositionMap.Position(
             item: span.tag.item, mediaFrame: span.tag.mediaStartFrame, sampleRate: span.format.sampleRate
         )))
@@ -274,9 +278,8 @@ final class Feeder {
             pendingPartialFlush = nil
             if result.succeeded {
                 // Resupplied only now: a failed flush leaves the source and the stretch where they were.
-                resetStretch()
+                refeedStretch(discarding: flush.cutFrames)
                 upstream.resupply(from: SeekTarget(flush.resume))
-                replaying = []
                 upstreamEnded = false
                 refeedTrace = ("partialFlush", result.completedAt, false)
             } else if flush.held {
@@ -553,6 +556,15 @@ final class Feeder {
     private func resetStretch() {
         stretch.reset()
         outputProcessors.restart()
+    }
+
+    /// Upstream supplies again from the end of what stays written. The output stages processed
+    /// `cutFrames` of dropped written audio past it, then the replay not yet written; they step back over both.
+    private func refeedStretch(discarding cutFrames: Int) {
+        let unwritten = replaying.reduce(0) { $0 + Int($1.frameCount) }
+        replaying = []
+        stretch.reset()
+        outputProcessors.rewind(outputFrames: cutFrames + unwritten)
     }
 
     /// False when the output refused it: the feeder restarted or failed, so what follows it is stale.

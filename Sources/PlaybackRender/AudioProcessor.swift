@@ -96,6 +96,12 @@ public protocol AudioProcessor: AnyObject, Sendable {
     func reset()
     /// Where the stage runs; `beforeTimeStretch` unless the processor says otherwise.
     var placement: AudioProcessorPlacement { get }
+    /// Called on `afterTimeStretch` stages only, at a re-feed (a speed or processor change): the last
+    /// `frames` output frames it processed since its last flush were dropped unheard, and the frames
+    /// that follow continue the same item from the first of them, stretched afresh. Return true once
+    /// the stage has stepped its state back by `frames`, so a cue it was mixing resumes where it was
+    /// cut. False, the default, resets the stage and flushes it at the re-fed frame, as at a seek.
+    func rewind(outputFrames frames: Int) -> Bool
 }
 
 /// Where an ``AudioProcessor`` sits relative to the time-stretch that applies speed (ADR-0030).
@@ -112,6 +118,7 @@ public enum AudioProcessorPlacement: Sendable {
 
 extension AudioProcessor {
     public var placement: AudioProcessorPlacement { .beforeTimeStretch }
+    public func rewind(outputFrames frames: Int) -> Bool { false }
 }
 
 /// A stage whose output is not its input frame for frame (skip-silence, a lookahead limiter, a

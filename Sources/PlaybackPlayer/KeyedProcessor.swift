@@ -55,6 +55,7 @@ class KeyedProcessor<Item: Hashable & Sendable>: AudioProcessor, @unchecked Send
     }
 
     func reset() { base.reset() }
+    func rewind(outputFrames frames: Int) -> Bool { base.rewind(outputFrames: frames) }
 }
 
 final class KeyedBufferingProcessor<Item: Hashable & Sendable>: KeyedProcessor<Item>, BufferingAudioProcessor,
