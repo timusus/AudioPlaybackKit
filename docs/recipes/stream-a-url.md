@@ -33,6 +33,7 @@ XCTAssertGreaterThan(server.requestedRanges.count, 1, "the drop was not resumed 
 Handed to a `Player` inside an `FFmpegItemSource`, the transport cancels the source for you.
 
 Do not recreate the source or re-seek on a network change; it watches the path itself. To go offline-first,
-ask `store.completedFile(for: url)` and play a finished download with `FileByteReader`. The rest
+ask `store.completedFile(for: url)` and play a finished download with `FileByteReader`. A lookup does not pin the file (`peekCompletedFile(for:)`
+included): eviction can remove it before you open it, so fall back to streaming the URL when it is gone. The rest
 (redirects, auth origin, cellular read-ahead, self-signed servers) is in
 [Usage](../usage.md#play-a-url-while-it-downloads).

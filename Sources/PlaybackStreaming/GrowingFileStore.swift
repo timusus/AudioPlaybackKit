@@ -158,7 +158,9 @@ public final class GrowingFileStore {
     }
 
     /// The cached complete file for `url` without touching it: one stat, cheap enough for the main
-    /// thread. Pair with ``markPlayed(for:)`` off main to record the play.
+    /// thread. Pair with ``markPlayed(for:)`` off main to record the play. A peek does not pin the
+    /// file: eviction can delete it before you open it, so handle a missing file (for example by
+    /// streaming the URL).
     public func peekCompletedFile(for url: URL) -> URL? {
         let complete = completedURL(for: url)
         return FileManager.default.fileExists(atPath: complete.path) ? complete : nil

@@ -119,7 +119,9 @@ while let chunk = decoder.nextChunk() { /* schedule it */ }
   bad-URL errors fail unretried too.
 - **Cache.** A download whose transactions together cover `[0, total)` is kept in a `GrowingFileStore` (default
   `.shared`, 1 GiB, least recently played out). Before streaming, ask
-  `store.completedFile(for: url)` and play that with `FileByteReader`. If the URL carries a
+  `store.completedFile(for: url)` and play that with `FileByteReader`. `peekCompletedFile(for:)` is the same lookup without touching the file, cheap
+  enough for the main thread; it does not pin the file, so eviction can remove it before you open
+  it. Handle a missing file by falling back to streaming the URL. If the URL carries a
   per-session token, pass `cacheKey:` (the URL without it) to the source and to `completedFile(for:)`. Call `sweepPartials()` at launch,
   and give each owner (podcasts, music) its own store so one cannot evict the other's files.
 - **Cellular data.** By default a source downloads the whole file on any network. Pass
