@@ -342,6 +342,38 @@ final class PlayerCoreTests: XCTestCase {
         ])
     }
 
+    // #196: through the player's keyed wrapper, a cue placed after the stretch keeps its length at speed.
+    func testAProcessorPlacedAfterTheStretchRunsOnStretchedFramesAndIsFlushedWithTheAppsItem() {
+        rig.factory.formats["a"] = PCMFormat(sampleRate: 48000, channelCount: 1)
+        rig.factory.lengths["a"] = 48000 * 30
+        rig.factory.chunkFrames = 4800
+        let cue = Cue()
+        player.setProcessors([Silence(), cue])
+        player.rate = 1.5
+        player.setItems(["a"])
+        player.play()
+        // Decode takes a few pumps before the clock starts.
+        for _ in 0..<20 where rig.output.currentTime() < 1 {
+            rig.run(for: 0.25)
+        }
+        XCTAssertEqual(rig.output.currentTime(), 1)
+        // The cue, 1.25 s in, is now 0.25 s ahead: the re-feed at `resumeDepth` cuts it, and it steps back.
+        player.rate = 2
+        rig.run(for: 3)
+
+        XCTAssertEqual(rig.output.partialFlushes.count, 1)
+        let heard = rig.output.played.flatMap { played -> [Float] in
+            switch played {
+            case let .audio(_, _, samples): samples
+            case let .silence(_, duration): Array(repeating: 0, count: Int((duration * 48000).rounded()))
+            }
+        }
+        let loud = heard.indices.filter { heard[$0] != 0 }
+        XCTAssertEqual(loud.count, 33600, "the whole cue, once, at its own length")
+        XCTAssertEqual((loud.last ?? 0) - (loud.first ?? 0) + 1, 33600, "without a gap")
+        XCTAssertEqual(cue.flushes, [StreamMetadata(item: "a", mediaStartFrame: 0)])
+    }
+
     func testIsPlayingOnlyWhenReadyIntendedAndNotSuppressed() {
         for state in [PlaybackState.idle, .buffering, .ready, .ended] {
             for intent in [false, true] {
@@ -412,6 +444,43 @@ private final class Negate: AudioProcessor, @unchecked Sendable {
     }
 
     func reset() {}
+}
+
+/// Zeroes the programme, so only the cue is left to measure.
+private final class Silence: AudioProcessor, @unchecked Sendable {
+    func configure(_ input: PCMFormat) throws -> PCMFormat { input }
+    var isActive: Bool { true }
+    func process(_ samples: UnsafeMutableBufferPointer<Float>) { samples.update(repeating: 0) }
+    func flush(_ metadata: StreamMetadata) {}
+    func reset() {}
+}
+
+/// Writes 0.7 s of ones 1.25 s of output after its flush.
+private final class Cue: AudioProcessor, @unchecked Sendable {
+    private(set) var flushes: [StreamMetadata] = []
+    private var frame = -60000
+
+    var placement: AudioProcessorPlacement { .afterTimeStretch }
+    func configure(_ input: PCMFormat) throws -> PCMFormat { input }
+    var isActive: Bool { true }
+
+    func process(_ samples: UnsafeMutableBufferPointer<Float>) {
+        for index in samples.indices {
+            if frame >= 0, frame < 33600 { samples[index] = 1 }
+            frame += 1
+        }
+    }
+
+    func flush(_ metadata: StreamMetadata) {
+        flushes.append(metadata)
+    }
+
+    func reset() {}
+
+    func rewind(outputFrames frames: Int) -> Bool {
+        frame -= frames
+        return true
+    }
 }
 
 /// Negates through the queue, so a buffering stage keeps its shape behind the player's wrapper.
