@@ -41,6 +41,14 @@ beyond, so the 0.25...4 range is covered.
   reset, so no held frame leaks across a join or a restart.
 - **The seam.** `StretchUnit` is the protocol over the unit. A whole-sample fake keeps the tests whose
   sample values name their frame; `TimeStretchTests` runs the real unit for quality.
+- **Placement.** A processor runs before the stretch by default (`AudioProcessorPlacement.beforeTimeStretch`),
+  in media time, so it is sped up with the programme: use it for anything that shapes the content, such
+  as skip-silence or Voice Boost. One marked `.afterTimeStretch` runs on the stretch's output, in output
+  time at the output format, as media3 apps append a processor after Sonic: use it for what the listener
+  must hear at a fixed length and level whatever the speed, such as a cue mixed in. It must be in place
+  (no buffering, no format change), so spans, the map and gapless boundaries are untouched; it is
+  flushed at each item's first output frame and reset at every re-feed, seek and stop, and audio
+  replayed after a stall is not processed again.
 
 ## Alternatives rejected
 
