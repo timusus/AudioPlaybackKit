@@ -77,6 +77,7 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     private let onEvent: @Sendable (TransportEvent<Item>) -> Void
     private var upstream: SequencedUpstream!
     private var feeder: Feeder!
+    private var outputProcessors: OutputProcessors!
     /// `setCurrent` and `seek` calls made, counted on the caller's thread; the queue counts those it has
     /// taken in `takenDiscontinuities`, and a position computed while they differ predates a call.
     private let discontinuityLock = NSLock()
@@ -209,13 +210,16 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
         sequencer = Sequencer(executor: executor) { timer.wake() }
         // Weak: deinit's teardown runs after the transport is gone, and its events go nowhere.
         // `ids` holds every item the sequencer can still decode, so the id fallback is never handed out.
-        upstream = SequencedUpstream(sequencer: sequencer, item: { [weak self] id in
+        let item: (Int) -> any Hashable & Sendable = { [weak self] id in
             if let item = self?.ids[id] { return item }
             return id
-        }) { [weak self] item, error in
+        }
+        upstream = SequencedUpstream(sequencer: sequencer, item: item) { [weak self] item, error in
             self?.fail(item: item, error)
         }
-        feeder = Feeder(output: output, upstream: upstream, wake: { timer.wake() }, stretch: stretch) { [weak self] in self?.handle($0) }
+        outputProcessors = OutputProcessors(item: item)
+        feeder = Feeder(output: output, upstream: upstream, wake: { timer.wake() }, stretch: stretch,
+                        outputProcessors: outputProcessors) { [weak self] in self?.handle($0) }
         timer.start(queue: queue) { [weak self] in self?.pump() }
     }
 
@@ -332,9 +336,15 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// rebuffers briefly. After `.ended` the chain is installed for the next audio but nothing is
     /// re-fed, and after a failure it replays from the heard frame. Each processor's `flush` gets the `Item` whose
     /// frames follow. Call it again after a change that alters a processor's `isActive` or output format.
+    /// Each processor runs where its `placement` says, in list order within each placement.
     public func setProcessors(_ processors: [any AudioProcessor]) {
+        let afterStretch = processors.filter { $0.placement == .afterTimeStretch }
+        // A stage that moved frames there would desynchronise the spans already stretched.
+        precondition(!afterStretch.contains { $0 is any BufferingAudioProcessor },
+                     "a processor after the time-stretch must be in place, not a BufferingAudioProcessor")
         run { [self] in
-            upstream.setProcessors(processors)
+            upstream.setProcessors(processors.filter { $0.placement == .beforeTimeStretch })
+            outputProcessors.set(afterStretch)
             refeedFromHeard()
         }
     }

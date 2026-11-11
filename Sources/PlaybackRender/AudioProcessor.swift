@@ -94,6 +94,24 @@ public protocol AudioProcessor: AnyObject, Sendable {
     func flush(_ metadata: StreamMetadata)
     /// Flushes and forgets the staged configuration.
     func reset()
+    /// Where the stage runs; `beforeTimeStretch` unless the processor says otherwise.
+    var placement: AudioProcessorPlacement { get }
+}
+
+/// Where an ``AudioProcessor`` sits relative to the time-stretch that applies speed (ADR-0030).
+public enum AudioProcessorPlacement: Sendable {
+    /// In media time at the decoded rate: its audio is sped up with the programme.
+    case beforeTimeStretch
+    /// In output time at the output format, so what it mixes in keeps its length and level at any
+    /// speed, as media3 apps append a processor after Sonic. In-place stages only. It is flushed with
+    /// the item and landed frame before each item's first output frame, after every seek or re-feed
+    /// (a speed or processor change), and reset at each seek and stop; audio replayed after a stall
+    /// or route change is not processed again.
+    case afterTimeStretch
+}
+
+extension AudioProcessor {
+    public var placement: AudioProcessorPlacement { .beforeTimeStretch }
 }
 
 /// A stage whose output is not its input frame for frame (skip-silence, a lookahead limiter, a

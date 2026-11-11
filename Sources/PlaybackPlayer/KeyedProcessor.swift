@@ -45,6 +45,7 @@ class KeyedProcessor<Item: Hashable & Sendable>: AudioProcessor, @unchecked Send
 
     func configure(_ input: PCMFormat) throws -> PCMFormat { try base.configure(input) }
     var isActive: Bool { base.isActive }
+    var placement: AudioProcessorPlacement { base.placement }
     func process(_ samples: UnsafeMutableBufferPointer<Float>) { base.process(samples) }
 
     func flush(_ metadata: StreamMetadata) {

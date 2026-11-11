@@ -65,6 +65,7 @@ final class Feeder {
     private var map = MediaPositionMap()
     private var rate: Double = 1
     private var stretch: TimeStretch
+    private let outputProcessors: OutputProcessors
     private var playWhenReady = false
     private var outputRunning = false
     /// The clock the last pump's underrun/end check judged at, or the clock after a restart that left it behind.
@@ -116,10 +117,12 @@ final class Feeder {
         resumeDepth: TimeInterval = 0.5,
         wake: @escaping @Sendable () -> Void = {},
         stretch: TimeStretch = TimeStretch(),
+        outputProcessors: OutputProcessors = OutputProcessors(),
         onEvent: @escaping (FeederEvent) -> Void
     ) {
         precondition(resumeDepth > 0 && resumeDepth <= rebufferDepth)
         self.stretch = stretch
+        self.outputProcessors = outputProcessors
         self.output = output
         self.upstream = upstream
         self.rebufferDepth = rebufferDepth
@@ -225,7 +228,7 @@ final class Feeder {
         note("processor change appended at writtenEnd")
         guard let span = replaying.first?.spans.first else { return }
         replaying = []
-        stretch.reset()
+        resetStretch()
         upstream.resupply(from: SeekTarget(MediaPositionMap.Position(
             item: span.tag.item, mediaFrame: span.tag.mediaStartFrame, sampleRate: span.format.sampleRate
         )))
@@ -271,7 +274,7 @@ final class Feeder {
             pendingPartialFlush = nil
             if result.succeeded {
                 // Resupplied only now: a failed flush leaves the source and the stretch where they were.
-                stretch.reset()
+                resetStretch()
                 upstream.resupply(from: SeekTarget(flush.resume))
                 replaying = []
                 upstreamEnded = false
@@ -432,7 +435,7 @@ final class Feeder {
         pendingPartialFlush = nil
         restartTarget = position
         if chunks == nil {
-            stretch.reset()
+            resetStretch()
             // With no position nothing was consumed, so upstream's next chunk is still the right one.
             if let position { upstream.resupply(from: position) }
         }
@@ -509,7 +512,7 @@ final class Feeder {
             }
             let supply = upstream.pull()
             if case .ended = supply {
-                guard stretch.finish().allSatisfy(write) else { continue }
+                guard writeStretched(stretch.finish()) else { continue }
                 upstreamEnded = true
                 return
             }
@@ -523,12 +526,33 @@ final class Feeder {
                     setStatus(.buffering)
                 }
             }
-            guard case let .chunk(chunk) = supply else { return }
+            // Consumed, so a chunk the stretch passes through is the only owner of its samples.
+            guard case let .chunk(chunk) = consume supply else { return }
             if rate != stretch.rate { note("stretch rate applied old=\(stretch.rate) new=\(rate)") }
-            for stretched in stretch.process(chunk, rate: rate) {
-                guard write(stretched) else { break }
-            }
+            _ = writeStretched(stretch.process(consume chunk, rate: rate))
         }
+    }
+
+    /// Runs the post-stretch processors over each chunk and writes it; false as `write`, or when a
+    /// processor failed and the feeder halted. Never for a replay, which was processed when first written.
+    private func writeStretched(_ chunks: consuming [TimeStretch.Chunk]) -> Bool {
+        var chunks = chunks
+        for index in chunks.indices {
+            do {
+                try outputProcessors.process(&chunks[index])
+            } catch {
+                fail(error)
+                return false
+            }
+            guard write(chunks[index]) else { return false }
+        }
+        return true
+    }
+
+    /// Upstream supplies again from a restart point, so what the stretch and the output stages hold is dropped.
+    private func resetStretch() {
+        stretch.reset()
+        outputProcessors.restart()
     }
 
     /// False when the output refused it: the feeder restarted or failed, so what follows it is stale.
