@@ -342,13 +342,15 @@ final class PlayerCoreTests: XCTestCase {
         ])
     }
 
-    // #196: through the player's keyed wrapper, a cue placed after the stretch keeps its length at speed.
-    func testAProcessorPlacedAfterTheStretchRunsOnStretchedFramesAndIsFlushedWithTheAppsItem() {
+    /// Plays a cue placed after the stretch at 1.5x, makes `change` 1 s in, while the cue, 1.25 s in, is
+    /// 0.25 s ahead, so the re-feed at `resumeDepth` cuts it, and asserts it was heard whole, once.
+    private func assertWholeCue(across change: (_ silence: any AudioProcessor, _ cue: any AudioProcessor) -> Void,
+                                file: StaticString = #filePath, line: UInt = #line) {
         rig.factory.formats["a"] = PCMFormat(sampleRate: 48000, channelCount: 1)
         rig.factory.lengths["a"] = 48000 * 30
         rig.factory.chunkFrames = 4800
-        let cue = Cue()
-        player.setProcessors([Silence(), cue])
+        let silence = Silence(), cue = Cue()
+        player.setProcessors([silence, cue])
         player.rate = 1.5
         player.setItems(["a"])
         player.play()
@@ -356,12 +358,11 @@ final class PlayerCoreTests: XCTestCase {
         for _ in 0..<20 where rig.output.currentTime() < 1 {
             rig.run(for: 0.25)
         }
-        XCTAssertEqual(rig.output.currentTime(), 1)
-        // The cue, 1.25 s in, is now 0.25 s ahead: the re-feed at `resumeDepth` cuts it, and it steps back.
-        player.rate = 2
+        XCTAssertEqual(rig.output.currentTime(), 1, file: file, line: line)
+        change(silence, cue)
         rig.run(for: 3)
 
-        XCTAssertEqual(rig.output.partialFlushes.count, 1)
+        XCTAssertEqual(rig.output.partialFlushes.count, 1, file: file, line: line)
         let heard = rig.output.played.flatMap { played -> [Float] in
             switch played {
             case let .audio(_, _, samples): samples
@@ -369,9 +370,18 @@ final class PlayerCoreTests: XCTestCase {
             }
         }
         let loud = heard.indices.filter { heard[$0] != 0 }
-        XCTAssertEqual(loud.count, 33600, "the whole cue, once, at its own length")
-        XCTAssertEqual((loud.last ?? 0) - (loud.first ?? 0) + 1, 33600, "without a gap")
-        XCTAssertEqual(cue.flushes, [StreamMetadata(item: "a", mediaStartFrame: 0)])
+        XCTAssertEqual(loud.count, 33600, "the whole cue, once, at its own length", file: file, line: line)
+        XCTAssertEqual((loud.last ?? 0) - (loud.first ?? 0) + 1, 33600, "without a gap", file: file, line: line)
+        XCTAssertEqual(cue.flushes, [StreamMetadata(item: "a", mediaStartFrame: 0)], file: file, line: line)
+    }
+
+    // #196: through the player's keyed wrapper, a cue placed after the stretch keeps its length at speed.
+    func testAProcessorPlacedAfterTheStretchRunsOnStretchedFramesAndIsFlushedWithTheAppsItem() {
+        assertWholeCue { _, _ in player.rate = 2 }
+    }
+
+    func testSettingTheSameCueAgainWithAChangedPreStretchChainKeepsItPlaying() {
+        assertWholeCue { silence, cue in player.setProcessors([silence, Negate(), cue]) }
     }
 
     func testIsPlayingOnlyWhenReadyIntendedAndNotSuppressed() {

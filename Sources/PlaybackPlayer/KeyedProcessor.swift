@@ -30,12 +30,18 @@ extension KeyedItems {
         guard let buffering = base as? any BufferingAudioProcessor else { return KeyedProcessor(base, items: self) }
         return KeyedBufferingProcessor(buffering, items: self)
     }
+
+    /// Wraps each processor, reusing its wrapper from `previous`: the transport keeps a post-stretch
+    /// stage it is handed again, and only knows it by the wrapper.
+    func keyed(_ processors: [any AudioProcessor], reusing previous: [any AudioProcessor]) -> [any AudioProcessor] {
+        processors.map { base in previous.first { ($0 as? KeyedProcessor<Item>)?.base === base } ?? keyed(base) }
+    }
 }
 
 /// Hands a processor the app's item at flush instead of the player's private transport key.
 // Unchecked only because it is not final; every stored property is a Sendable let.
 class KeyedProcessor<Item: Hashable & Sendable>: AudioProcessor, @unchecked Sendable {
-    private let base: any AudioProcessor
+    let base: any AudioProcessor
     private let items: KeyedItems<Item>
 
     init(_ base: any AudioProcessor, items: KeyedItems<Item>) {

@@ -97,6 +97,7 @@ public final class Player<Item: Hashable & Sendable> {
     @ObservationIgnored private var keyedEntries: [Int: Int] = [:]
     @ObservationIgnored private var lastKey = 0
     @ObservationIgnored let keyedItems = KeyedItems<Item>()
+    @ObservationIgnored private var keyedProcessors: [any AudioProcessor] = []
     /// The current entry's key while the transport holds it; nil when stopped, or ended by an edit.
     @ObservationIgnored private var loadedKey: Int?
     @ObservationIgnored private var armedKey: Int?
@@ -420,7 +421,8 @@ public final class Player<Item: Hashable & Sendable> {
     /// Each processor's `flush` gets the `Item` whose frames follow. Re-feeds from the heard frame,
     /// so the change is heard at once, after a brief rebuffer.
     public func setProcessors(_ processors: [any AudioProcessor]) {
-        transport.setProcessors(processors.map(keyedItems.keyed))
+        keyedProcessors = keyedItems.keyed(processors, reusing: keyedProcessors)
+        transport.setProcessors(keyedProcessors)
     }
 
     /// Call after changing a processor's own parameters (a gain, EQ bands) so they are heard at once,
