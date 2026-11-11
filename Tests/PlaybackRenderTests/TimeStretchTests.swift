@@ -131,7 +131,7 @@ final class TimeStretchTests: XCTestCase {
     /// AUNewTimePitch's lag scales with the sample rate, so the cut at the start and the render at the
     /// end must too: the burst lands at its media time and the tone starts at frame 0 and runs to the end.
     func testTheOutputLinesUpWithTheMediaAtEverySampleRate() {
-        for sampleRate in [8000, 16000, 22050, 32000, 44100, 48000, 96000] {
+        for sampleRate in [8000, 11025, 16000, 22050, 24000, 32000, 44100, 48000, 88200, 96000, 176_400, 192_000] {
             let perMillisecond = Double(sampleRate) / 1000
             let centre = sampleRate
             let half = Int(0.005 * Double(sampleRate))

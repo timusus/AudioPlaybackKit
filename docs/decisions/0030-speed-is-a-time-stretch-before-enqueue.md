@@ -30,8 +30,9 @@ beyond, so the 0.25...4 range is covered.
   1x. The playhead still adds `outputLatency`.
 - **The pull.** Each render pulls exactly `rate x frames` of input, so input consumption is exact and the
   map needs no estimate.
-- **Delay compensation.** The unit's output lags its input by 2048 input frames plus 2048 output frames
-  (2048 + 2048/rate output frames in all). `TimeStretch` cuts that lead from the start of the item and
+- **Delay compensation.** The unit's output lags its input by one window of input frames plus one of output
+  frames (window + window/rate output frames in all). The window is 32 ms rounded up to a power of two,
+  at most 4096 frames: 2048 at 44.1 and 48 kHz, 1024 at 22.05 kHz. `TimeStretch` cuts that lead from the start of the item and
   renders it out at the end, so the first sample out is the first of the source and the last frame of the
   item is heard.
 - **Fresh units.** A re-feed builds a fresh unit, which fades in over 5-20 ms. That is the price of a
@@ -65,7 +66,7 @@ beyond, so the 0.25...4 range is covered.
 - A speed change is heard about `resumeDepth` plus a chunk late, as an effect change is.
 - The unit runs on the transport's queue up to 30 s ahead of the speaker, never on the render thread;
   nothing is added at 1x.
-- The unit's lead (2048 + 2048/rate output frames) delays the first stretched output, so a restart at a
+- The unit's lead (window + window/rate output frames) delays the first stretched output, so a restart at a
   rate other than 1 takes a little longer to reach `resumeDepth`.
 - `Transport.init(timePitchAlgorithm:onEvent:)` and `Player`'s `timePitchAlgorithm:` are gone (0.17.0):
   the renderer no longer changes speed.

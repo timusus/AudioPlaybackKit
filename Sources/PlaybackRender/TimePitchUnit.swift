@@ -5,12 +5,13 @@ import AudioToolbox
 import AVFoundation
 
 /// Apple's AUNewTimePitch, the unit behind `AVAudioUnitTimePitch`, rendered on the caller's thread.
-/// The exact pull and the lag were measured at 0.5-4x, any block size and 8-96 kHz, while the unit
+/// The exact pull and the lag were measured at 0.5-4x, any block size and 8-192 kHz, while the unit
 /// reports a latency of 0.
 final class TimePitchUnit: StretchUnit {
     // Measured by bursts and tones through TimeStretch: 256 frames at 8 kHz, 512 at 16, 1024 at 22.05
-    // and 32, 2048 at 44.1 and 48, 4096 at 96, i.e. 32 ms rounded up to a power of two.
+    // and 32, 2048 at 44.1 and 48, 4096 from 88.2 up, i.e. 32 ms rounded up to a power of two, capped.
     let window: Int
+    private static let largestWindow = 4096
 
     private let channels: Int
     var rate: Double = 1 {
@@ -28,7 +29,7 @@ final class TimePitchUnit: StretchUnit {
     init(format: PCMFormat) {
         channels = format.channelCount
         let frames = Int((format.sampleRate * 32 / 1000).rounded(.up))
-        window = 1 << (Int.bitWidth - (frames - 1).leadingZeroBitCount)
+        window = min(1 << (Int.bitWidth - (frames - 1).leadingZeroBitCount), Self.largestWindow)
         var description = AudioComponentDescription(
             componentType: kAudioUnitType_FormatConverter, componentSubType: kAudioUnitSubType_NewTimePitch,
             componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0
