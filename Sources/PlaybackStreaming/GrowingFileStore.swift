@@ -152,10 +152,23 @@ public final class GrowingFileStore {
     /// The cached complete file for `url`, touched as just played; nil when there is none. A
     /// later play reads it as a local file (`FileByteReader`), as a download is.
     public func completedFile(for url: URL) -> URL? {
-        let complete = completedURL(for: url)
-        guard FileManager.default.fileExists(atPath: complete.path) else { return nil }
+        guard let complete = peekCompletedFile(for: url) else { return nil }
         touch(complete)
         return complete
+    }
+
+    /// The cached complete file for `url` without touching it: one stat, cheap enough for the main
+    /// thread. Pair with ``markPlayed(for:)`` off main to record the play.
+    public func peekCompletedFile(for url: URL) -> URL? {
+        let complete = completedURL(for: url)
+        return FileManager.default.fileExists(atPath: complete.path) ? complete : nil
+    }
+
+    /// Records a play of `url`'s complete file as most recent, as ``completedFile(for:)`` does. Does
+    /// file I/O, so call it off the main thread; safe from any thread. A file evicted meanwhile
+    /// stays gone: setting the date on a missing file fails and is ignored.
+    public func markPlayed(for url: URL) {
+        touch(completedURL(for: url))
     }
 
     /// Deletes the least recently played complete files until the rest fit `limit` (the store's ``budget`` when nil), never the

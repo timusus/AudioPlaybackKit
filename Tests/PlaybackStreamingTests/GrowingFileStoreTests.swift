@@ -46,6 +46,31 @@ final class GrowingFileStoreTests: XCTestCase {
         XCTAssertNil(store.completedFile(for: URL(string: "https://example.com/other.mp3")!))
     }
 
+    func testPeekLeavesTheRecencyAloneAndMarkPlayedBumpsIt() throws {
+        let store = GrowingFileStore(directory: directory)
+        let url = URL(string: "https://example.com/ep.mp3")!
+        try cached(store, url, bytes: 10, ageHours: 5)
+        let file = store.completedURL(for: url)
+        func modified() throws -> Date {
+            try XCTUnwrap(FileManager.default.attributesOfItem(atPath: file.path)[.modificationDate] as? Date)
+        }
+        let before = try modified()
+
+        XCTAssertEqual(store.peekCompletedFile(for: url), file)
+        XCTAssertEqual(try modified(), before)
+
+        store.markPlayed(for: url)
+        XCTAssertGreaterThan(try modified(), Date().addingTimeInterval(-60))
+    }
+
+    func testPeekOfAMissingFileIsNilAndMarkPlayedDoesNotCreateOne() {
+        let store = GrowingFileStore(directory: directory)
+        let url = URL(string: "https://example.com/gone.mp3")!
+        XCTAssertNil(store.peekCompletedFile(for: url))
+        store.markPlayed(for: url)
+        XCTAssertNil(store.peekCompletedFile(for: url))
+    }
+
     func testEvictionAtTheCapRemovesTheLeastRecentlyPlayedAndSparesTheExcluded() throws {
         let store = GrowingFileStore(directory: directory)
         let oldest = URL(string: "https://example.com/1.mp3")!
