@@ -233,11 +233,12 @@ final class DeviceRig {
         try? await Task.sleep(for: .seconds(seconds))
     }
 
-    /// Returns once the session's observers, which run on the main operation queue, have handled
-    /// every notification posted before; for a test that expects nothing to change.
+    /// Returns once the player has handled every notification posted before; for a test that
+    /// expects nothing to change. Each event passes the session's queue, then main.
     func drainNotifications() async {
+        session.waitForPendingCalls()
         await withCheckedContinuation { continuation in
-            OperationQueue.main.addOperation { continuation.resume() }
+            DispatchQueue.main.async { continuation.resume() }
         }
         await Task.yield()
     }

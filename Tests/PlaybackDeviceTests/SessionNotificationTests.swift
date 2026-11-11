@@ -1,7 +1,7 @@
 import AVFoundation
 import MediaPlayer
 import XCTest
-@testable import PlaybackPlayer
+@_spi(Testing) @testable import PlaybackPlayer
 
 /// The checklist's interruption, route and media-services rows, with the session's notifications
 /// posted as iOS posts them; `RealCallTests` proves a real call delivers them.
@@ -107,6 +107,32 @@ final class SessionNotificationTests: DeviceTestCase {
         SystemSession.routeChanged(.oldDeviceUnavailable, previous: [.bluetoothA2DP])
         await rig.waitUntil("paused by the route loss") { !rig.player.playWhenReady }
         await rig.assertSilent()
+    }
+
+    // #192: the route is read on the session's queue, yet the events reach the handler on main in
+    // the order posted, the route change carrying the device's route (the speaker, as the rig assumes).
+    func testSessionEventsArriveOnMainInOrderWithTheCurrentRoute() async {
+        let session = SystemAudioSession(configuration: .longFormAudio)
+        var received: [AudioSessionEvent] = []
+        var allOnMain = true
+        session.setEventHandler { event in
+            allOnMain = allOnMain && Thread.isMainThread
+            received.append(event)
+        }
+
+        SystemSession.interruptionBegan()
+        SystemSession.routeChanged(.oldDeviceUnavailable, previous: [.headphones])
+        SystemSession.interruptionEnded(shouldResume: true)
+        session.waitForPendingCalls()
+        await rig.drainNotifications()
+
+        let route = SystemAudioSession.kinds(AVAudioSession.sharedInstance().currentRoute)
+        XCTAssertEqual(received, [
+            .interruptionBegan,
+            .routeChanged(reason: .oldDeviceUnavailable, previous: [.headphones], current: route),
+            .interruptionEnded(shouldResume: true),
+        ])
+        XCTAssertTrue(allOnMain)
     }
 
     func testCategoryChangeAndNewDeviceDoNotPause() async {

@@ -20,10 +20,18 @@ final class SystemAudioSession: AudioSessionControlling {
         ]
         observers = names.map { name in
             center.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
-                MainActor.assumeIsolated {
-                    guard let self, let event = Self.event(note) else { return }
-                    self.handler?(event)
-                }
+                MainActor.assumeIsolated { self?.receive(note) }
+            }
+        }
+    }
+
+    private func receive(_ note: Notification) {
+        guard let parsed = Self.parse(note) else { return }
+        // Every event takes the queue, so the route read stays off main without reordering events.
+        queue.async { [weak self] in
+            let event = parsed.resolve()
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self?.handler?(event) }
             }
         }
     }
@@ -68,7 +76,23 @@ final class SystemAudioSession: AudioSessionControlling {
         try configuration.apply(to: AVAudioSession.sharedInstance())
     }
 
-    private static func event(_ note: Notification) -> AudioSessionEvent? {
+    /// A notification read on main; a route change still needs the current route, read on the queue.
+    private enum Parsed: Sendable {
+        case event(AudioSessionEvent)
+        case routeChanged(reason: AudioRouteChangeReason, previous: [AudioPortKind])
+
+        nonisolated func resolve() -> AudioSessionEvent {
+            switch self {
+            case let .event(event):
+                event
+            case let .routeChanged(reason, previous):
+                // The notification carries only the old route; a newer one read here posts its own change.
+                .routeChanged(reason: reason, previous: previous, current: SystemAudioSession.kinds(AVAudioSession.sharedInstance().currentRoute))
+            }
+        }
+    }
+
+    private static func parse(_ note: Notification) -> Parsed? {
         let info = note.userInfo ?? [:]
         switch note.name {
         case AVAudioSession.interruptionNotification:
@@ -76,10 +100,10 @@ final class SystemAudioSession: AudioSessionControlling {
                   let type = AVAudioSession.InterruptionType(rawValue: raw) else { return nil }
             switch type {
             case .began:
-                return .interruptionBegan
+                return .event(.interruptionBegan)
             case .ended:
                 let options = (info[AVAudioSessionInterruptionOptionKey] as? UInt).map(AVAudioSession.InterruptionOptions.init)
-                return .interruptionEnded(shouldResume: options?.contains(.shouldResume) ?? false)
+                return .event(.interruptionEnded(shouldResume: options?.contains(.shouldResume) ?? false))
             @unknown default:
                 return nil
             }
@@ -91,20 +115,15 @@ final class SystemAudioSession: AudioSessionControlling {
             default: .other
             }
             let previous = info[AVAudioSessionRouteChangePreviousRouteKey] as? AVAudioSessionRouteDescription
-            // The notification carries only the old route; a newer one read here posts its own change.
-            return .routeChanged(
-                reason: reason,
-                previous: kinds(previous),
-                current: kinds(AVAudioSession.sharedInstance().currentRoute)
-            )
+            return .routeChanged(reason: reason, previous: kinds(previous))
         case AVAudioSession.mediaServicesWereResetNotification:
-            return .mediaServicesReset
+            return .event(.mediaServicesReset)
         default:
             return nil
         }
     }
 
-    private static func kinds(_ route: AVAudioSessionRouteDescription?) -> [AudioPortKind] {
+    nonisolated static func kinds(_ route: AVAudioSessionRouteDescription?) -> [AudioPortKind] {
         (route?.outputs ?? []).map { output in
             switch output.portType {
             case .builtInSpeaker, .builtInReceiver: .builtIn

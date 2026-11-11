@@ -54,20 +54,20 @@ extension AVAudioSession: CategorySetting {}
 #endif
 
 /// What the session reports, on the main actor.
-@_spi(Testing) public enum AudioSessionEvent: Equatable {
+@_spi(Testing) public enum AudioSessionEvent: Equatable, Sendable {
     case interruptionBegan
     case interruptionEnded(shouldResume: Bool)
     case routeChanged(reason: AudioRouteChangeReason, previous: [AudioPortKind], current: [AudioPortKind])
     case mediaServicesReset
 }
 
-@_spi(Testing) public enum AudioRouteChangeReason: Equatable {
+@_spi(Testing) public enum AudioRouteChangeReason: Equatable, Sendable {
     case newDeviceAvailable, oldDeviceUnavailable, other
 }
 
 /// An output port, by the kind that decides whether losing it pauses. Bluetooth A2DP, LE and HFP
 /// are one kind, so a profile switch loses nothing.
-@_spi(Testing) public enum AudioPortKind: Equatable {
+@_spi(Testing) public enum AudioPortKind: Equatable, Sendable {
     case builtIn, headphones, bluetooth, usb, lineOut, carAudio, airPlay, other
 
     /// Audio meant for the listener alone: losing it would move playback onto the speaker, media3's
