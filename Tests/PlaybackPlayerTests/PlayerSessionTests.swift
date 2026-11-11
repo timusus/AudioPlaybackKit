@@ -157,6 +157,24 @@ final class PlayerSessionTests: XCTestCase {
         XCTAssertFalse(isHeard())
     }
 
+    // iOS does not promise an end for every began (#193): the player stays suppressed with
+    // playWhenReady true, and the first toggle must play rather than pause.
+    func testATogglePlaysAfterAnInterruptionThatNeverEnds() {
+        startPlaying()
+        session.interruptionBegan()
+        XCTAssertTrue(player.showsPlayButton)
+
+        player.togglePlayPause()
+        XCTAssertEqual(player.suppression, .unsuppressed)
+        XCTAssertTrue(player.isPlaying)
+        XCTAssertTrue(isHeard())
+        XCTAssertFalse(player.showsPlayButton)
+
+        player.togglePlayPause()
+        XCTAssertFalse(player.playWhenReady)
+        XCTAssertTrue(player.showsPlayButton)
+    }
+
     func testInterruptionEndedWithShouldResumeReactivatesAndPlays() async {
         startPlaying()
         session.interruptionBegan()

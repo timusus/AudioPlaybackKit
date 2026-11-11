@@ -230,11 +230,6 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
 
     // MARK: Info
 
-    // media3 `Util.shouldShowPlayButton`: a pause, an idle or ended player or a suppression shows play.
-    private var showsPlay: Bool {
-        !player.playWhenReady || player.state == .idle || player.state == .ended || player.suppression != .unsuppressed
-    }
-
     private func snapshot(of item: Item) -> Published {
         Published(
             item: item,
@@ -242,7 +237,7 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
             defaultRate: player.rate,
             duration: player.isLive ? nil : player.duration ?? current?.metadata.duration,
             isLive: player.isLive,
-            state: showsPlay ? .paused : .playing,
+            state: player.showsPlayButton ? .paused : .playing,
             discontinuity: player.discontinuityCount,
             position: player.position,
             at: now()
@@ -323,8 +318,7 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
         switch (command, event) {
         case (.play, _): player.play()
         case (.pause, _): player.pause()
-        // media3's `playIfSuppressed` default: a suppressed player shows play, so toggle plays.
-        case (.togglePlayPause, _): showsPlay ? player.play() : player.pause()
+        case (.togglePlayPause, _): player.togglePlayPause()
         case (.nextTrack, _): player.seekToNext()
         case (.previousTrack, _): player.seekToPrevious()
         case let (.skipForward, .interval(seconds)): player.seek(by: seconds)

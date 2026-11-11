@@ -66,6 +66,10 @@ public protocol NowPlayingControllable<Item>: AnyObject {
 
     func play()
     func pause()
+    /// Whether an app's play/pause button shows play; defaults to media3's rule (see the extension).
+    var showsPlayButton: Bool { get }
+    /// The play/pause button's action; defaults to playing when `showsPlayButton`, else pausing.
+    func togglePlayPause()
     /// The next button.
     func seekToNext()
     /// The previous button: the previous item, or the start of this one with nothing before it.
@@ -75,6 +79,21 @@ public protocol NowPlayingControllable<Item>: AnyObject {
     /// As `Player.addPeriodicObserver`: the session asks for one tick to learn when a play is heard,
     /// since `position` moves with the clock and Observation never sees it.
     func addPeriodicObserver(interval: TimeInterval, using callback: @escaping @MainActor @Sendable () -> Void) -> TimeObserverToken
+}
+
+extension NowPlayingControllable {
+    /// media3 `Util.shouldShowPlayButton` with `playIfSuppressed`: a pause, an idle or ended player
+    /// or a suppression shows play. An app's play/pause button keys on this, not `playWhenReady`,
+    /// which stays true through an interruption iOS may never end.
+    public var showsPlayButton: Bool {
+        !playWhenReady || state == .idle || state == .ended || suppression != .unsuppressed
+    }
+
+    /// media3 `Util.handlePlayPauseButtonAction`: plays when `showsPlayButton`, else pauses. A play
+    /// during an interruption takes the session back.
+    public func togglePlayPause() {
+        showsPlayButton ? play() : pause()
+    }
 }
 
 /// A wrapper that forwards every requirement to `player`, so it declares only what its policy
