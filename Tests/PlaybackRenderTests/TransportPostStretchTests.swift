@@ -268,6 +268,13 @@ final class TransportPostStretchOrderTests: XCTestCase {
         XCTAssertEqual(Array(after.prefix(3)), [.reset, .configure(mono), flush("a", 20)])
     }
 
+    func testAProcessorRunsOnceWhereItsPlacementFirstSaidEvenIfItLaterSaysOtherwise() {
+        start(a, processors: [FlippingDoubler()])
+        run(for: 4)
+
+        XCTAssertEqual(enqueued, (0..<24).map { Float($0) * 2 })
+    }
+
     func testTheEndOfTheStreamIsProcessedBeforeEnded() {
         transport.setRate(1.5)
         start(a)
@@ -338,6 +345,26 @@ private final class BurstProcessor: AudioProcessor, @unchecked Sendable {
         frame -= frames
         return true
     }
+}
+
+/// Doubles each sample, and answers each read of its placement with the other one.
+private final class FlippingDoubler: AudioProcessor, @unchecked Sendable {
+    private var reads = 0
+
+    var placement: AudioProcessorPlacement {
+        reads += 1
+        return reads.isMultiple(of: 2) ? .beforeTimeStretch : .afterTimeStretch
+    }
+
+    func configure(_ input: PCMFormat) throws -> PCMFormat { input }
+    var isActive: Bool { true }
+
+    func process(_ samples: UnsafeMutableBufferPointer<Float>) {
+        for index in samples.indices { samples[index] *= 2 }
+    }
+
+    func flush(_ metadata: StreamMetadata) {}
+    func reset() {}
 }
 
 /// Zeroes the programme, so only the burst is left to measure.

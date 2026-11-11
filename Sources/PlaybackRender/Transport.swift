@@ -338,12 +338,15 @@ public final class Transport<Item: Hashable & Sendable>: @unchecked Sendable {
     /// frames follow. Call it again after a change that alters a processor's `isActive` or output format.
     /// Each processor runs where its `placement` says, in list order within each placement.
     public func setProcessors(_ processors: [any AudioProcessor]) {
-        let afterStretch = processors.filter { $0.placement == .afterTimeStretch }
+        // Read once: a placement that changed between two reads would run a stage twice or not at all.
+        let (beforeStretch, afterStretch) = processors.reduce(into: ([any AudioProcessor](), [any AudioProcessor]())) {
+            if $1.placement == .afterTimeStretch { $0.1.append($1) } else { $0.0.append($1) }
+        }
         // A stage that moved frames there would desynchronise the spans already stretched.
         precondition(!afterStretch.contains { $0 is any BufferingAudioProcessor },
                      "a processor after the time-stretch must be in place, not a BufferingAudioProcessor")
         run { [self] in
-            upstream.setProcessors(processors.filter { $0.placement == .beforeTimeStretch })
+            upstream.setProcessors(beforeStretch)
             outputProcessors.set(afterStretch)
             refeedFromHeard()
         }
