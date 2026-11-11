@@ -49,7 +49,10 @@ beyond, so the 0.25...4 range is covered.
   (no buffering, no format change), so spans, the map and gapless boundaries are untouched; it is
   flushed at each item's first output frame, in output frames from there (at a rate other than 1 they
   do not advance `mediaStartFrame` one for one), and reset at every seek, stop, renderer recovery and
-  chain replacement. At a re-feed it is asked to step back over the output frames dropped
+  chain replacement. `setProcessors` with the same post-stretch instances in the same order (say, only a
+  pre-stretch stage changed) replaces nothing: they are configured again, and only a change in which of
+  them are active flushes them again at the re-fed frame. At a re-feed (a speed change, `processorsChanged`, or such a
+  `setProcessors`) each is asked to step back over the output frames dropped
   (`rewind(outputFrames:)`), so a cue cut mid-way resumes where it was cut; one that declines, or a
   drop reaching back past its last flush, is reset and flushed at the re-fed frame as at a seek. Audio
   replayed after a stall is not processed again.

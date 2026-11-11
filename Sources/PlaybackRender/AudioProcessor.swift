@@ -113,9 +113,11 @@ public enum AudioProcessorPlacement: Sendable {
     /// the item and media frame before each item's first output frame; frames after a flush are output
     /// frames, so at a rate other than 1 they do not advance `mediaStartFrame` one for one. It is reset
     /// and flushed again at each seek, stop and renderer recovery, and when `setProcessors` replaces
-    /// it. A re-feed (a speed or processor change) asks it to `rewind`; if it declines, or the dropped
-    /// frames reach back past its last flush, it is reset and flushed at the re-fed frame. Audio
-    /// replayed after a stall or route change is not processed again.
+    /// it. Passing the same post-stretch instances in the same order replaces nothing: they are
+    /// configured again and flushed at the re-fed frame only if which of them are active changed. A
+    /// re-feed (a speed change, `processorsChanged` or `setProcessors`) asks it to `rewind`; if it
+    /// declines, or the dropped frames reach back past its last flush, it is reset and flushed at the
+    /// re-fed frame. Audio replayed after a stall or route change is not processed again.
     case afterTimeStretch
 }
 
