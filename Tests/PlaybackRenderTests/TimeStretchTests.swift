@@ -115,6 +115,47 @@ final class TimeStretchTests: XCTestCase {
         XCTAssertEqual(stretch.finish().count, 0)
     }
 
+    private func stretchedAtRate(_ samples: [Float], sampleRate: Int, rate: Double) -> [Float] {
+        let format = PCMFormat(sampleRate: Double(sampleRate), channelCount: 1)
+        var stretch = TimeStretch()
+        let block = sampleRate / 10
+        var chunks: [TimeStretch.Chunk] = []
+        for start in stride(from: 0, to: samples.count, by: block) {
+            let slice = Array(samples[start..<min(start + block, samples.count)])
+            let tag = SegmentTag(item: 1, mediaStartFrame: Int64(start), frameCount: Int64(slice.count))
+            chunks += stretch.process(TaggedChunk(samples: slice, format: format, tags: [tag]), rate: rate)
+        }
+        return (chunks + stretch.finish()).flatMap(\.samples)
+    }
+
+    /// AUNewTimePitch's lag scales with the sample rate, so the cut at the start and the render at the
+    /// end must too: the burst lands at its media time and the tone starts at frame 0 and runs to the end.
+    func testTheOutputLinesUpWithTheMediaAtEverySampleRate() {
+        for sampleRate in [8000, 16000, 22050, 32000, 44100, 48000, 96000] {
+            let perMillisecond = Double(sampleRate) / 1000
+            let centre = sampleRate
+            let half = Int(0.005 * Double(sampleRate))
+            let burst = (0..<(2 * sampleRate)).map { frame -> Float in
+                let offset = frame - centre
+                guard abs(offset) < half else { return 0 }
+                let hann = 0.5 + 0.5 * cosf(.pi * Float(offset) / Float(half))
+                return hann * sinf(2 * .pi * 1000 * Float(offset) / Float(sampleRate))
+            }
+            let tone = (0..<(2 * sampleRate)).map { 0.25 * sinf(2 * .pi * 440 * Float($0) / Float(sampleRate)) }
+            for rate in [1.5, 2] {
+                let label = "\(sampleRate) Hz at \(rate)x"
+                let output = stretchedAtRate(burst, sampleRate: sampleRate, rate: rate)
+                let peak = output.indices.max { abs(output[$0]) < abs(output[$1]) }!
+                XCTAssertEqual(Double(peak) / perMillisecond, Double(centre) / rate / perMillisecond, accuracy: 12, "burst \(label)")
+
+                let heard = stretchedAtRate(tone, sampleRate: sampleRate, rate: rate)
+                let loud = heard.indices.filter { abs(heard[$0]) > 0.05 }
+                XCTAssertLessThan(Double(loud.first!) / perMillisecond, 10, "tone start \(label)")
+                XCTAssertLessThan(Double(heard.count - 1 - loud.last!) / perMillisecond, 10, "tone tail \(label)")
+            }
+        }
+    }
+
     // A replay after an auto-flush starts mid-chunk: frames before the cut were heard.
     func testDroppingTheFirstFramesKeepsTheMediaFramesTheRestCarries() {
         let format = PCMFormat(sampleRate: 4, channelCount: 1)
