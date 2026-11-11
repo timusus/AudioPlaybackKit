@@ -50,12 +50,13 @@ final class TransportPostStretchBurstTests: XCTestCase {
 
     /// What the output played, silence as zeros, with a burst 1 s in that is 0.3 s ahead of the clock
     /// when `change` re-feeds what is written past `resumeDepth`.
-    private func heardBurst(across change: (Transport<String>) -> Void) -> [Float] {
+    private func heardBurst(across change: (Transport<String>, _ burst: any AudioProcessor) -> Void) -> [Float] {
         let output = FakeAudioOutput()
         let timer = ManualPumpTimer()
         let executor = ManualExecutor()
         let transport = Transport<String>(output: output, timer: timer, executor: executor) { _ in }
-        transport.setProcessors([SilenceProcessor(), BurstProcessor(Self.burst, after: 48000, placement: .afterTimeStretch)])
+        let burst = BurstProcessor(Self.burst, after: 48000, placement: .afterTimeStretch)
+        transport.setProcessors([SilenceProcessor(), burst])
         transport.setCurrent(item: "a", source: FakeItemSource(format: Self.format, frames: 240_000, chunkFrames: 4800))
         transport.play()
         func pump() {
@@ -68,7 +69,7 @@ final class TransportPostStretchBurstTests: XCTestCase {
             output.advance(by: 0.1)
             pump()
         }
-        change(transport)
+        change(transport, burst)
         pump()
         for _ in 0..<30 {
             output.advance(by: 0.1)
@@ -98,11 +99,17 @@ final class TransportPostStretchBurstTests: XCTestCase {
     }
 
     func testASpeedChangeMidBurstResumesItWhereTheReFeedCut() {
-        assertWholeBurst(heardBurst { $0.setRate(1.5) })
+        assertWholeBurst(heardBurst { transport, _ in transport.setRate(1.5) })
     }
 
     func testAProcessorChangeMidBurstResumesItWhereTheReFeedCut() {
-        assertWholeBurst(heardBurst { $0.processorsChanged() })
+        assertWholeBurst(heardBurst { transport, _ in transport.processorsChanged() })
+    }
+
+    func testAPreStretchChainChangeMidBurstKeepsThePostStretchStageItReceivesAgain() {
+        assertWholeBurst(heardBurst { transport, burst in
+            transport.setProcessors([SilenceProcessor(), GainProcessor(), burst])
+        })
     }
 
     func testBeforeTheStretchABurstIsSpedUpWithTheProgramme() {
@@ -281,6 +288,37 @@ final class TransportPostStretchOrderTests: XCTestCase {
         XCTAssertEqual(Array(replacement.events.prefix(2)), [.configure(mono), flush("a", 12)])
     }
 
+    func testTheSameStagesSetAgainStepBackWithoutAResetOrFlush() {
+        post.rewinds = true
+        start(long)
+        run(for: 1)
+        let before = post.events.count, processed = post.frames(in: post.events)
+
+        transport.setProcessors([GainProcessor(), post])
+        pump()
+        run(for: 1)
+
+        let after = Array(post.events.dropFirst(before))
+        guard case let .rewind(frames) = after.first else { return XCTFail("no rewind: \(after)") }
+        XCTAssertEqual(processed - frames, 12)
+        XCTAssertFalse(after.contains { if case .flush = $0 { true } else { $0 == .reset } })
+        XCTAssertEqual(Array(post.samples.suffix(post.frames(in: after)).prefix(3)), [24, 26, 28], "after the new doubling stage")
+    }
+
+    func testAStageSetAgainAfterItTurnedInactiveIsLeftOut() {
+        post.rewinds = true
+        start(long)
+        run(for: 1)
+        let processed = post.frames(in: post.events)
+
+        post.active = false
+        transport.setProcessors([post])
+        pump()
+        run(for: 1)
+
+        XCTAssertEqual(post.frames(in: post.events), processed, "nothing processed after the change")
+    }
+
     func testAProcessorRunsOnceWhereItsPlacementFirstSaidEvenIfItLaterSaysOtherwise() {
         start(a, processors: [FlippingDoubler()])
         run(for: 4)
@@ -434,7 +472,8 @@ private final class OutputRecordingProcessor: AudioProcessor, @unchecked Sendabl
         return input
     }
 
-    var isActive: Bool { true }
+    var active = true
+    var isActive: Bool { active }
 
     func process(_ samples: UnsafeMutableBufferPointer<Float>) {
         events.append(.input(Array(samples), frames: samples.count / channels))

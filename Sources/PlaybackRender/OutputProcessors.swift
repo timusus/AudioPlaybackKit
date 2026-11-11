@@ -18,6 +18,8 @@ final class OutputProcessors {
     private var active: [any AudioProcessor] = []
     /// What the stages were configured for; nil until the next chunk after a restart or a chain change.
     private var format: PCMFormat?
+    /// The chain was set again unchanged: configure it at the next chunk, keeping its flush if the active stages are the same.
+    private var reconfigure = false
     /// The item the stages were last flushed for.
     private var flushedItem: Int?
     /// Output frames processed since that flush, all of one item and format: how far back a re-feed can step.
@@ -29,8 +31,12 @@ final class OutputProcessors {
     }
 
     /// Applies from the next chunk processed, as the pre-stretch chain applies from the next chunk pulled.
+    /// The same stages in the same order are no chain change: they are only configured again, for a
+    /// changed `isActive`, and carry on unless the stages that are active differ.
     func set(_ processors: [any AudioProcessor]) {
-        pending = processors
+        guard processors.elementsEqual(self.processors, by: ===) else { return pending = processors }
+        pending = nil
+        reconfigure = true
     }
 
     /// A seek, stop or renderer recovery: nothing processed so far is continued.
@@ -55,7 +61,7 @@ final class OutputProcessors {
     func process(_ chunk: inout TimeStretch.Chunk) throws {
         takePending()
         guard !processors.isEmpty else { return }
-        if chunk.format != format { try configure(chunk.format) }
+        if chunk.format != format || reconfigure { try configure(chunk.format) }
         guard !active.isEmpty else { return }
         let spans = chunk.spans, channels = chunk.format.channelCount
         // The spans' output frames sum to the chunk's (`TimeStretch.take`).
@@ -84,10 +90,11 @@ final class OutputProcessors {
     }
 
     private func configure(_ input: PCMFormat) throws {
+        // Only stages already running at this format can carry on without a flush.
+        let running = format == input ? active : nil
+        reconfigure = false
         active = []
         format = nil
-        flushedItem = nil
-        framesSinceFlush = 0
         for processor in processors {
             let output = try processor.configure(input)
             guard processor.isActive else { continue }
@@ -95,5 +102,10 @@ final class OutputProcessors {
             active.append(processor)
         }
         format = input
+        guard let running, running.elementsEqual(active, by: ===) else {
+            flushedItem = nil
+            framesSinceFlush = 0
+            return
+        }
     }
 }
