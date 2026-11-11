@@ -205,12 +205,14 @@ final class Feeder {
         let before = map, writtenBefore = written
         // A flush replacing under `resumeDepth` of audio gains less than appending would delay the
         // change, and a cut that close to the tail is inside what a shallow renderer has committed to.
-        guard let boundary = written.first(where: { $0.end >= target })?.end,
+        guard let last = written.firstIndex(where: { $0.end >= target }),
+              case let boundary = written[last].end,
               map.writtenEnd - boundary >= resumeDepth,
               let cut = map.truncate(from: boundary) else { return appendAtWrittenEnd() }
-        let isCut = { (chunk: Written) in chunk.end > cut.time || chunk.start >= cut.time }
-        let cutFrames = written.reduce(0) { isCut($1) ? $0 + Int($1.chunk.frameCount) : $0 }
-        written.removeAll(where: isCut)
+        // The cut is the boundary chunk's end frame, so the chunks after it are what it drops; its
+        // time, summed another way, can sit an ulp off that chunk's end.
+        let cutFrames = written[(last + 1)...].reduce(0) { $0 + Int($1.chunk.frameCount) }
+        written.removeSubrange((last + 1)...)
         lastPartialFlush += 1
         let token = lastPartialFlush
         pendingPartialFlush = PendingFlush(

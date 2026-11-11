@@ -121,6 +121,61 @@ final class TransportPostStretchBurstTests: XCTestCase {
     }
 }
 
+/// A re-feed asks a post-stretch stage to step back over exactly the frames the output dropped, at
+/// chunk sizes and clock times whose boundary times do not land on a whole binary fraction.
+final class TransportPostStretchRewindCountTests: XCTestCase {
+    private func assertRewindsToTheCut(chunkFrames: Int64, after seconds: TimeInterval,
+                                       file: StaticString = #filePath, line: UInt = #line) {
+        let output = FakeAudioOutput()
+        let timer = ManualPumpTimer()
+        let executor = ManualExecutor()
+        let transport = Transport<String>(output: output, timer: timer, executor: executor) { _ in }
+        let post = OutputRecordingProcessor()
+        post.rewinds = true
+        transport.setProcessors([post])
+        let format = PCMFormat(sampleRate: 44100, channelCount: 1)
+        transport.setCurrent(item: "a", source: FakeItemSource(format: format, frames: 44100 * 20, chunkFrames: chunkFrames))
+        transport.play()
+        func pump() {
+            timer.sync()
+            executor.runUntilIdle()
+            timer.fire()
+        }
+        pump()
+        for _ in 0..<Int((seconds / 0.05).rounded()) {
+            output.advance(by: 0.05)
+            pump()
+        }
+        transport.setRate(1.5)
+        pump()
+        output.advance(by: 0.05)
+        pump()
+
+        guard let cut = output.partialFlushes.first,
+              let index = post.events.firstIndex(where: { if case .rewind = $0 { true } else { false } }),
+              case let .rewind(frames) = post.events[index] else {
+            return XCTFail("no partial flush and rewind at \(seconds) s", file: file, line: line)
+        }
+        let kept = Int((cut * 44100).rounded())
+        XCTAssertEqual(kept % Int(chunkFrames), 0, "cut on a chunk boundary", file: file, line: line)
+        XCTAssertEqual(post.frames(in: post.events.prefix(index)) - frames, kept,
+                       "stepped back to the cut at \(seconds) s", file: file, line: line)
+    }
+
+    func testAReFeedRewindsExactlyToTheCutWith4096FrameChunks() {
+        for seconds in stride(from: 0.5, through: 3, by: 0.05) {
+            assertRewindsToTheCut(chunkFrames: 4096, after: seconds)
+        }
+    }
+
+    func testAReFeedRewindsExactlyToTheCutWith1103FrameChunks() {
+        // From 1 s: before that too little is written ahead for a partial flush.
+        for seconds in stride(from: 1, through: 3, by: 0.05) {
+            assertRewindsToTheCut(chunkFrames: 1103, after: seconds)
+        }
+    }
+}
+
 /// Every event a post-stretch processor sees, through the transport's public API at eight frames a
 /// second; the stretch keeps each sample whole, so 2x keeps every other frame.
 final class TransportPostStretchOrderTests: XCTestCase {
