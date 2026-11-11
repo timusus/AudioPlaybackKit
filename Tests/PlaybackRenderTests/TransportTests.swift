@@ -1,4 +1,5 @@
 import Foundation
+import os
 @testable @_spi(Testing) import PlaybackRender
 import PlaybackRenderTestSupport
 import XCTest
@@ -1006,16 +1007,24 @@ final class TransportTests: XCTestCase {
         let playing = expectation(description: "playing")
         playing.assertForOverFulfill = false
         let crossedB = expectation(description: "crossed b")
+        // The burst's seeks can cross b before `playing` (the stretch's silence stands for b at clock 0),
+        // so only a crossing after it counts.
+        let isPlaying = OSAllocatedUnfairLock(initialState: false)
         let transport = Transport<String>(output: output, timer: DispatchPumpTimer(), executor: SerialQueueExecutor()) { event in
             XCTAssertFalse(Thread.isMainThread)
             switch event {
-            case .status(.playing): playing.fulfill()
-            case .crossed(item: "b", _): crossedB.fulfill()
+            case .status(.playing):
+                isPlaying.withLock { $0 = true }
+                playing.fulfill()
+            case .crossed(item: "b", _) where isPlaying.withLock { $0 }: crossedB.fulfill()
             default: break
             }
         }
-        transport.setCurrent(item: "a", source: FakeItemSource(format: mono, frames: 4, chunkFrames: 2))
-        transport.setNext(item: "b", source: FakeItemSource(format: mono, frames: 4, chunkFrames: 2, base: 1000))
+        func setItems() {
+            transport.setCurrent(item: "a", source: FakeItemSource(format: mono, frames: 4, chunkFrames: 2))
+            transport.setNext(item: "b", source: FakeItemSource(format: mono, frames: 4, chunkFrames: 2, base: 1000))
+        }
+        setItems()
 
         // No play among them, so `playing` can only come from the one after.
         DispatchQueue.concurrentPerform(iterations: 64) { index in
@@ -1026,6 +1035,9 @@ final class TransportTests: XCTestCase {
             }
         }
         transport.setRate(1)
+        // Decode can drain both short items at the burst's last rate before this setRate runs, and what
+        // is written is not re-fed; the items set again are pulled at rate 1 on every schedule.
+        setItems()
         transport.play()
         wait(for: [playing], timeout: 5)
         // The clock stands still until advanced, so nothing has paused it since.
