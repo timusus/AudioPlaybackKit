@@ -69,19 +69,55 @@ final class PlayerSessionTests: XCTestCase {
         session.activationError = SessionError()
         player.setItems(["a", "b"])
         player.play()
+        rig.run(for: 1)
         XCTAssertEqual(player.error?.kind, .session)
+        XCTAssertEqual(player.error?.activationRetried, true)
         XCTAssertEqual(player.state, .idle)
         XCTAssertTrue(player.playWhenReady, "the user's next tap retries")
         XCTAssertFalse(isHeard())
-        XCTAssertEqual(session.calls, [.configure, .activate], "never active, so nothing to deactivate")
+        XCTAssertEqual(session.calls, [.configure, .activate, .activate], "never active, so nothing to deactivate")
 
         session.activationError = nil
         player.play()
         XCTAssertNil(player.error)
         XCTAssertTrue(isHeard())
-        XCTAssertEqual(session.activations, 2)
+        XCTAssertEqual(session.activations, 3)
         let events = await rig.finish()
         XCTAssertEqual(PlayerRig.failedIndices(events), [], "the item did not fail")
+    }
+
+    func testAnActivationThatFailsOnceIsRetriedAndPlaybackStartsWithNoError() {
+        session.activationError = SessionError()
+        player.setItems(["a", "b"])
+        player.play()
+        XCTAssertNil(player.error, "the first refusal is held for the retry")
+        session.activationError = nil
+        XCTAssertTrue(isHeard())
+        XCTAssertNil(player.error)
+        XCTAssertTrue(player.isPlaying)
+    }
+
+    func testAPauseDuringTheRetryWaitDropsTheRetry() {
+        session.activationError = SessionError()
+        player.setItems(["a", "b"])
+        player.play()
+        player.pause()
+        session.activationError = nil
+        rig.run(for: 1)
+        XCTAssertNil(player.error)
+        XCTAssertFalse(player.isPlaying)
+        XCTAssertFalse(isHeard())
+        XCTAssertEqual(session.activations, 1, "no second activation for a play nobody wants")
+    }
+
+    func testTwoPlaysDuringTheRetryWaitActivateOnce() {
+        session.activationError = SessionError()
+        player.setItems(["a", "b"])
+        player.play()
+        player.play()
+        session.activationError = nil
+        XCTAssertTrue(isHeard())
+        XCTAssertEqual(session.activations, 2, "the first try and one retry")
     }
 
     // media3 AudioFocusManagerTest.onAudioFocusChange_withTransientLoss_sendsCommandWaitForCallback.
@@ -156,6 +192,7 @@ final class PlayerSessionTests: XCTestCase {
         session.interruptionBegan()
         session.activationError = SessionError()
         session.interruptionEnded(shouldResume: true)
+        rig.run(for: 1)
         XCTAssertEqual(player.suppression, .unsuppressed)
         XCTAssertTrue(player.playWhenReady)
         XCTAssertEqual(player.error?.kind, .session)

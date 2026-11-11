@@ -29,6 +29,20 @@ public final class PlayerTestRig<Item: Hashable & Sendable> {
         }
         events = player.events
         player.onEvent = { [weak self] in self?.onEvent?($0) }
+        player.scheduleActivationRetry = { [weak self] delay, work in
+            guard let self else { return }
+            scheduled.append((now + delay, work))
+        }
+    }
+
+    private var now: TimeInterval = 0
+    private var scheduled: [(due: TimeInterval, work: @MainActor () -> Void)] = []
+
+    private func advanceClock(by seconds: TimeInterval) {
+        now += seconds
+        let due = scheduled.filter { $0.due <= now }
+        scheduled.removeAll { $0.due <= now }
+        due.forEach { $0.work() }
     }
 
     /// Runs `body` and returns the transport events it caused, kept from the player as if still on
@@ -66,6 +80,7 @@ public final class PlayerTestRig<Item: Hashable & Sendable> {
         for _ in 0..<Int(seconds * 4) {
             pump()
             output.advance(by: 0.25)
+            advanceClock(by: 0.25)
         }
         pump()
     }

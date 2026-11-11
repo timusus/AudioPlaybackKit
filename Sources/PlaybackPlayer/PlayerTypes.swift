@@ -37,6 +37,9 @@ public struct PlaybackError: Error, Sendable {
 
     public var kind: Kind
     public var underlying: any Error
+    /// A `.session` failure that persisted through the player's one retry, so a first-attempt
+    /// refusal that recovered never reaches the app.
+    public var activationRetried = false
 
     /// What a caller acts on: retry a network or HTTP failure, skip an unsupported or malformed
     /// item. An error the library did not raise (an app's factory, the output, the session) is `.internal`.

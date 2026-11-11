@@ -467,20 +467,46 @@ public final class Player<Item: Hashable & Sendable> {
 
     // MARK: Audio session
 
+    /// A background launch or a just-ended interruption often refuses the first activation and takes
+    /// a second a moment later; long enough for the system to settle, short enough to feel like a start.
+    static var activationRetryDelay: TimeInterval { 0.3 }
+
+    /// Runs `work` after `delay` on the main actor; tests replace it with a manual clock.
+    @ObservationIgnored @_spi(Testing) public var scheduleActivationRetry: @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void = { delay, work in
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(delay))
+            work()
+        }
+    }
+
     private func activate() {
         guard pendingActivation == nil else { return }
         lastActivation += 1
         let id = lastActivation
         pendingActivation = id
+        attemptActivation(id, retried: false)
+    }
+
+    /// `pendingActivation` stays set across the retry wait, so a second play starts no second activation.
+    private func attemptActivation(_ id: Int, retried: Bool) {
         session.activate { [weak self] failure in
             guard let self, pendingActivation == id else { return }
-            pendingActivation = nil
             if let failure {
                 // Refused during an interruption, the interruption still holds; its end tries again.
-                guard suppression == .unsuppressed, intent else { return }
-                error = PlaybackError(kind: .session, underlying: failure)
+                guard suppression == .unsuppressed, intent else { return pendingActivation = nil }
+                guard retried else {
+                    scheduleActivationRetry(Self.activationRetryDelay) { [weak self] in
+                        guard let self, pendingActivation == id else { return }
+                        guard intent, loadedKey != nil, suppression == .unsuppressed else { return pendingActivation = nil }
+                        attemptActivation(id, retried: true)
+                    }
+                    return
+                }
+                pendingActivation = nil
+                error = PlaybackError(kind: .session, underlying: failure, activationRetried: true)
                 return refreshState()
             }
+            pendingActivation = nil
             sessionActive = true
             suppression = .unsuppressed
             if intent, loadedKey != nil, error == nil { startTransport() }
