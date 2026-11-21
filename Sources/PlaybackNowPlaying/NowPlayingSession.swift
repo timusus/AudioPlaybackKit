@@ -49,6 +49,13 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     /// This session's entry in `centreClaims`, so a clear from it cannot undo a newer session's install.
     private let claim: Int
 
+    /// Called for a remote play or play/pause toggle while the player has no current item, such as after
+    /// the queue ended; the app decides what to start. Return true if it accepted the command (answered
+    /// `.success`), false to decline (`.noActionableNowPlayingItem`). A host that decides asynchronously
+    /// returns true at once, because the system's answer cannot wait for it. Unset, such a command is
+    /// answered `.noActionableNowPlayingItem`. Other commands never reach it.
+    public var onPlayWithoutItem: (@MainActor () -> Bool)?
+
     @_spi(Testing) public private(set) var pendingRefresh: Task<Void, Never>?
     private(set) var artworkLoad: Task<Void, Never>?
     private var released = false
@@ -312,7 +319,10 @@ public final class NowPlayingSession<Item: Hashable & Sendable> {
     }
 
     private func handle(_ command: RemoteCommand, _ event: RemoteCommandEvent) -> MPRemoteCommandHandlerStatus {
-        guard player.currentItem != nil else { return .noActionableNowPlayingItem }
+        guard player.currentItem != nil else {
+            guard command == .play || command == .togglePlayPause, let onPlayWithoutItem else { return .noActionableNowPlayingItem }
+            return onPlayWithoutItem() ? .success : .noActionableNowPlayingItem
+        }
         // The handlers follow a change only on the next refresh; a press in between is refused, as media3 does.
         guard remoteCommands.contains(command) else { return .commandFailed }
         switch (command, event) {

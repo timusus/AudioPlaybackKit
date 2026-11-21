@@ -583,6 +583,11 @@ restarts the item), skips and scrubbing once the item has opened seekable, play 
 item of unknown length that seeks is not shown live and shows the metadata's duration, if any.
 `release()` disables every command and clears the info, the playback rates and the skip intervals.
 
+With no current item (the queue ended), a remote play or play/pause toggle is answered
+`.noActionableNowPlayingItem` unless the app sets `nowPlaying.onPlayWithoutItem`. That closure starts
+whatever the app chooses and returns true (`.success`) or false (declined). An app that decides
+asynchronously returns true at once, since the system's answer cannot wait. Other commands never reach it.
+
 **Your own policy.** The session drives `NowPlayingControllable`, as a media3 session drives a
 `ForwardingPlayer`. Wrap the player with `ForwardingNowPlayingControllable` (with `PlayerCommands` and
 `SkipIntervals`, it is in `PlaybackPlayer`, not `PlaybackNowPlaying`) and declare only what your

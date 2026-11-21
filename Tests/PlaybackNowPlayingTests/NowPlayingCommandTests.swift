@@ -51,6 +51,43 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertFalse(rig.player.playWhenReady)
     }
 
+    func testItemlessPlayAndToggleReachAnAcceptingHandler() async {
+        await rig.settle()
+        var calls = 0
+        rig.session.onPlayWithoutItem = { calls += 1; return true }
+
+        XCTAssertEqual(rig.commands.press(.play), .success)
+        XCTAssertEqual(rig.commands.press(.togglePlayPause), .success)
+        XCTAssertEqual(calls, 2)
+    }
+
+    func testItemlessPlayAnswersNoActionableItemWhenTheHandlerDeclines() async {
+        await rig.settle()
+        rig.session.onPlayWithoutItem = { false }
+
+        XCTAssertEqual(rig.commands.press(.play), .noActionableNowPlayingItem)
+        XCTAssertEqual(rig.commands.press(.togglePlayPause), .noActionableNowPlayingItem)
+    }
+
+    func testItemlessPauseAndOtherCommandsIgnoreTheHandler() async {
+        await rig.settle()
+        var calls = 0
+        rig.session.onPlayWithoutItem = { calls += 1; return true }
+
+        XCTAssertEqual(rig.commands.press(.pause), .noActionableNowPlayingItem)
+        XCTAssertEqual(calls, 0)
+    }
+
+    func testTheHandlerIsNotCalledWhileAnItemIsCurrent() async {
+        await opened()
+        var calls = 0
+        rig.session.onPlayWithoutItem = { calls += 1; return true }
+
+        XCTAssertEqual(rig.commands.press(.play), .success)
+        XCTAssertEqual(calls, 0)
+        XCTAssertTrue(rig.player.playWhenReady)
+    }
+
     // Deviates from media3, which greys seeking out until the item opens: a CarPlay scrub during a load
     // must not be refused, so the player keeps it and applies it when the source answers.
     func testASeekDuringALoadIsAcceptedAndLandsOnceTheItemOpens() async {
