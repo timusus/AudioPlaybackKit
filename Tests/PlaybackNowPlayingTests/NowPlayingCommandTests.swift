@@ -51,14 +51,32 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertFalse(rig.player.playWhenReady)
     }
 
-    func testItemlessPlayAndToggleReachAnAcceptingHandler() async {
+    /// A handler that starts an item, as the app does when it picks an episode.
+    private func startingHandler() {
+        let player = rig.player
+        rig.session.onPlayWithoutItem = {
+            player.setItems(["z"])
+            player.play()
+            return true
+        }
+    }
+
+    func testItemlessPlayReachesAnAcceptingHandler() async {
         await rig.settle()
-        var calls = 0
-        rig.session.onPlayWithoutItem = { calls += 1; return true }
+        startingHandler()
 
         XCTAssertEqual(rig.commands.press(.play), .success)
+        XCTAssertEqual(rig.player.currentIndex, 0)
+        XCTAssertTrue(rig.player.playWhenReady)
+    }
+
+    func testItemlessToggleReachesAnAcceptingHandler() async {
+        await rig.settle()
+        startingHandler()
+
         XCTAssertEqual(rig.commands.press(.togglePlayPause), .success)
-        XCTAssertEqual(calls, 2)
+        XCTAssertEqual(rig.player.currentIndex, 0)
+        XCTAssertTrue(rig.player.playWhenReady)
     }
 
     func testItemlessPlayAnswersNoActionableItemWhenTheHandlerDeclines() async {
@@ -69,22 +87,21 @@ final class NowPlayingCommandTests: XCTestCase {
         XCTAssertEqual(rig.commands.press(.togglePlayPause), .noActionableNowPlayingItem)
     }
 
-    func testItemlessPauseAndOtherCommandsIgnoreTheHandler() async {
+    func testItemlessPauseIgnoresTheHandler() async {
         await rig.settle()
-        var calls = 0
-        rig.session.onPlayWithoutItem = { calls += 1; return true }
+        startingHandler()
 
         XCTAssertEqual(rig.commands.press(.pause), .noActionableNowPlayingItem)
-        XCTAssertEqual(calls, 0)
+        XCTAssertNil(rig.player.currentIndex)
+        XCTAssertFalse(rig.player.playWhenReady)
     }
 
-    func testTheHandlerIsNotCalledWhileAnItemIsCurrent() async {
-        await opened()
-        var calls = 0
-        rig.session.onPlayWithoutItem = { calls += 1; return true }
+    func testPlayWithACurrentItemPlaysItAndIgnoresTheHandler() async {
+        await opened(["a", "b"], at: 1)
+        startingHandler()
 
         XCTAssertEqual(rig.commands.press(.play), .success)
-        XCTAssertEqual(calls, 0)
+        XCTAssertEqual(rig.player.currentIndex, 1)
         XCTAssertTrue(rig.player.playWhenReady)
     }
 
