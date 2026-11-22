@@ -142,6 +142,10 @@ final class TimeStretchSpeechQualityTests: XCTestCase {
 
     /// Runs a host tool with "%@" standing for its output WAV, nil when the tool is not installed.
     private static func external(_ tool: String, _ arguments: [String], in directory: URL) throws -> [Float]? {
+        #if !os(macOS)
+        // The test target also builds for the iOS simulator, which has no Process.
+        return nil
+        #else
         let output = directory.appendingPathComponent("\(tool)-\(UUID().uuidString).wav")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -158,5 +162,6 @@ final class TimeStretchSpeechQualityTests: XCTestCase {
         let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length))!
         try file.read(into: buffer)
         return Array(UnsafeBufferPointer(start: buffer.floatChannelData![0], count: Int(buffer.frameLength)))
+        #endif
     }
 }
