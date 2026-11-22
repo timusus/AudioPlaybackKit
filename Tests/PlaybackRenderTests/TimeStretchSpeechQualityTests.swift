@@ -60,6 +60,18 @@ final class TimeStretchSpeechQualityTests: XCTestCase {
         samples.count { abs($0) > ceiling }
     }
 
+    /// With transient preservation on, the default, the unit scored .909/.836/.729 at 1.25/1.5/2x;
+    /// Rubber Band R3 scores .932/.902/.847.
+    func testSpeechKeepsItsEnvelopesAtEveryPodcastSpeed() throws {
+        let source = try Self.speech()
+        let source10k = SpeechIntelligibility.resample(source, from: Self.sampleRate)
+        for rate in Self.rates {
+            let output = Self.stretched(source, rate: rate, algorithm: .spectral)
+            let score = SpeechIntelligibility.score(reference: source10k, processed: SpeechIntelligibility.resample(output, from: Self.sampleRate), rate: rate)
+            XCTAssertGreaterThan(score, 0.85, "rate \(rate)")
+        }
+    }
+
     func testQualityReport() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["STRETCH_QUALITY"] == "1", "set STRETCH_QUALITY=1 to print the table")
         let source = try Self.speech()

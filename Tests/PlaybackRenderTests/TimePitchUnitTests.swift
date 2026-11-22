@@ -80,6 +80,7 @@ private final class ReferenceTimePitch: StretchUnit {
         AudioUnitSetProperty(unit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0,
                              &callback, UInt32(MemoryLayout<AURenderCallbackStruct>.size))
         AudioUnitInitialize(unit)
+        AudioUnitSetParameter(unit, kNewTimePitchParam_EnableTransientPreservation, kAudioUnitScope_Global, 0, 0, 0)
     }
 
     deinit {

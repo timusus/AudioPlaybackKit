@@ -31,7 +31,10 @@ final class TimePitchUnit: StretchUnit {
         var subtype: OSType
         var parameters: [AudioUnitParameterID: AudioUnitParameterValue] = [:]
 
-        static let spectral = Algorithm(subtype: kAudioUnitSubType_NewTimePitch)
+        /// Transient preservation holds the stretch at 1x on each onset, and speech is mostly onsets: on,
+        /// it scored worst of the settings on speech at 1.5 and 2x (ADR-0030).
+        static let spectral = Algorithm(subtype: kAudioUnitSubType_NewTimePitch,
+                                        parameters: [kNewTimePitchParam_EnableTransientPreservation: 0])
     }
 
     init(format: PCMFormat, algorithm: Algorithm = .spectral) {

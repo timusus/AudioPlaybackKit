@@ -87,4 +87,36 @@ beyond, so the 0.25...4 range is covered.
   the renderer no longer changes speed.
 - Stretched output is not bit-identical to the source; rate 1 is.
 
+## Amendment (2026-11-23): speech settings
+
+Testers heard speech distort above 1x. Log-spectral distance cannot rank speech stretches, so
+`TimeStretchSpeechQualityTests` scores them with STOI (Taal 2011; its 384 ms third-octave envelopes
+are where a stretch smears speech) against the source through the ideal time map, on 10 s of a
+public-domain LibriVox reading peak-scaled to -1 dBFS. `STRETCH_QUALITY=1` prints the full table.
+
+| Stretch at 1.25/1.5/2x | STOI |
+|---|---|
+| `nutp` default (smoothness 8, coherence on, transients on) | .909/.836/.729 |
+| `nutp` smoothness 3 / 4 | .889/.866/.838, .914/.871/.821 |
+| `nutp` smoothness 16 / 32 | .894/.826/.686, .862/.840/.623 |
+| `nutp` spectral coherence off | .741/.738/.743 |
+| **`nutp` transient preservation off** | **.939/.906/.861** |
+| `ipto` through `TimeStretch` | .459/.307/.361 |
+| `ipto` in 512-frame renders, outside `TimeStretch` | .915/.917/.871 |
+| Rubber Band R3 / ffmpeg `atempo` | .932/.902/.847, .915/.881/.833 |
+
+We keep `nutp` and turn transient preservation off. That holds the stretch at 1x on each onset it
+detects, and speech is mostly onsets, so the rest is squeezed harder. Off, it scores at or above
+Rubber Band and `atempo` at every speed. The window, the lag and the exact pull are unchanged:
+`TimeStretchTests` passes at 8-192 kHz as before.
+
+`ipto` (`AUiPodTimeOther`, the unit Pocket Casts uses) runs through the v2 render callback, at 3x too,
+though it publishes 0.5-2. But it makes output in 512-frame blocks and pulls a whole block's input
+at once, so a render of any other length reads past the queue, and the silence it reads breaks the
+exact pull. Rendered in whole blocks it matches `nutp` with transients off within the metric's noise.
+Switching would need block-quantised renders and a re-measured lag for no measured gain.
+
+STOI measures intelligibility, not timbre: phasiness that leaves envelopes intact does not show, so a
+listening check on device still decides between `nutp` and `ipto` if testers still hear it.
+
 Links: [ADR-0018](0018-render-layer.md), [ADR-0026](0026-in-place-processing.md), [usage](../usage.md).
