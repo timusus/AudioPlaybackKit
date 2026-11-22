@@ -26,12 +26,20 @@ final class TimePitchUnit: StretchUnit {
 
     private static let maximumFrames = 8192
 
-    init(format: PCMFormat) {
+    /// The Apple unit and the parameters set on it, so the speech harness can compare settings.
+    struct Algorithm {
+        var subtype: OSType
+        var parameters: [AudioUnitParameterID: AudioUnitParameterValue] = [:]
+
+        static let spectral = Algorithm(subtype: kAudioUnitSubType_NewTimePitch)
+    }
+
+    init(format: PCMFormat, algorithm: Algorithm = .spectral) {
         channels = format.channelCount
         let frames = Int((format.sampleRate * 32 / 1000).rounded(.up))
         window = min(1 << (Int.bitWidth - (frames - 1).leadingZeroBitCount), Self.largestWindow)
         var description = AudioComponentDescription(
-            componentType: kAudioUnitType_FormatConverter, componentSubType: kAudioUnitSubType_NewTimePitch,
+            componentType: kAudioUnitType_FormatConverter, componentSubType: algorithm.subtype,
             componentManufacturer: kAudioUnitManufacturer_Apple, componentFlags: 0, componentFlagsMask: 0
         )
         var instance: AudioUnit?
@@ -63,6 +71,9 @@ final class TimePitchUnit: StretchUnit {
         AudioUnitSetProperty(unit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0,
                              &callback, UInt32(MemoryLayout<AURenderCallbackStruct>.size))
         AudioUnitInitialize(unit)
+        for (parameter, value) in algorithm.parameters {
+            AudioUnitSetParameter(unit, parameter, kAudioUnitScope_Global, 0, value, 0)
+        }
     }
 
     deinit {

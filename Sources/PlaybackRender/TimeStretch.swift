@@ -57,7 +57,7 @@ struct TimeStretch {
     private var pending: [(tag: SegmentTag, format: PCMFormat)] = []
     private var pendingFrames: Int64 = 0
 
-    init(makeUnit: @escaping (PCMFormat) -> any StretchUnit = TimePitchUnit.init) {
+    init(makeUnit: @escaping (PCMFormat) -> any StretchUnit = { TimePitchUnit(format: $0) }) {
         self.makeUnit = makeUnit
     }
 
