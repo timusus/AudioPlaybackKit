@@ -5,8 +5,8 @@ protocol StretchUnit: AnyObject {
     var rate: Double { get set }
     /// Input frames not yet pulled.
     var queuedFrames: Int { get }
-    /// What comes out lags what was pulled by `window` input frames plus `window` output frames.
-    var window: Int { get }
+    /// Output frames by which what comes out at `rate` lags what was pulled.
+    func lag(_ rate: Double) -> Int
     func append(_ samples: [Float])
     func render(_ frames: Int) -> [Float]
 }

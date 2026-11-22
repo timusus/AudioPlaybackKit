@@ -43,7 +43,7 @@ final class TimePitchUnitTests: XCTestCase {
 
 /// The same AUNewTimePitch setup as `TimePitchUnit`, copying one sample at a time through an array queue.
 private final class ReferenceTimePitch: StretchUnit {
-    let window = 2048
+    func lag(_ rate: Double) -> Int { 2048 + Int((2048 / rate).rounded()) }
     var rate: Double = 1 {
         didSet { AudioUnitSetParameter(unit, kNewTimePitchParam_Rate, kAudioUnitScope_Global, 0, AudioUnitParameterValue(rate), 0) }
     }

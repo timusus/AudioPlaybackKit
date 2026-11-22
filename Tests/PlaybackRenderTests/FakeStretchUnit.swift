@@ -7,7 +7,7 @@ final class FakeStretchUnit: StretchUnit {
     static func stretch() -> TimeStretch { TimeStretch { FakeStretchUnit(channels: $0.channelCount) } }
 
     var rate: Double = 1
-    let window = 0
+    func lag(_: Double) -> Int { 0 }
     private let channels: Int
     private var input: [Float] = []
     /// Input frames pulled, whole and fractional; the whole ones are dropped from `input`.

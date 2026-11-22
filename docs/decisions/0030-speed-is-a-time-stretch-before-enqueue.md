@@ -119,4 +119,9 @@ Switching would need block-quantised renders and a re-measured lag for no measur
 STOI measures intelligibility, not timbre: phasiness that leaves envelopes intact does not show, so a
 listening check on device still decides between `nutp` and `ipto` if testers still hear it.
 
+The stretch's overlaps also rebuild peaks a limiter before it took off: speech limited to -1 dBFS
+came out with thousands of samples over it at 0.75-3x. `PeakLimitedUnit` limits the unit's output to
+-1 dBFS again, with a 5 ms lookahead and a 50 ms release, gain linked across channels. Its
+lookahead joins the unit's lag, so the lead cut and `finish` absorb the delay.
+
 Links: [ADR-0018](0018-render-layer.md), [ADR-0026](0026-in-place-processing.md), [usage](../usage.md).

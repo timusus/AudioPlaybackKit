@@ -10,8 +10,13 @@ import AVFoundation
 final class TimePitchUnit: StretchUnit {
     // Measured by bursts and tones through TimeStretch: 256 frames at 8 kHz, 512 at 16, 1024 at 22.05
     // and 32, 2048 at 44.1 and 48, 4096 from 88.2 up, i.e. 32 ms rounded up to a power of two, capped.
-    let window: Int
+    // Output lags the pull by a window of input frames plus a window of output frames.
+    private let window: Int
     private static let largestWindow = 4096
+
+    func lag(_ rate: Double) -> Int {
+        window + Int((Double(window) / rate).rounded())
+    }
 
     private let channels: Int
     var rate: Double = 1 {

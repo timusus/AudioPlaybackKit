@@ -29,10 +29,10 @@ final class TimeStretchSpeechQualityTests: XCTestCase {
         return samples.map { $0 * ceiling / peak }
     }
 
-    /// Through `TimeStretch` in tenth-of-a-second chunks, as the feeder drives it.
+    /// Through `TimeStretch` and its limiter in tenth-of-a-second chunks, as the feeder drives it.
     private static func stretched(_ samples: [Float], rate: Double, algorithm: TimePitchUnit.Algorithm) -> [Float] {
         let format = PCMFormat(sampleRate: sampleRate, channelCount: 1)
-        var stretch = TimeStretch { TimePitchUnit(format: $0, algorithm: algorithm) }
+        var stretch = TimeStretch { PeakLimitedUnit(TimePitchUnit(format: $0, algorithm: algorithm), format: $0) }
         var output: [Float] = []
         for start in stride(from: 0, to: samples.count, by: 4410) {
             let slice = Array(samples[start..<min(start + 4410, samples.count)])
@@ -69,6 +69,16 @@ final class TimeStretchSpeechQualityTests: XCTestCase {
             let output = Self.stretched(source, rate: rate, algorithm: .spectral)
             let score = SpeechIntelligibility.score(reference: source10k, processed: SpeechIntelligibility.resample(output, from: Self.sampleRate), rate: rate)
             XCTAssertGreaterThan(score, 0.85, "rate \(rate)")
+        }
+    }
+
+    /// Speech driven 12 dB into the ceiling, as loud programme leaves a limiter: the stretch's overlaps
+    /// rebuild peaks over it.
+    func testStretchedLoudSpeechStaysUnderTheCeiling() throws {
+        let loud = try Self.speech().map { min(max($0 * 4, -Self.ceiling), Self.ceiling) }
+        for rate in [0.75] + Self.rates + [3] {
+            let output = Self.stretched(loud, rate: rate, algorithm: .spectral)
+            XCTAssertEqual(Self.overCeiling(output), 0, "rate \(rate)")
         }
     }
 

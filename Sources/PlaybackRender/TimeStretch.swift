@@ -57,7 +57,7 @@ struct TimeStretch {
     private var pending: [(tag: SegmentTag, format: PCMFormat)] = []
     private var pendingFrames: Int64 = 0
 
-    init(makeUnit: @escaping (PCMFormat) -> any StretchUnit = { TimePitchUnit(format: $0) }) {
+    init(makeUnit: @escaping (PCMFormat) -> any StretchUnit = { PeakLimitedUnit(TimePitchUnit(format: $0), format: $0) }) {
         self.makeUnit = makeUnit
     }
 
@@ -85,7 +85,8 @@ struct TimeStretch {
         unit!.append(chunk.samples)
         // A frame short of the queue, so rounding never pulls silence mid-stream.
         let samples = render(frames: Int((Double(unit!.queuedFrames) - 1) / rate))
-        let held = Int64(unit!.queuedFrames) + Int64(Double(unit!.window) * (rate + 1))
+        // Input frames whose audio has not come out: those queued, and the lag's worth inside the unit.
+        let held = Int64(unit!.queuedFrames) + Int64(Double(unit!.lag(rate)) * rate)
         // Output always stands for some media, or the map could not place it.
         let consumed = min(max(pendingFrames - held, samples.isEmpty ? 0 : 1), pendingFrames)
         if let stretched = take(consumed: consumed, samples: samples) {
@@ -145,12 +146,5 @@ struct TimeStretch {
         pendingFrames -= taken
         guard !spans.isEmpty || produced > 0 else { return nil }
         return Chunk(samples: samples, format: format, spans: spans)
-    }
-}
-
-private extension StretchUnit {
-    /// The lag in output frames at `rate`.
-    func lag(_ rate: Double) -> Int {
-        window + Int((Double(window) / rate).rounded())
     }
 }
